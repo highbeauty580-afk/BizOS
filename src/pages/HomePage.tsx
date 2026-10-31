@@ -27,8 +27,8 @@ export const HomePage: React.FC = () => {
         {/* 3-Icon Vertical Sidebar Column */}
         <div className="flex-shrink-0 z-20">
           <div
-            style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-            className="p-3.5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-row lg:flex-col gap-6 w-fit transition-colors floating-card"
+            style={{ backgroundColor: customPalette.surfaceBg ? `${customPalette.surfaceBg}b0` : 'rgba(255, 255, 255, 0.75)' }}
+            className="p-3.5 rounded-2xl glass-card border border-white/80 shadow-lg flex flex-row lg:flex-col gap-5 w-fit backdrop-blur-xl animate-float-slow"
           >
             {/* 1. SALES ICON (المبيعات) */}
             <button

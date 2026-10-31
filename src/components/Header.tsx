@@ -28,9 +28,9 @@ export const Header: React.FC = () => {
   return (
     <>
       <header
-        className="fixed top-0 left-0 right-0 h-16 backdrop-blur-md border-b border-slate-200/80 z-50 px-4 md:px-6 flex items-center justify-between transition-colors"
+        className="fixed top-0 left-0 right-0 h-16 glass-header z-50 px-4 md:px-6 flex items-center justify-between transition-colors backdrop-blur-xl border-b border-white/70 shadow-sm"
         style={{
-          backgroundColor: customPalette.topBarBg || '#ffffff',
+          backgroundColor: customPalette.topBarBg ? `${customPalette.topBarBg}dd` : 'rgba(255, 255, 255, 0.75)',
           color: customPalette.topBarText || '#0f172a',
         }}
       >
