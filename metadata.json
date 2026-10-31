@@ -1,0 +1,6 @@
+{
+  "name": "BizOS — Business Management Platform",
+  "description": "Comprehensive 5-module business management suite covering POS Sales, Operations Zigzag Workflow, Financial Statements, HR Org Tree Chart, and Marketing 4Ps & Buyer Persona.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
