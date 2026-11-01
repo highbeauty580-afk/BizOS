@@ -30,17 +30,13 @@ const hexToRgba = (hex: string, alpha: number): string => {
 
 const AppContent: React.FC = () => {
   const { currentPage, language, customPalette } = useApp();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const isRtl = language === 'ar';
 
   const primaryHex = customPalette.primaryAccent || '#3525cd';
   const pageBgHex = customPalette.pageBg || '#f0f7ff';
   const sidebarBgHex = customPalette.sidebarBg && customPalette.sidebarBg !== '#ffffff' ? customPalette.sidebarBg : primaryHex;
-  const topBarBgHex = customPalette.topBarBg && customPalette.topBarBg !== '#ffffff' ? customPalette.topBarBg : primaryHex;
-
-  // Dynamic RGBA gradients matching the user's chosen palette (Lightweight GPU accelerated)
-  const blob1Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(primaryHex, 0.22)} 0%, ${hexToRgba(primaryHex, 0.05)} 60%, transparent 80%)`;
-  const blob2Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(sidebarBgHex, 0.2)} 0%, ${hexToRgba(primaryHex, 0.04)} 60%, transparent 80%)`;
 
   const dynamicCanvasStyle: React.CSSProperties = {
     backgroundColor: pageBgHex,
@@ -68,14 +64,22 @@ const AppContent: React.FC = () => {
       </div>
 
       {/* Top Header */}
-      <Header />
+      <Header
+        isMobileMenuOpen={isMobileMenuOpen}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      />
 
       {/* Navigation Sidebar */}
-      <Sidebar />
+      <Sidebar
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+      />
 
-      {/* Main Content Viewport */}
-      <div className={`relative z-10 pt-18 pb-12 transition-all ${isRtl ? 'pr-64 pl-0' : 'pl-64 pr-0'}`}>
-        <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 py-6">
+      {/* Main Content Viewport Responsive Grid */}
+      <div className={`relative z-10 pt-16 lg:pt-18 pb-12 transition-all ${
+        isRtl ? 'lg:pr-64 lg:pl-0 pr-0 pl-0' : 'lg:pl-64 lg:pr-0 pl-0 pr-0'
+      }`}>
+        <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
           {currentPage === 'home' && <HomePage />}
           {currentPage === 'operations' && <OperationsPage />}
           {currentPage === 'finance' && <FinancePage />}

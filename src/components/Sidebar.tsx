@@ -14,7 +14,12 @@ interface NavItemConfig {
   iconAnimClass: string;
 }
 
-export const Sidebar: React.FC = () => {
+interface SidebarProps {
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
   const { currentPage, setCurrentPage, language, customPalette } = useApp();
 
   const navItems: NavItemConfig[] = [
@@ -77,63 +82,87 @@ export const Sidebar: React.FC = () => {
 
   const isRtl = language === 'ar';
 
+  const handleNavClick = (id: PageId) => {
+    setCurrentPage(id);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
   return (
-    <aside
-      style={{
-        backgroundColor: customPalette.sidebarBg ? `${customPalette.sidebarBg}d0` : 'rgba(255, 255, 255, 0.72)',
-        color: customPalette.sidebarText || '#334155',
-      }}
-      className={`fixed top-16 bottom-0 w-64 glass-sidebar border-r border-white/70 z-40 flex flex-col justify-between py-6 transition-all ${
-        isRtl ? 'right-0 border-r-0 border-l' : 'left-0'
-      }`}
-    >
-      <div className="flex flex-col gap-2 px-3.5">
-        {/* Navigation List with Floating Glass Chips */}
-        <nav className="flex flex-col gap-3 pt-2">
-          {navItems.map((item) => {
-            const isActive = currentPage === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentPage(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-start transition-all duration-300 cursor-pointer group hover:-translate-y-0.5 ${
-                  isActive
-                    ? `${item.activeBg} border-transparent font-bold scale-[1.02] shadow-lg shadow-indigo-500/20 ring-2 ring-indigo-400/30`
-                    : `${item.inactiveBg} ${item.inactiveText} font-semibold hover:shadow-md border-white/60 backdrop-blur-md`
-                }`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ${
-                    isActive ? 'bg-white/25 text-white shadow-xs' : 'bg-white/80 shadow-xs group-hover:scale-110 group-hover:bg-white'
+    <>
+      {/* Mobile Dark Overlay Backdrop */}
+      {isMobileOpen && (
+        <div
+          onClick={onCloseMobile}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-40 lg:hidden transition-opacity"
+        />
+      )}
+
+      {/* Sidebar Navigation Container */}
+      <aside
+        style={{
+          backgroundColor: customPalette.sidebarBg ? `${customPalette.sidebarBg}f0` : 'rgba(255, 255, 255, 0.94)',
+          color: customPalette.sidebarText || '#334155',
+        }}
+        className={`fixed top-16 bottom-0 w-64 glass-sidebar border-r border-slate-200/80 z-40 flex flex-col justify-between py-6 transition-transform duration-300 ${
+          isRtl ? 'right-0 border-r-0 border-l' : 'left-0'
+        } ${
+          isMobileOpen
+            ? 'translate-x-0'
+            : isRtl
+            ? 'translate-x-full lg:translate-x-0'
+            : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        <div className="flex flex-col gap-2 px-3.5">
+          {/* Navigation List */}
+          <nav className="flex flex-col gap-3 pt-2">
+            {navItems.map((item) => {
+              const isActive = currentPage === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-start transition-all duration-200 cursor-pointer group hover:-translate-y-0.5 ${
+                    isActive
+                      ? `${item.activeBg} border-transparent font-bold scale-[1.01] shadow-md shadow-indigo-500/10`
+                      : `${item.inactiveBg} ${item.inactiveText} font-semibold hover:shadow-xs border-white/60`
                   }`}
                 >
-                  <span className={`material-symbols-outlined text-lg ${item.iconAnimClass} ${
-                    isActive ? 'text-white' : item.iconColor
-                  }`}>
-                    {item.icon}
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                      isActive ? 'bg-white/25 text-white shadow-xs' : 'bg-white/80 shadow-xs group-hover:scale-105 group-hover:bg-white'
+                    }`}
+                  >
+                    <span className={`material-symbols-outlined text-lg ${item.iconAnimClass} ${
+                      isActive ? 'text-white' : item.iconColor
+                    }`}>
+                      {item.icon}
+                    </span>
+                  </div>
+                  <span className="text-sm tracking-tight">
+                    {isRtl ? item.labelAr : item.labelEn}
                   </span>
-                </div>
-                <span className="text-sm tracking-tight">
-                  {isRtl ? item.labelAr : item.labelEn}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-      {/* Footer info box */}
-      <div className="px-4 flex flex-col gap-3">
-        <div className="p-3.5 rounded-2xl bg-white/60 border border-white/80 backdrop-blur-md flex flex-col gap-1 shadow-xs">
-          <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
-            <span>BizOS Engine</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          </div>
-          <div className="text-[11px] text-slate-500 font-mono">
-            v1.3.0 • {isRtl ? 'إصدار ثابت' : 'Stable Release'}
+        {/* Footer info box */}
+        <div className="px-4 flex flex-col gap-3">
+          <div className="p-3.5 rounded-2xl bg-white/70 border border-white/90 shadow-xs flex flex-col gap-1">
+            <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
+              <span>BizOS Engine</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+            </div>
+            <div className="text-[11px] text-slate-500 font-mono">
+              v1.3.0 • {isRtl ? 'إصدار ثابت' : 'Stable Release'}
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 };
