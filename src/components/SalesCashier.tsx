@@ -957,205 +957,268 @@ export const SalesCashier: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: CUSTOMER DATABASE (قاعدة العملاء) */}
+      {/* TAB 2: CUSTOMER DATABASE (قاعدة العملاء) - Matching Image 1 Design */}
       {activeTab === 'customers' && (
-        <div
-          style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-          className="p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col gap-6"
-        >
-          {/* Header Banner */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+        <div className="flex flex-col gap-5 w-full">
+          {/* 1. Header Banner Card */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            {/* Title & Subtitle */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
                 <span className="material-symbols-outlined text-2xl">group</span>
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-bold text-slate-900">
-                    {isRtl ? 'قاعدة بيانات العملاء والشركات' : 'Customer & Client Database'}
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                    {isRtl ? 'قاعدة بيانات العملاء' : 'Customer Database'}
                   </h2>
-                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 font-mono">
-                    {customers.length} {isRtl ? 'عميل مسجل' : 'registered'}
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono">
+                    {customers.length} {isRtl ? 'عميل' : 'clients'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500">
                   {isRtl
-                    ? 'إدارة بيانات العملاء والتواصل، إضافة وتعديل العملاء والمؤسسات، واستخدامهم المباشر في المبيعات.'
-                    : 'Manage client accounts, contact details, edit profile records, and attach directly to sales.'}
+                    ? 'عرض وحفظ وتحديث بيانات جميع العملاء المسجلين في النظام لاستخدامهم المباشر في المبيعات.'
+                    : 'View, save, and update all registered customer data for direct use in sales.'}
                 </p>
               </div>
             </div>
 
+            {/* Header Right Actions / Switcher Pills */}
+            <div className="flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
+              <button
+                onClick={handleOpenAddCustomer}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-base">person_add</span>
+                <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('customers')}
+                className="px-3.5 py-2 bg-white text-indigo-900 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-indigo-600">group</span>
+                <span>{isRtl ? 'قاعدة العملاء' : 'Customer DB'}</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-mono font-bold">
+                  {customers.length}
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Three Summary Stat Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Stat Card 1: Total Customers */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'إجمالي قاعدة العملاء' : 'Total Customer Base'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'عملاء مسجلون بالنظام' : 'Registered clients in system'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">group</span>
+              </div>
+            </div>
+
+            {/* Stat Card 2: Corporate & Partners */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'حسابات الشركات والشركاء' : 'Companies & Partners'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.filter((c) => Boolean(c.company)).length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'مؤسسات وشركات تجارية' : 'Commercial entities'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">domain</span>
+              </div>
+            </div>
+
+            {/* Stat Card 3: Individuals & Direct */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'الأفراد والعملاء المباشرون' : 'Individuals & Direct'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.filter((c) => !c.company).length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'حسابات أفراد ونقدي' : 'Individual accounts'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">person</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Search and Action Bar */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <button
               onClick={handleOpenAddCustomer}
-              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+              className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
             >
               <span className="material-symbols-outlined text-base">person_add</span>
               <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
             </button>
-          </div>
 
-          {/* Search Engine for Customer Database */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
-            <div className="relative w-full sm:w-80">
-              <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+            <div className="relative w-full sm:w-96">
+              <span className="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                search
+              </span>
               <input
                 type="text"
                 value={custDatabaseSearch}
                 onChange={(e) => setCustDatabaseSearch(e.target.value)}
-                placeholder={isRtl ? 'ابحث بالاسم، رقم الهاتف، الإيميل أو الشركة...' : 'Search by name, phone, email, company...'}
-                className="w-full pr-9 pl-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500 shadow-2xs"
+                placeholder={isRtl ? 'ابحث باسم العميل، رقم الهاتف، أو الشركة...' : 'Search by name, phone, or company...'}
+                className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
-            </div>
-
-            <div className="text-xs font-semibold text-slate-500">
-              {isRtl ? 'عرض كروت تفصيلية للعملاء مع المشتريات' : 'Detailed Customer Profiles with Sales Summary'}
             </div>
           </div>
 
-          {/* Customer Cards Grid */}
-          {(() => {
-            const searchLower = custDatabaseSearch.trim().toLowerCase();
-            const filteredCusts = customers.filter((c) => {
-              if (!searchLower) return true;
-              return (
-                c.name.toLowerCase().includes(searchLower) ||
-                (c.phone && c.phone.toLowerCase().includes(searchLower)) ||
-                (c.company && c.company.toLowerCase().includes(searchLower)) ||
-                (c.email && c.email.toLowerCase().includes(searchLower)) ||
-                (c.taxNumber && c.taxNumber.toLowerCase().includes(searchLower))
-              );
-            });
+          {/* 4. Customer List / Empty State Container */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-8 min-h-[220px] flex flex-col justify-center">
+            {(() => {
+              const searchLower = custDatabaseSearch.trim().toLowerCase();
+              const filteredCusts = customers.filter((c) => {
+                if (!searchLower) return true;
+                return (
+                  c.name.toLowerCase().includes(searchLower) ||
+                  (c.phone && c.phone.toLowerCase().includes(searchLower)) ||
+                  (c.company && c.company.toLowerCase().includes(searchLower)) ||
+                  (c.email && c.email.toLowerCase().includes(searchLower))
+                );
+              });
 
-            if (filteredCusts.length === 0) {
+              if (filteredCusts.length === 0) {
+                return (
+                  <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-4xl text-slate-300">
+                      no_accounts
+                    </span>
+                    <span className="font-bold text-slate-500 text-sm">
+                      {isRtl ? 'لا يوجد عملاء مطابقون للبحث' : 'No matching customers found'}
+                    </span>
+                  </div>
+                );
+              }
+
               return (
-                <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
-                  <span className="material-symbols-outlined text-4xl text-slate-300">person_off</span>
-                  <span className="font-bold text-slate-600">
-                    {isRtl ? 'لا يوجد عملاء مطابقون للبحث' : 'No matching customers found'}
-                  </span>
-                  <button
-                    onClick={handleOpenAddCustomer}
-                    className="mt-2 text-indigo-600 hover:underline font-bold text-xs cursor-pointer"
-                  >
-                    {isRtl ? '+ إضافة عميل جديد الآن' : '+ Add new customer now'}
-                  </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredCusts.map((cust) => {
+                    const custTxs = transactions.filter((t) => t.customerName === cust.name);
+                    const totalSpent = custTxs.reduce((sum, t) => sum + t.total, 0);
+                    const isSelectedForPOS = selectedCustomer?.id === cust.id;
+
+                    return (
+                      <div
+                        key={cust.id}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 ${
+                          isSelectedForPOS
+                            ? 'border-indigo-500 bg-indigo-50/40 shadow-xs'
+                            : 'border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex flex-col gap-2.5">
+                          <div className="flex items-start justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                                {cust.name.substring(0, 2).toUpperCase()}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <h3 className="text-sm font-bold text-slate-900 truncate">
+                                  {cust.name}
+                                </h3>
+                                {cust.company && (
+                                  <span className="text-[10px] font-semibold text-slate-500 truncate">
+                                    🏢 {cust.company}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleOpenEditCustomer(cust)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                title={isRtl ? 'تعديل' : 'Edit'}
+                              >
+                                <span className="material-symbols-outlined text-base">edit</span>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCustomer(cust)}
+                                className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                title={isRtl ? 'حذف' : 'Delete'}
+                              >
+                                <span className="material-symbols-outlined text-base">delete</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-1 text-xs text-slate-600 font-medium">
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-sm text-slate-400">call</span>
+                              <span className="font-mono text-slate-800 font-bold">{cust.phone || '—'}</span>
+                            </div>
+
+                            {cust.email && (
+                              <div className="flex items-center gap-2">
+                                <span className="material-symbols-outlined text-sm text-slate-400">mail</span>
+                                <span className="text-slate-700 font-mono text-[11px] truncate">{cust.email}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mt-1 pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
+                              <span className="text-slate-400 text-[10px]">{isRtl ? 'عدد الفواتير' : 'Orders'}</span>
+                              <span className="font-bold text-slate-900 font-mono text-xs">{custTxs.length}</span>
+                            </div>
+                            <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
+                              <span className="text-slate-400 text-[10px]">{isRtl ? 'إجمالي الشراء' : 'Total Spent'}</span>
+                              <span className="font-extrabold text-emerald-700 font-mono text-xs">${totalSpent.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                          {isSelectedForPOS ? (
+                            <span className="w-full py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1">
+                              <span>✓</span>
+                              <span>{isRtl ? 'محدد للكاشير' : 'Selected for POS'}</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setSelectedCustomer(cust);
+                                setActiveTab('pos');
+                              }}
+                              className="w-full py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-sm">point_of_sale</span>
+                              <span>{isRtl ? 'اختيار للبيع في الكاشير' : 'Select for POS'}</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
-            }
-
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredCusts.map((cust) => {
-                  const custTxs = transactions.filter((t) => t.customerName === cust.name);
-                  const totalSpent = custTxs.reduce((sum, t) => sum + t.total, 0);
-                  const isSelectedForPOS = selectedCustomer?.id === cust.id;
-
-                  return (
-                    <div
-                      key={cust.id}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col justify-between gap-4 ${
-                        isSelectedForPOS
-                          ? 'border-indigo-500 bg-indigo-50/40 shadow-xs'
-                          : 'border-slate-200/80 bg-slate-50/50 hover:bg-white hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex flex-col gap-2.5">
-                        <div className="flex items-start justify-between gap-2 border-b border-slate-200/60 pb-2.5">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                              {cust.name.substring(0, 2).toUpperCase()}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <h3 className="text-sm font-bold text-slate-900 truncate">
-                                {cust.name}
-                              </h3>
-                              {cust.company && (
-                                <span className="text-[10px] font-semibold text-slate-500 truncate">
-                                  🏢 {cust.company}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => handleOpenEditCustomer(cust)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                              title={isRtl ? 'تعديل بيانات العميل' : 'Edit Customer'}
-                            >
-                              <span className="material-symbols-outlined text-base">edit</span>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCustomer(cust)}
-                              className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                              title={isRtl ? 'حذف العميل' : 'Delete Customer'}
-                            >
-                              <span className="material-symbols-outlined text-base">delete</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Customer Info Lines */}
-                        <div className="flex flex-col gap-1 text-xs text-slate-600 font-medium">
-                          <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-sm text-slate-400">call</span>
-                            <span className="font-mono text-slate-800 font-bold">{cust.phone || '—'}</span>
-                          </div>
-
-                          {cust.email && (
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-sm text-slate-400">mail</span>
-                              <span className="text-slate-700 font-mono text-[11px] truncate">{cust.email}</span>
-                            </div>
-                          )}
-
-                          {cust.taxNumber && (
-                            <div className="flex items-center gap-2 text-[10px] font-mono text-slate-500 bg-slate-200/50 px-2 py-0.5 rounded w-fit">
-                              <span>الرقم الضريبي: {cust.taxNumber}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Sales Summary Statistics */}
-                        <div className="mt-1 pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[11px]">
-                          <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
-                            <span className="text-slate-400 text-[10px]">{isRtl ? 'عدد الفواتير' : 'Orders'}</span>
-                            <span className="font-bold text-slate-900 font-mono text-xs">{custTxs.length}</span>
-                          </div>
-                          <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
-                            <span className="text-slate-400 text-[10px]">{isRtl ? 'إجمالي الشراء' : 'Total Spent'}</span>
-                            <span className="font-extrabold text-emerald-700 font-mono text-xs">${totalSpent.toFixed(2)}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Button: Select for POS */}
-                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                        {isSelectedForPOS ? (
-                          <span className="w-full py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1">
-                            <span>✓</span>
-                            <span>{isRtl ? 'العميل المحدد للكاشير حالياً' : 'Selected for POS'}</span>
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setSelectedCustomer(cust);
-                              setActiveTab('pos');
-                            }}
-                            className="w-full py-1.5 bg-indigo-50 hover:bg-indigo-600 text-indigo-700 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <span className="material-symbols-outlined text-sm">point_of_sale</span>
-                            <span>{isRtl ? 'اختيار للبيع في الكاشير' : 'Select for POS Checkout'}</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+            })()}
+          </div>
         </div>
       )}
 
@@ -1414,122 +1477,116 @@ export const SalesCashier: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL 2: ADD / EDIT CUSTOMER MODAL (إضافة / تعديل عميل) */}
+      {/* MODAL 2: ADD / EDIT CUSTOMER MODAL (Matching Image 2 Design) */}
       {isAddCustomerModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 flex flex-col gap-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-600">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-scale-up">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-indigo-600 text-2xl">
                   {editingCustomer ? 'edit_square' : 'person_add'}
                 </span>
-                <span>
+                <h3 className="font-bold text-lg text-slate-900">
                   {editingCustomer
                     ? isRtl
                       ? 'تعديل بيانات العميل'
                       : 'Edit Customer Details'
                     : isRtl
-                    ? 'إضافة عميل جديد لقاعدة البيانات'
-                    : 'Add New Customer'}
-                </span>
-              </h3>
+                    ? 'إضافة عميل جديد إلى قاعدة البيانات'
+                    : 'Add New Customer to Database'}
+                </h3>
+              </div>
               <button
+                type="button"
                 onClick={() => {
                   setIsAddCustomerModalOpen(false);
                   setEditingCustomer(null);
                 }}
-                className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 text-xl p-1 cursor-pointer transition-colors"
               >
-                <span className="material-symbols-outlined">close</span>
+                ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveCustomer} className="flex flex-col gap-3.5 text-xs font-medium">
-              <div className="flex flex-col gap-1">
-                <label className="font-bold text-slate-700">{isRtl ? 'اسم العميل / الجهة *' : 'Customer / Client Name *'}</label>
+            {/* Modal Form */}
+            <form onSubmit={handleSaveCustomer} className="flex flex-col gap-4 text-xs font-medium">
+              {/* Field 1: Full Name */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs">
+                  {isRtl ? 'اسم العميل ثلاثي / التجاري' : 'Customer Full Name / Commercial Name'}
+                </label>
                 <input
                   type="text"
                   required
                   value={custForm.name}
                   onChange={(e) => setCustForm({ ...custForm, name: e.target.value })}
-                  placeholder={isRtl ? 'مثال: شركة الأمل / محمد علي' : 'e.g. John Doe / Acme Corp'}
-                  className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-indigo-500 font-bold"
+                  placeholder={isRtl ? 'مثال: شركة الخليج للتجارة' : 'e.g. Gulf Trading Company'}
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="font-bold text-slate-700">{isRtl ? 'رقم الهاتف' : 'Phone Number'}</label>
+              {/* Field 2 & 3: Phone & Company */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-800 text-xs">
+                    {isRtl ? 'رقم الهاتف' : 'Phone Number'}
+                  </label>
                   <input
                     type="text"
                     value={custForm.phone}
                     onChange={(e) => setCustForm({ ...custForm, phone: e.target.value })}
-                    placeholder="+966 50 123 4567"
-                    className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="+966 50 000 0000"
+                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="font-bold text-slate-700">{isRtl ? 'البريد الإلكتروني' : 'Email Address'}</label>
-                  <input
-                    type="email"
-                    value={custForm.email}
-                    onChange={(e) => setCustForm({ ...custForm, email: e.target.value })}
-                    placeholder="client@company.com"
-                    className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="font-bold text-slate-700">{isRtl ? 'اسم الشركة / المنشأة (اختياري)' : 'Company Name (Optional)'}</label>
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-800 text-xs">
+                    {isRtl ? 'الشركة / المنشأة' : 'Company / Entity'}
+                  </label>
                   <input
                     type="text"
                     value={custForm.company}
                     onChange={(e) => setCustForm({ ...custForm, company: e.target.value })}
-                    placeholder={isRtl ? 'مثال: شركة الرواد' : 'e.g. Pioneer Corp'}
-                    className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="font-bold text-slate-700">{isRtl ? 'الرقم الضريبي (اختياري)' : 'Tax Number (Optional)'}</label>
-                  <input
-                    type="text"
-                    value={custForm.taxNumber}
-                    onChange={(e) => setCustForm({ ...custForm, taxNumber: e.target.value })}
-                    placeholder="300123456700003"
-                    className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder={isRtl ? 'مؤسسة الابتكار' : 'Innovation Est.'}
+                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              {/* Field 4: Email */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs">
+                  {isRtl ? 'البريد الإلكتروني' : 'Email Address'}
+                </label>
+                <input
+                  type="email"
+                  value={custForm.email}
+                  onChange={(e) => setCustForm({ ...custForm, email: e.target.value })}
+                  placeholder="client@company.com"
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex items-center gap-3 pt-3 mt-2 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-sm transition-transform active:scale-95 cursor-pointer"
+                >
+                  {isRtl ? 'حفظ العميل' : 'Save Customer'}
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
                     setIsAddCustomerModalOpen(false);
                     setEditingCustomer(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  className="px-6 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-2xl cursor-pointer transition-colors"
                 >
                   {isRtl ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-transform active:scale-95 flex items-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-base">check</span>
-                  <span>
-                    {editingCustomer
-                      ? isRtl
-                        ? 'حفظ التعديلات'
-                        : 'Save Changes'
-                      : isRtl
-                      ? 'إضافة العميل'
-                      : 'Create Customer'}
-                  </span>
                 </button>
               </div>
             </form>
