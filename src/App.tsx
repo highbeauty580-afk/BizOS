@@ -38,15 +38,13 @@ const AppContent: React.FC = () => {
   const sidebarBgHex = customPalette.sidebarBg && customPalette.sidebarBg !== '#ffffff' ? customPalette.sidebarBg : primaryHex;
   const topBarBgHex = customPalette.topBarBg && customPalette.topBarBg !== '#ffffff' ? customPalette.topBarBg : primaryHex;
 
-  // Dynamic RGBA gradients matching the user's chosen palette
-  const blob1Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(primaryHex, 0.32)} 0%, ${hexToRgba(primaryHex, 0.12)} 50%, transparent 75%)`;
-  const blob2Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(sidebarBgHex, 0.28)} 0%, ${hexToRgba(primaryHex, 0.08)} 55%, transparent 80%)`;
-  const blob3Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(topBarBgHex, 0.25)} 0%, ${hexToRgba(primaryHex, 0.06)} 55%, transparent 80%)`;
-  const blob4Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(primaryHex, 0.2)} 0%, ${hexToRgba(primaryHex, 0.04)} 60%, transparent 80%)`;
+  // Dynamic RGBA gradients matching the user's chosen palette (Lightweight GPU accelerated)
+  const blob1Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(primaryHex, 0.22)} 0%, ${hexToRgba(primaryHex, 0.05)} 60%, transparent 80%)`;
+  const blob2Gradient = `radial-gradient(circle at 50% 50%, ${hexToRgba(sidebarBgHex, 0.2)} 0%, ${hexToRgba(primaryHex, 0.04)} 60%, transparent 80%)`;
 
   const dynamicCanvasStyle: React.CSSProperties = {
     backgroundColor: pageBgHex,
-    backgroundImage: `radial-gradient(ellipse at 50% 0%, ${hexToRgba(primaryHex, 0.09)} 0%, transparent 70%), linear-gradient(135deg, ${hexToRgba(primaryHex, 0.04)} 0%, ${pageBgHex} 50%, ${hexToRgba(primaryHex, 0.06)} 100%)`,
+    backgroundImage: `radial-gradient(ellipse at 50% 0%, ${hexToRgba(primaryHex, 0.07)} 0%, transparent 70%), linear-gradient(135deg, ${hexToRgba(primaryHex, 0.03)} 0%, ${pageBgHex} 50%, ${hexToRgba(primaryHex, 0.04)} 100%)`,
   };
 
   return (
@@ -54,38 +52,26 @@ const AppContent: React.FC = () => {
       style={dynamicCanvasStyle}
       className="min-h-screen text-[#131b2e] font-sans antialiased transition-colors duration-300 relative overflow-x-hidden"
     >
-      {/* Dynamic Floating Animated Liquid Water Background Atmosphere (أجواء عائمة متطابقة مع ألوان المستخدم) */}
+      {/* Dynamic Floating Animated Liquid Water Background Atmosphere (خفيفة وسلسة بأعلى سرعة) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         {/* Blob 1: Primary Selected Accent Water Glow */}
         <div
           style={{ background: blob1Gradient }}
-          className="absolute top-[-10%] right-[-5%] w-[580px] h-[580px] rounded-full blur-3xl water-blob-1 transition-all duration-700"
+          className="absolute top-[-5%] right-[-5%] w-[500px] h-[500px] rounded-full blur-2xl water-blob-1 pointer-events-none"
         />
         
         {/* Blob 2: Sidebar / Secondary Palette Reflection */}
         <div
           style={{ background: blob2Gradient }}
-          className="absolute top-[30%] left-[-10%] w-[620px] h-[620px] rounded-full blur-3xl water-blob-2 transition-all duration-700"
-        />
-
-        {/* Blob 3: TopBar Palette Wave */}
-        <div
-          style={{ background: blob3Gradient }}
-          className="absolute bottom-[-10%] right-[20%] w-[520px] h-[520px] rounded-full blur-3xl water-blob-3 transition-all duration-700"
-        />
-
-        {/* Blob 4: Soft Accent Shimmer Highlight */}
-        <div
-          style={{ background: blob4Gradient }}
-          className="absolute top-[60%] right-[-8%] w-[480px] h-[480px] rounded-full blur-3xl water-blob-1 transition-all duration-700"
+          className="absolute bottom-[-5%] left-[-5%] w-[520px] h-[520px] rounded-full blur-2xl water-blob-2 pointer-events-none"
         />
 
         {/* Dynamic Water Caustic Pattern Overlay */}
         <div 
-          className="absolute inset-0 opacity-[0.04] mix-blend-overlay pointer-events-none"
+          className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none"
           style={{
             backgroundImage: `radial-gradient(circle at 50% 50%, ${primaryHex} 1px, transparent 1px)`,
-            backgroundSize: '32px 32px'
+            backgroundSize: '36px 36px'
           }}
         />
       </div>
