@@ -148,7 +148,30 @@ export const extractPaletteFromImage = (dataUrl: string): Promise<Partial<Custom
 };
 
 // Default Customers Data
-const DEFAULT_CUSTOMERS: Customer[] = [];
+const DEFAULT_CUSTOMERS: Customer[] = [
+  {
+    id: 'cust-1',
+    name: 'شركة الأمل للتجارة',
+    phone: '+966 50 123 4567',
+    email: 'info@alamal.com',
+    company: 'مجموعة الأمل التجارية',
+    taxNumber: '310123456700003',
+  },
+  {
+    id: 'cust-2',
+    name: 'عبدالله محمد الغامدي',
+    phone: '+966 55 987 6543',
+    email: 'abdullah@example.com',
+    company: 'مؤسسة الغامدي للمقاولات',
+    taxNumber: '300987654300003',
+  },
+  {
+    id: 'cust-3',
+    name: 'سارة خالد العتيبي',
+    phone: '+966 54 456 7890',
+    email: 'sara.k@example.com',
+  },
+];
 
 // Default Initial Data: Raw Materials & Finished Goods Inventory
 const DEFAULT_FAST_ITEMS: FastItem[] = [
@@ -408,7 +431,7 @@ interface AppContextType {
 
   // Customer State
   customers: Customer[];
-  addCustomer: (cust: Omit<Customer, 'id'>) => void;
+  addCustomer: (cust: Omit<Customer, 'id'>) => Customer;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
   deleteCustomer: (id: string) => void;
 
@@ -643,9 +666,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Customer Handlers
-  const addCustomer = (custData: Omit<Customer, 'id'>) => {
+  const addCustomer = (custData: Omit<Customer, 'id'>): Customer => {
     const newCust: Customer = { ...custData, id: `cust-${Date.now()}` };
     setCustomers((prev) => [newCust, ...prev]);
+    return newCust;
   };
 
   const updateCustomer = (id: string, data: Partial<Customer>) => {
