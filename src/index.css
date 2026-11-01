@@ -9,119 +9,62 @@
   }
 }
 
-/* Ambient Floating & Aquatic Water Keyframes */
+/* Ambient Floating Keyframes (Hardware Accelerated) */
 @keyframes floatGentle {
   0%, 100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-5px) rotate(0.5deg);
+    transform: translate3d(0, -3px, 0);
   }
 }
 
 @keyframes floatSlow {
   0%, 100% {
-    transform: translateY(0px) rotate(0deg);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-4px) rotate(-0.5deg);
+    transform: translate3d(0, -2px, 0);
   }
 }
 
-/* Ambient Floating & Aquatic Water Keyframes (GPU Hardware Accelerated) */
-@keyframes floatGentle {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-  50% {
-    transform: translate3d(0, -4px, 0) rotate(0.5deg);
-  }
-}
-
-@keyframes floatSlow {
-  0%, 100% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-  }
-  50% {
-    transform: translate3d(0, -3px, 0) rotate(-0.5deg);
-  }
-}
-
-/* Highly Optimized GPU Blob Motion (No border-radius morphing for zero repaints) */
-@keyframes aquaticBlob1 {
-  0%, 100% {
-    transform: translate3d(0px, 0px, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(30px, -40px, 0) scale(1.08);
-  }
-}
-
-@keyframes aquaticBlob2 {
-  0%, 100% {
-    transform: translate3d(0px, 0px, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(-35px, 30px, 0) scale(1.06);
-  }
-}
-
-/* Glassmorphism & Liquid Utility Classes (Lightweight & Supercharged Performance) */
-.water-blob-1 {
-  animation: aquaticBlob1 24s ease-in-out infinite;
-  will-change: transform;
-  transform: translateZ(0);
-  contain: layout style paint;
-}
-
-.water-blob-2 {
-  animation: aquaticBlob2 28s ease-in-out infinite;
-  will-change: transform;
-  transform: translateZ(0);
-  contain: layout style paint;
-}
-
+/* Glassmorphism Utility Classes (Ultra-Fast & Crisp Native Speed) */
 .glass-panel {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 12px 30px rgba(0, 100, 200, 0.05), 0 2px 6px rgba(0, 0, 0, 0.02);
-  transform: translateZ(0);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 25px rgba(0, 50, 100, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
 .glass-card {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.88);
-  box-shadow: 0 6px 18px -4px rgba(0, 50, 120, 0.04), 0 2px 5px rgba(0, 0, 0, 0.02);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease-out, border-color 0.2s ease-out;
-  transform: translateZ(0);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 14px -2px rgba(0, 50, 120, 0.03), 0 2px 4px rgba(0, 0, 0, 0.01);
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, border-color 0.2s ease-out;
 }
 
 .glass-card:hover {
-  transform: translate3d(0, -4px, 0);
-  box-shadow: 0 14px 28px -6px rgba(14, 116, 144, 0.12), 0 0 15px rgba(59, 130, 246, 0.12);
-  border-color: rgba(255, 255, 255, 0.98);
+  transform: translate3d(0, -3px, 0);
+  box-shadow: 0 10px 22px -4px rgba(14, 116, 144, 0.1), 0 0 12px rgba(59, 130, 246, 0.08);
+  border-color: rgba(255, 255, 255, 1);
 }
 
 .glass-header {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.82);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 4px 20px 0 rgba(31, 38, 135, 0.04);
-  transform: translateZ(0);
+  background: rgba(255, 255, 255, 0.95);
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 2px 10px 0 rgba(31, 38, 135, 0.03);
 }
 
 .glass-sidebar {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.78);
-  border-color: rgba(255, 255, 255, 0.8);
-  box-shadow: 2px 0 20px 0 rgba(31, 38, 135, 0.04);
-  transform: translateZ(0);
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(226, 232, 240, 0.8);
+  box-shadow: 2px 0 12px 0 rgba(31, 38, 135, 0.03);
+}
+
+@supports (backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px)) {
+  .glass-panel, .glass-card, .glass-header, .glass-sidebar {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
 }
 
 /* Interactive Floating Card Utilities */

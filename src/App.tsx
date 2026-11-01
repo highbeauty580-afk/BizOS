@@ -44,31 +44,22 @@ const AppContent: React.FC = () => {
 
   const dynamicCanvasStyle: React.CSSProperties = {
     backgroundColor: pageBgHex,
-    backgroundImage: `radial-gradient(ellipse at 50% 0%, ${hexToRgba(primaryHex, 0.07)} 0%, transparent 70%), linear-gradient(135deg, ${hexToRgba(primaryHex, 0.03)} 0%, ${pageBgHex} 50%, ${hexToRgba(primaryHex, 0.04)} 100%)`,
+    backgroundImage: `
+      radial-gradient(circle at 85% 10%, ${hexToRgba(primaryHex, 0.14)} 0%, transparent 45%),
+      radial-gradient(circle at 15% 85%, ${hexToRgba(sidebarBgHex, 0.1)} 0%, transparent 45%),
+      linear-gradient(135deg, ${hexToRgba(primaryHex, 0.02)} 0%, ${pageBgHex} 50%, ${hexToRgba(primaryHex, 0.03)} 100%)
+    `,
   };
 
   return (
     <div
       style={dynamicCanvasStyle}
-      className="min-h-screen text-[#131b2e] font-sans antialiased transition-colors duration-300 relative overflow-x-hidden"
+      className="min-h-screen text-[#131b2e] font-sans antialiased transition-colors duration-200 relative overflow-x-hidden"
     >
-      {/* Dynamic Floating Animated Liquid Water Background Atmosphere (خفيفة وسلسة بأعلى سرعة) */}
+      {/* Static Ultra-Fast Aquatic Texture Background */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-        {/* Blob 1: Primary Selected Accent Water Glow */}
-        <div
-          style={{ background: blob1Gradient }}
-          className="absolute top-[-5%] right-[-5%] w-[500px] h-[500px] rounded-full blur-2xl water-blob-1 pointer-events-none"
-        />
-        
-        {/* Blob 2: Sidebar / Secondary Palette Reflection */}
-        <div
-          style={{ background: blob2Gradient }}
-          className="absolute bottom-[-5%] left-[-5%] w-[520px] h-[520px] rounded-full blur-2xl water-blob-2 pointer-events-none"
-        />
-
-        {/* Dynamic Water Caustic Pattern Overlay */}
         <div 
-          className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none"
+          className="absolute inset-0 opacity-[0.025] pointer-events-none"
           style={{
             backgroundImage: `radial-gradient(circle at 50% 50%, ${primaryHex} 1px, transparent 1px)`,
             backgroundSize: '36px 36px'
