@@ -41,18 +41,49 @@ export interface Customer {
   taxNumber?: string;
 }
 
+export type InventoryType = 'raw_material' | 'work_in_progress' | 'finished_goods';
+
 export interface FastItem {
   id: string;
   name: string;
   nameAr?: string;
-  category: 'Retail' | 'Service' | 'Wholesale' | 'Other';
+  category: 'Retail' | 'Service' | 'Wholesale' | 'Other' | string;
+  inventoryType?: InventoryType; // 'raw_material' | 'work_in_progress' | 'finished_goods'
   price: number;
+  costPrice?: number;
   icon?: string;
   stockQuantity: number;
   minStock: number; // الحد الأدنى للمخزون
   maxStock: number; // الحد الأعلى للمخزون
   code?: string;
-  unit?: string;     // الوحدة (قطعة، علبة، إلخ)
+  unit?: string;     // الوحدة (قطعة، علبة، كجم، إلخ)
+}
+
+export type WipStage = 'preparation' | 'processing' | 'assembly' | 'quality_check' | 'packaging';
+export type WipStatus = 'in_progress' | 'completed' | 'canceled';
+
+export interface WipMaterialUsage {
+  rawMaterialId: string;
+  rawMaterialName: string;
+  quantityUsed: number;
+  unit: string;
+}
+
+export interface WipBatch {
+  id: string;
+  batchNo: string;
+  finishedGoodId: string;
+  finishedGoodName: string;
+  targetQuantity: number;
+  completedQuantity: number;
+  scrappedQuantity: number; // الهالك أثناء التصنيع
+  rawMaterialsUsed: WipMaterialUsage[];
+  stage: WipStage;
+  status: WipStatus;
+  startDate: string;
+  targetCompletionDate?: string;
+  completedDate?: string;
+  notes?: string;
 }
 
 export type MovementType = 'sale' | 'restock' | 'return' | 'adjustment';

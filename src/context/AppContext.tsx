@@ -20,6 +20,11 @@ import {
   ExpenseCategory,
   ExpensePaymentMethod,
   ExpensePaymentStatus,
+  InventoryType,
+  WipStage,
+  WipStatus,
+  WipMaterialUsage,
+  WipBatch,
 } from '../types';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
@@ -145,8 +150,164 @@ export const extractPaletteFromImage = (dataUrl: string): Promise<Partial<Custom
 // Default Customers Data
 const DEFAULT_CUSTOMERS: Customer[] = [];
 
-// Default Initial Data
-const DEFAULT_FAST_ITEMS: FastItem[] = [];
+// Default Initial Data: Raw Materials & Finished Goods Inventory
+const DEFAULT_FAST_ITEMS: FastItem[] = [
+  // 1. Raw Materials (المواد الخام المستخدمة في التصنيع)
+  {
+    id: 'rm-1',
+    name: 'Cotton Fabric (High Grade)',
+    nameAr: 'قماش قطني فاخر',
+    category: 'Raw Materials',
+    inventoryType: 'raw_material',
+    price: 15.00,
+    costPrice: 10.00,
+    stockQuantity: 250,
+    minStock: 50,
+    maxStock: 500,
+    code: 'RM-COTTON-01',
+    unit: 'متر',
+  },
+  {
+    id: 'rm-2',
+    name: 'Sewing Threads (Spools)',
+    nameAr: 'خيوط حياكة ممتازة',
+    category: 'Raw Materials',
+    inventoryType: 'raw_material',
+    price: 4.50,
+    costPrice: 2.50,
+    stockQuantity: 12,
+    minStock: 20,
+    maxStock: 100,
+    code: 'RM-THREAD-02',
+    unit: 'بكرة',
+  },
+  {
+    id: 'rm-3',
+    name: 'Raw Specialty Coffee Beans',
+    nameAr: 'حبوب بن إثيوبي خام',
+    category: 'Raw Materials',
+    inventoryType: 'raw_material',
+    price: 35.00,
+    costPrice: 25.00,
+    stockQuantity: 180,
+    minStock: 40,
+    maxStock: 300,
+    code: 'RM-COFFEE-03',
+    unit: 'كجم',
+  },
+  {
+    id: 'rm-4',
+    name: 'Carton Packaging Boxes',
+    nameAr: 'عبوات تغليف كرتونية',
+    category: 'Raw Materials',
+    inventoryType: 'raw_material',
+    price: 2.00,
+    costPrice: 1.20,
+    stockQuantity: 550,
+    minStock: 100,
+    maxStock: 500,
+    code: 'RM-BOX-04',
+    unit: 'عبوة',
+  },
+
+  // 2. Finished Goods (المنتجات الجاهزة للبيع)
+  {
+    id: 'fg-1',
+    name: 'Classic Formal Cotton Shirt',
+    nameAr: 'قميص رسمي قطني',
+    category: 'Retail',
+    inventoryType: 'finished_goods',
+    price: 120.00,
+    costPrice: 55.00,
+    stockQuantity: 45,
+    minStock: 10,
+    maxStock: 100,
+    code: 'PRD-SHIRT-01',
+    unit: 'قطعة',
+  },
+  {
+    id: 'fg-2',
+    name: 'Specialty Coffee Beans (250g)',
+    nameAr: 'عبوة أظرف قهوة مختصة (250ج)',
+    category: 'Retail',
+    inventoryType: 'finished_goods',
+    price: 65.00,
+    costPrice: 30.00,
+    stockQuantity: 8,
+    minStock: 15,
+    maxStock: 80,
+    code: 'PRD-COFFEE-02',
+    unit: 'علبة',
+  },
+  {
+    id: 'fg-3',
+    name: 'Genuine Leather Jacket',
+    nameAr: 'جاكيت جلد طبيعي',
+    category: 'Retail',
+    inventoryType: 'finished_goods',
+    price: 450.00,
+    costPrice: 210.00,
+    stockQuantity: 95,
+    minStock: 10,
+    maxStock: 50,
+    code: 'PRD-JACKET-03',
+    unit: 'قطعة',
+  },
+  {
+    id: 'fg-4',
+    name: 'Perfume Sandalwood & Musk (100ml)',
+    nameAr: 'عطر خشب الصندل والمسك',
+    category: 'Retail',
+    inventoryType: 'finished_goods',
+    price: 210.00,
+    costPrice: 85.00,
+    stockQuantity: 30,
+    minStock: 10,
+    maxStock: 60,
+    code: 'PRD-PERFUME-04',
+    unit: 'زجاجة',
+  },
+];
+
+// Default Work in Progress (تحت التصنيع)
+const DEFAULT_WIP_BATCHES: WipBatch[] = [
+  {
+    id: 'wip-1',
+    batchNo: 'WIP-2026-001',
+    finishedGoodId: 'fg-1',
+    finishedGoodName: 'قميص رسمي قطني',
+    targetQuantity: 50,
+    completedQuantity: 0,
+    scrappedQuantity: 2,
+    rawMaterialsUsed: [
+      { rawMaterialId: 'rm-1', rawMaterialName: 'قماش قطني فاخر', quantityUsed: 100, unit: 'متر' },
+      { rawMaterialId: 'rm-2', rawMaterialName: 'خيوط حياكة ممتازة', quantityUsed: 15, unit: 'بكرة' },
+    ],
+    stage: 'processing',
+    status: 'in_progress',
+    startDate: '2026-10-28',
+    targetCompletionDate: '2026-11-05',
+    notes: 'جاري مرحلة الخياطة والتجهيز الأولي للدفعة',
+  },
+  {
+    id: 'wip-2',
+    batchNo: 'WIP-2026-002',
+    finishedGoodId: 'fg-2',
+    finishedGoodName: 'عبوة أظرف قهوة مختصة (250ج)',
+    targetQuantity: 40,
+    completedQuantity: 0,
+    scrappedQuantity: 0,
+    rawMaterialsUsed: [
+      { rawMaterialId: 'rm-3', rawMaterialName: 'حبوب بن إثيوبي خام', quantityUsed: 10, unit: 'كجم' },
+      { rawMaterialId: 'rm-4', rawMaterialName: 'عبوات تغليف كرتونية', quantityUsed: 40, unit: 'عبوة' },
+    ],
+    stage: 'packaging',
+    status: 'in_progress',
+    startDate: '2026-10-30',
+    targetCompletionDate: '2026-11-02',
+    notes: 'مرحلة التحمير والتغليف النهائي',
+  },
+];
 
 const DEFAULT_STOCK_MOVEMENTS: StockMovement[] = [];
 
@@ -266,6 +427,14 @@ interface AppContextType {
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
   updateTransactionNote: (id: string, note: string) => void;
 
+  // Work in Progress (WIP / Manufacturing) State
+  wipBatches: WipBatch[];
+  startWipBatch: (batchData: Omit<WipBatch, 'id' | 'batchNo' | 'completedQuantity' | 'scrappedQuantity' | 'status'>) => void;
+  updateWipBatchStage: (id: string, stage: WipStage, notes?: string) => void;
+  recordWipScrap: (id: string, scrappedQty: number) => void;
+  completeWipBatch: (id: string, completedQty: number, scrappedQty?: number) => void;
+  deleteWipBatch: (id: string) => void;
+
   // Pending / Held Sales State
   pendingSales: PendingSale[];
   holdSale: (sale: Omit<PendingSale, 'id' | 'heldAt' | 'date'>) => void;
@@ -329,6 +498,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Sales & Inventory
   const [dailySalesTarget, setDailySalesTarget] = useState<number>(5000.0);
   const [fastItems, setFastItems] = useState<FastItem[]>(DEFAULT_FAST_ITEMS);
+  const [wipBatches, setWipBatches] = useState<WipBatch[]>(DEFAULT_WIP_BATCHES);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>(DEFAULT_STOCK_MOVEMENTS);
   const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
   const [pendingSales, setPendingSales] = useState<PendingSale[]>(DEFAULT_PENDING_SALES);
@@ -364,6 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (parsed.customers) setCustomers(parsed.customers);
         if (parsed.dailySalesTarget) setDailySalesTarget(parsed.dailySalesTarget);
         if (parsed.fastItems) setFastItems(parsed.fastItems);
+        if (parsed.wipBatches) setWipBatches(parsed.wipBatches);
         if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
         if (parsed.transactions) setTransactions(parsed.transactions);
         if (parsed.pendingSales) setPendingSales(parsed.pendingSales);
@@ -424,6 +595,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         customers,
         dailySalesTarget,
         fastItems,
+        wipBatches,
         stockMovements,
         transactions,
         pendingSales,
@@ -447,6 +619,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customers,
     dailySalesTarget,
     fastItems,
+    wipBatches,
     stockMovements,
     transactions,
     pendingSales,
@@ -594,6 +767,139 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteFastItem = (id: string) => {
     setFastItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  // WIP & Manufacturing Handlers
+  const startWipBatch = (
+    batchData: Omit<WipBatch, 'id' | 'batchNo' | 'completedQuantity' | 'scrappedQuantity' | 'status'>
+  ) => {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const batchNo = `WIP-${now.getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    // 1. Deduct raw materials used from inventory
+    if (batchData.rawMaterialsUsed && batchData.rawMaterialsUsed.length > 0) {
+      setFastItems((prevItems) =>
+        prevItems.map((catalogItem) => {
+          const used = batchData.rawMaterialsUsed.find((rm) => rm.rawMaterialId === catalogItem.id);
+          if (used) {
+            const currentStock = catalogItem.stockQuantity;
+            const updatedStock = Math.max(0, currentStock - used.quantityUsed);
+
+            const logEntry: StockMovement = {
+              id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+              itemId: catalogItem.id,
+              itemName: catalogItem.nameAr || catalogItem.name,
+              type: 'adjustment',
+              quantityChange: -used.quantityUsed,
+              quantityBefore: currentStock,
+              quantityAfter: updatedStock,
+              date: dateStr,
+              time: timeStr,
+              reason: `بدء تشغيلة تصنيع (${batchNo}) - خصم مواد خام`,
+              referenceNo: batchNo,
+            };
+            setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
+
+            return { ...catalogItem, stockQuantity: updatedStock };
+          }
+          return catalogItem;
+        })
+      );
+    }
+
+    // 2. Create new WIP Batch
+    const newBatch: WipBatch = {
+      ...batchData,
+      id: `wip-${Date.now()}`,
+      batchNo,
+      completedQuantity: 0,
+      scrappedQuantity: 0,
+      status: 'in_progress',
+    };
+
+    setWipBatches((prev) => [newBatch, ...prev]);
+  };
+
+  const updateWipBatchStage = (id: string, stage: WipStage, notes?: string) => {
+    setWipBatches((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, stage, notes: notes !== undefined ? notes : b.notes } : b))
+    );
+  };
+
+  const recordWipScrap = (id: string, scrappedQty: number) => {
+    if (scrappedQty <= 0) return;
+    setWipBatches((prev) =>
+      prev.map((b) => {
+        if (b.id === id) {
+          return {
+            ...b,
+            scrappedQuantity: (b.scrappedQuantity || 0) + scrappedQty,
+          };
+        }
+        return b;
+      })
+    );
+  };
+
+  const completeWipBatch = (id: string, completedQty: number, scrappedQty: number = 0) => {
+    const targetBatch = wipBatches.find((b) => b.id === id);
+    if (!targetBatch || targetBatch.status === 'completed') return; // Prevent double completion
+
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    // 1. Mark batch as completed
+    setWipBatches((prev) =>
+      prev.map((b) => {
+        if (b.id === id) {
+          return {
+            ...b,
+            status: 'completed',
+            completedQuantity: completedQty,
+            scrappedQuantity: (b.scrappedQuantity || 0) + scrappedQty,
+            completedDate: dateStr,
+          };
+        }
+        return b;
+      })
+    );
+
+    // 2. Add completed finished goods to Finished Goods inventory
+    if (completedQty > 0) {
+      setFastItems((prevItems) =>
+        prevItems.map((catalogItem) => {
+          if (catalogItem.id === targetBatch.finishedGoodId || catalogItem.name === targetBatch.finishedGoodName) {
+            const currentStock = catalogItem.stockQuantity;
+            const updatedStock = currentStock + completedQty;
+
+            const logEntry: StockMovement = {
+              id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+              itemId: catalogItem.id,
+              itemName: catalogItem.nameAr || catalogItem.name,
+              type: 'restock',
+              quantityChange: completedQty,
+              quantityBefore: currentStock,
+              quantityAfter: updatedStock,
+              date: dateStr,
+              time: timeStr,
+              reason: `إكتمال تشغيلة تصنيع (${targetBatch.batchNo}) - إضافة إلى المنتجات الجاهزة`,
+              referenceNo: targetBatch.batchNo,
+            };
+            setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
+
+            return { ...catalogItem, stockQuantity: updatedStock };
+          }
+          return catalogItem;
+        })
+      );
+    }
+  };
+
+  const deleteWipBatch = (id: string) => {
+    setWipBatches((prev) => prev.filter((b) => b.id !== id));
   };
 
   const addTransaction = (tx: Omit<Transaction, 'id'>) => {
@@ -915,6 +1221,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteFastItem,
         restockItem,
         stockMovements,
+        wipBatches,
+        startWipBatch,
+        updateWipBatchStage,
+        recordWipScrap,
+        completeWipBatch,
+        deleteWipBatch,
         returnTransactionItems,
         transactions,
         addTransaction,
