@@ -44,11 +44,13 @@ export const InventoryManager: React.FC = () => {
   const [custSearchTerm, setCustSearchTerm] = useState('');
   const [isAddEditCustModalOpen, setIsAddEditCustModalOpen] = useState(false);
   const [editingCust, setEditingCust] = useState<Customer | null>(null);
+  const [deletingCustTarget, setDeletingCustTarget] = useState<Customer | null>(null);
   const [custFormName, setCustFormName] = useState('');
   const [custFormPhone, setCustFormPhone] = useState('');
   const [custFormCompany, setCustFormCompany] = useState('');
   const [custFormEmail, setCustFormEmail] = useState('');
   const [custFormError, setCustFormError] = useState('');
+  const [deletingItemTarget, setDeletingItemTarget] = useState<FastItem | null>(null);
 
   // Local Search & Filter State for Inventory Items
   const [searchTerm, setSearchTerm] = useState('');
@@ -1101,12 +1103,9 @@ export const InventoryManager: React.FC = () => {
 
                                   {/* Delete */}
                                   <button
-                                    onClick={() => {
-                                      if (window.confirm(isRtl ? `تأكيد حذف الصنف (${item.name})؟` : `Delete item ${item.name}?`)) {
-                                        deleteFastItem(item.id);
-                                      }
-                                    }}
+                                    onClick={() => setDeletingItemTarget(item)}
                                     className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                    title={isRtl ? 'حذف الصنف' : 'Delete Item'}
                                   >
                                     <span className="material-symbols-outlined text-base">delete</span>
                                   </button>
@@ -1124,41 +1123,149 @@ export const InventoryManager: React.FC = () => {
           )}
         </>
       ) : (
-        /* CUSTOMER DATABASE VIEW */
-        <div className="flex flex-col gap-4">
-          <div
-            style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-            className="p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3"
-          >
-            <div className="relative w-full md:w-96">
-              <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">search</span>
+        /* CUSTOMER DATABASE VIEW - Matching Image 1 Design */
+        <div className="flex flex-col gap-5 w-full">
+          {/* 1. Header Banner Card */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-bold shadow-xs shrink-0">
+                <span className="material-symbols-outlined text-2xl">group</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                    {isRtl ? 'قاعدة بيانات العملاء' : 'Customer Database'}
+                  </h2>
+                  <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-mono">
+                    {customers.length} {isRtl ? 'عميل' : 'clients'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500">
+                  {isRtl
+                    ? 'عرض وحفظ وتحديث بيانات جميع العملاء المسجلين في النظام لاستخدامهم المباشر في المبيعات.'
+                    : 'View, save, and update all registered customer data for direct use in sales.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
+              <button
+                onClick={handleOpenAddCustModal}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 whitespace-nowrap"
+              >
+                <span className="material-symbols-outlined text-base">person_add</span>
+                <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
+              </button>
+
+              <button
+                onClick={() => setMainTab('customers')}
+                className="px-3.5 py-2 bg-white text-indigo-900 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-indigo-600">group</span>
+                <span>{isRtl ? 'قاعدة العملاء' : 'Customer DB'}</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-mono font-bold">
+                  {customers.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setMainTab('inventory')}
+                className="px-3.5 py-2 text-slate-600 hover:text-slate-900 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-slate-500">inventory_2</span>
+                <span>{isRtl ? 'جدول المخزون' : 'Inventory Table'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Three Summary Stat Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'إجمالي قاعدة العملاء' : 'Total Customer Base'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'عملاء مسجلون بالنظام' : 'Registered clients in system'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">group</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'حسابات الشركات والشركاء' : 'Companies & Partners'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.filter((c) => Boolean(c.company)).length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'مؤسسات وشركات تجارية' : 'Commercial entities'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">domain</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-bold text-slate-600">
+                  {isRtl ? 'الأفراد والعملاء المباشرون' : 'Individuals & Direct'}
+                </span>
+                <span className="text-2xl font-black text-slate-900 font-mono">
+                  {customers.filter((c) => !c.company).length}
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium">
+                  {isRtl ? 'حسابات أفراد ونقدي' : 'Individual accounts'}
+                </span>
+              </div>
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">person</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Search and Action Bar */}
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            <button
+              onClick={handleOpenAddCustModal}
+              className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
+            >
+              <span className="material-symbols-outlined text-base">person_add</span>
+              <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
+            </button>
+
+            <div className="relative w-full sm:w-96">
+              <span className="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                search
+              </span>
               <input
                 type="text"
                 value={custSearchTerm}
                 onChange={(e) => setCustSearchTerm(e.target.value)}
-                placeholder={isRtl ? 'ابحث باسم العميل أو رقم الهاتف...' : 'Search customer by name or phone...'}
-                className="w-full pr-9 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500"
+                placeholder={isRtl ? 'ابحث باسم العميل، رقم الهاتف، أو الشركة...' : 'Search by name, phone, or company...'}
+                className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
             </div>
-
-            <button
-              onClick={handleOpenAddCustModal}
-              style={{ backgroundColor: customPalette.primaryAccent }}
-              className="px-4 py-2 rounded-xl text-white font-bold text-xs shadow-md hover:opacity-95 transition-all flex items-center gap-1.5 cursor-pointer active:scale-98 w-full md:w-auto justify-center"
-            >
-              <span className="material-symbols-outlined text-base">person_add</span>
-              <span>+ {isRtl ? 'إضافة عميل جديد' : 'Add New Customer'}</span>
-            </button>
           </div>
 
-          <div
-            style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-            className="rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden"
-          >
+          {/* 4. Main Customer Container */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-8 min-h-[220px] flex flex-col justify-center">
             {filteredCustomers.length === 0 ? (
-              <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
-                <span className="material-symbols-outlined text-4xl text-slate-300">group_off</span>
-                <span className="font-bold text-slate-600">{isRtl ? 'لا يوجد عملاء مطابقون للبحث' : 'No matching customers found'}</span>
+              <div className="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-2">
+                <span className="material-symbols-outlined text-4xl text-slate-300">
+                  no_accounts
+                </span>
+                <span className="font-bold text-slate-500 text-sm">
+                  {isRtl ? 'لا يوجد عملاء مطابقون للبحث' : 'No matching customers found'}
+                </span>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -1168,6 +1275,7 @@ export const InventoryManager: React.FC = () => {
                       <th className="p-3.5">{isRtl ? 'العميل' : 'Customer Name'}</th>
                       <th className="p-3.5">{isRtl ? 'رقم الهاتف' : 'Phone'}</th>
                       <th className="p-3.5">{isRtl ? 'الشركة / المنشأة' : 'Company'}</th>
+                      <th className="p-3.5">{isRtl ? 'البريد الإلكتروني' : 'Email'}</th>
                       <th className="p-3.5 text-center">{isRtl ? 'إجراءات' : 'Actions'}</th>
                     </tr>
                   </thead>
@@ -1176,13 +1284,13 @@ export const InventoryManager: React.FC = () => {
                       <tr key={cust.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="p-3.5">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
-                              {cust.name.substring(0, 1)}
+                            <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                              {cust.name.substring(0, 2).toUpperCase()}
                             </div>
                             <span className="font-bold text-slate-900">{cust.name}</span>
                           </div>
                         </td>
-                        <td className="p-3.5 font-mono text-slate-700 font-semibold dir-ltr">📞 {cust.phone}</td>
+                        <td className="p-3.5 font-mono text-slate-700 font-semibold">{cust.phone || '—'}</td>
                         <td className="p-3.5 text-slate-600 font-medium">
                           {cust.company ? (
                             <span className="px-2.5 py-1 rounded-md bg-indigo-50 text-indigo-800 font-bold text-[10px]">🏢 {cust.company}</span>
@@ -1190,12 +1298,21 @@ export const InventoryManager: React.FC = () => {
                             <span className="text-slate-400 italic text-[10px]">{isRtl ? 'حساب فردي' : 'Individual'}</span>
                           )}
                         </td>
+                        <td className="p-3.5 font-mono text-slate-600 text-[11px]">{cust.email || '—'}</td>
                         <td className="p-3.5 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            <button onClick={() => handleOpenEditCustModal(cust)} className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100">
+                            <button
+                              onClick={() => handleOpenEditCustModal(cust)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                              title={isRtl ? 'تعديل' : 'Edit'}
+                            >
                               <span className="material-symbols-outlined text-base">edit</span>
                             </button>
-                            <button onClick={() => deleteCustomer(cust.id)} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600">
+                            <button
+                              onClick={() => setDeletingCustTarget(cust)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                              title={isRtl ? 'حذف العميل' : 'Delete Customer'}
+                            >
                               <span className="material-symbols-outlined text-base">delete</span>
                             </button>
                           </div>
@@ -1815,6 +1932,215 @@ export const InventoryManager: React.FC = () => {
             <div className="flex justify-end pt-2">
               <button onClick={() => setViewLogItem(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-xs font-bold text-slate-700">
                 {isRtl ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 7: ADD / EDIT CUSTOMER MODAL (Matching Image 23) --- */}
+      {isAddEditCustModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-scale-up border border-slate-100">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-indigo-600 text-2xl">
+                  {editingCust ? 'edit_square' : 'person_add'}
+                </span>
+                <h3 className="font-bold text-lg text-slate-900">
+                  {editingCust
+                    ? isRtl
+                      ? 'تعديل بيانات العميل'
+                      : 'Edit Customer Details'
+                    : isRtl
+                    ? 'إضافة عميل جديد إلى قاعدة البيانات'
+                    : 'Add New Customer to Database'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddEditCustModalOpen(false);
+                  setEditingCust(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 text-xl p-1 cursor-pointer transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {custFormError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+                ⚠️ {custFormError}
+              </div>
+            )}
+
+            {/* Modal Form */}
+            <form onSubmit={handleSubmitCustForm} className="flex flex-col gap-4 text-xs font-medium">
+              {/* Field 1: Full Name */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs">
+                  {isRtl ? 'اسم العميل ثلاثي / التجاري' : 'Customer Full Name / Commercial Name'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={custFormName}
+                  onChange={(e) => setCustFormName(e.target.value)}
+                  placeholder={isRtl ? 'مثال: شركة الخليج للتجارة' : 'e.g. Gulf Trading Company'}
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Field 2 & 3: Phone & Company */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-800 text-xs">
+                    {isRtl ? 'رقم الهاتف' : 'Phone Number'}
+                  </label>
+                  <input
+                    type="text"
+                    value={custFormPhone}
+                    onChange={(e) => setCustFormPhone(e.target.value)}
+                    placeholder="+966 50 000 0000"
+                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-bold text-slate-800 text-xs">
+                    {isRtl ? 'الشركة / المنشأة' : 'Company / Entity'}
+                  </label>
+                  <input
+                    type="text"
+                    value={custFormCompany}
+                    onChange={(e) => setCustFormCompany(e.target.value)}
+                    placeholder={isRtl ? 'مؤسسة الابتكار' : 'Innovation Est.'}
+                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Field 4: Email */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs">
+                  {isRtl ? 'البريد الإلكتروني' : 'Email Address'}
+                </label>
+                <input
+                  type="email"
+                  value={custFormEmail}
+                  onChange={(e) => setCustFormEmail(e.target.value)}
+                  placeholder="client@company.com"
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex items-center gap-3 pt-3 mt-2 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-sm transition-transform active:scale-95 cursor-pointer"
+                >
+                  {isRtl ? 'حفظ العميل' : 'Save Customer'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddEditCustModalOpen(false);
+                    setEditingCust(null);
+                  }}
+                  className="px-6 py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-2xl cursor-pointer transition-colors"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 8: CONFIRM DELETE CUSTOMER MODAL --- */}
+      {deletingCustTarget && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-4 border border-slate-100 animate-scale-up">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">delete_forever</span>
+              </div>
+              <h3 className="font-bold text-base text-slate-900">
+                {isRtl ? 'تأكيد حذف العميل' : 'Confirm Customer Deletion'}
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              {isRtl
+                ? `هل أنت متأكد من حذف العميل (${deletingCustTarget.name}) من قاعدة البيانات؟ لا يمكن التراجع عن هذه العملية.`
+                : `Are you sure you want to delete customer (${deletingCustTarget.name}) from the database? This action cannot be undone.`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingCustTarget(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  deleteCustomer(deletingCustTarget.id);
+                  setDeletingCustTarget(null);
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                {isRtl ? 'حذف العميل' : 'Delete Customer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL 9: CONFIRM DELETE ITEM MODAL --- */}
+      {deletingItemTarget && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-4 border border-slate-100 animate-scale-up">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">delete_forever</span>
+              </div>
+              <h3 className="font-bold text-base text-slate-900">
+                {isRtl ? 'تأكيد حذف الصنف' : 'Confirm Item Deletion'}
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              {isRtl
+                ? `هل أنت متأكد من حذف الصنف (${deletingItemTarget.nameAr || deletingItemTarget.name}) من المخزون؟`
+                : `Are you sure you want to delete item (${deletingItemTarget.name})?`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingItemTarget(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  deleteFastItem(deletingItemTarget.id);
+                  setDeletingItemTarget(null);
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                {isRtl ? 'حذف الصنف' : 'Delete Item'}
               </button>
             </div>
           </div>

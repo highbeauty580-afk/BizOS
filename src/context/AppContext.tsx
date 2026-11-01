@@ -147,190 +147,14 @@ export const extractPaletteFromImage = (dataUrl: string): Promise<Partial<Custom
   });
 };
 
-// Default Customers Data
-const DEFAULT_CUSTOMERS: Customer[] = [
-  {
-    id: 'cust-1',
-    name: 'شركة الأمل للتجارة',
-    phone: '+966 50 123 4567',
-    email: 'info@alamal.com',
-    company: 'مجموعة الأمل التجارية',
-    taxNumber: '310123456700003',
-  },
-  {
-    id: 'cust-2',
-    name: 'عبدالله محمد الغامدي',
-    phone: '+966 55 987 6543',
-    email: 'abdullah@example.com',
-    company: 'مؤسسة الغامدي للمقاولات',
-    taxNumber: '300987654300003',
-  },
-  {
-    id: 'cust-3',
-    name: 'سارة خالد العتيبي',
-    phone: '+966 54 456 7890',
-    email: 'sara.k@example.com',
-  },
-];
+// Default Customers Data (Empty - No default/sample data)
+const DEFAULT_CUSTOMERS: Customer[] = [];
 
-// Default Initial Data: Raw Materials & Finished Goods Inventory
-const DEFAULT_FAST_ITEMS: FastItem[] = [
-  // 1. Raw Materials (المواد الخام المستخدمة في التصنيع)
-  {
-    id: 'rm-1',
-    name: 'Cotton Fabric (High Grade)',
-    nameAr: 'قماش قطني فاخر',
-    category: 'Raw Materials',
-    inventoryType: 'raw_material',
-    price: 15.00,
-    costPrice: 10.00,
-    stockQuantity: 250,
-    minStock: 50,
-    maxStock: 500,
-    code: 'RM-COTTON-01',
-    unit: 'متر',
-  },
-  {
-    id: 'rm-2',
-    name: 'Sewing Threads (Spools)',
-    nameAr: 'خيوط حياكة ممتازة',
-    category: 'Raw Materials',
-    inventoryType: 'raw_material',
-    price: 4.50,
-    costPrice: 2.50,
-    stockQuantity: 12,
-    minStock: 20,
-    maxStock: 100,
-    code: 'RM-THREAD-02',
-    unit: 'بكرة',
-  },
-  {
-    id: 'rm-3',
-    name: 'Raw Specialty Coffee Beans',
-    nameAr: 'حبوب بن إثيوبي خام',
-    category: 'Raw Materials',
-    inventoryType: 'raw_material',
-    price: 35.00,
-    costPrice: 25.00,
-    stockQuantity: 180,
-    minStock: 40,
-    maxStock: 300,
-    code: 'RM-COFFEE-03',
-    unit: 'كجم',
-  },
-  {
-    id: 'rm-4',
-    name: 'Carton Packaging Boxes',
-    nameAr: 'عبوات تغليف كرتونية',
-    category: 'Raw Materials',
-    inventoryType: 'raw_material',
-    price: 2.00,
-    costPrice: 1.20,
-    stockQuantity: 550,
-    minStock: 100,
-    maxStock: 500,
-    code: 'RM-BOX-04',
-    unit: 'عبوة',
-  },
+// Default Initial Data: Raw Materials & Finished Goods Inventory (Empty - No default/sample data)
+const DEFAULT_FAST_ITEMS: FastItem[] = [];
 
-  // 2. Finished Goods (المنتجات الجاهزة للبيع)
-  {
-    id: 'fg-1',
-    name: 'Classic Formal Cotton Shirt',
-    nameAr: 'قميص رسمي قطني',
-    category: 'Retail',
-    inventoryType: 'finished_goods',
-    price: 120.00,
-    costPrice: 55.00,
-    stockQuantity: 45,
-    minStock: 10,
-    maxStock: 100,
-    code: 'PRD-SHIRT-01',
-    unit: 'قطعة',
-  },
-  {
-    id: 'fg-2',
-    name: 'Specialty Coffee Beans (250g)',
-    nameAr: 'عبوة أظرف قهوة مختصة (250ج)',
-    category: 'Retail',
-    inventoryType: 'finished_goods',
-    price: 65.00,
-    costPrice: 30.00,
-    stockQuantity: 8,
-    minStock: 15,
-    maxStock: 80,
-    code: 'PRD-COFFEE-02',
-    unit: 'علبة',
-  },
-  {
-    id: 'fg-3',
-    name: 'Genuine Leather Jacket',
-    nameAr: 'جاكيت جلد طبيعي',
-    category: 'Retail',
-    inventoryType: 'finished_goods',
-    price: 450.00,
-    costPrice: 210.00,
-    stockQuantity: 95,
-    minStock: 10,
-    maxStock: 50,
-    code: 'PRD-JACKET-03',
-    unit: 'قطعة',
-  },
-  {
-    id: 'fg-4',
-    name: 'Perfume Sandalwood & Musk (100ml)',
-    nameAr: 'عطر خشب الصندل والمسك',
-    category: 'Retail',
-    inventoryType: 'finished_goods',
-    price: 210.00,
-    costPrice: 85.00,
-    stockQuantity: 30,
-    minStock: 10,
-    maxStock: 60,
-    code: 'PRD-PERFUME-04',
-    unit: 'زجاجة',
-  },
-];
-
-// Default Work in Progress (تحت التصنيع)
-const DEFAULT_WIP_BATCHES: WipBatch[] = [
-  {
-    id: 'wip-1',
-    batchNo: 'WIP-2026-001',
-    finishedGoodId: 'fg-1',
-    finishedGoodName: 'قميص رسمي قطني',
-    targetQuantity: 50,
-    completedQuantity: 0,
-    scrappedQuantity: 2,
-    rawMaterialsUsed: [
-      { rawMaterialId: 'rm-1', rawMaterialName: 'قماش قطني فاخر', quantityUsed: 100, unit: 'متر' },
-      { rawMaterialId: 'rm-2', rawMaterialName: 'خيوط حياكة ممتازة', quantityUsed: 15, unit: 'بكرة' },
-    ],
-    stage: 'processing',
-    status: 'in_progress',
-    startDate: '2026-10-28',
-    targetCompletionDate: '2026-11-05',
-    notes: 'جاري مرحلة الخياطة والتجهيز الأولي للدفعة',
-  },
-  {
-    id: 'wip-2',
-    batchNo: 'WIP-2026-002',
-    finishedGoodId: 'fg-2',
-    finishedGoodName: 'عبوة أظرف قهوة مختصة (250ج)',
-    targetQuantity: 40,
-    completedQuantity: 0,
-    scrappedQuantity: 0,
-    rawMaterialsUsed: [
-      { rawMaterialId: 'rm-3', rawMaterialName: 'حبوب بن إثيوبي خام', quantityUsed: 10, unit: 'كجم' },
-      { rawMaterialId: 'rm-4', rawMaterialName: 'عبوات تغليف كرتونية', quantityUsed: 40, unit: 'عبوة' },
-    ],
-    stage: 'packaging',
-    status: 'in_progress',
-    startDate: '2026-10-30',
-    targetCompletionDate: '2026-11-02',
-    notes: 'مرحلة التحمير والتغليف النهائي',
-  },
-];
+// Default Work in Progress (تحت التصنيع) (Empty - No default/sample data)
+const DEFAULT_WIP_BATCHES: WipBatch[] = [];
 
 const DEFAULT_STOCK_MOVEMENTS: StockMovement[] = [];
 
@@ -554,10 +378,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (parsed.theme) setTheme(parsed.theme);
         if (parsed.customPalette) setCustomPalette(parsed.customPalette);
         if (parsed.businessName) setBusinessName(parsed.businessName);
-        if (parsed.customers) setCustomers(parsed.customers);
-        if (parsed.dailySalesTarget) setDailySalesTarget(parsed.dailySalesTarget);
-        if (parsed.fastItems) setFastItems(parsed.fastItems);
-        if (parsed.wipBatches) setWipBatches(parsed.wipBatches);
+        if (parsed.customers) {
+          const sampleCustIds = ['cust-1', 'cust-2', 'cust-3'];
+          setCustomers(parsed.customers.filter((c: Customer) => !sampleCustIds.includes(c.id)));
+        }
+        if (parsed.fastItems) {
+          const sampleItemIds = ['rm-1', 'rm-2', 'rm-3', 'rm-4', 'fg-1', 'fg-2', 'fg-3', 'fg-4'];
+          setFastItems(parsed.fastItems.filter((i: FastItem) => !sampleItemIds.includes(i.id)));
+        }
+        if (parsed.wipBatches) {
+          const sampleWipIds = ['wip-1', 'wip-2'];
+          setWipBatches(parsed.wipBatches.filter((w: WipBatch) => !sampleWipIds.includes(w.id)));
+        }
         if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
         if (parsed.transactions) setTransactions(parsed.transactions);
         if (parsed.pendingSales) setPendingSales(parsed.pendingSales);

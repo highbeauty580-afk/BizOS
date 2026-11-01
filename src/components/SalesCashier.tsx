@@ -37,6 +37,7 @@ export const SalesCashier: React.FC = () => {
   const [custDatabaseSearch, setCustDatabaseSearch] = useState('');
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [deletingCustTarget, setDeletingCustTarget] = useState<Customer | null>(null);
   const [custForm, setCustForm] = useState({
     name: '',
     phone: '',
@@ -276,12 +277,7 @@ export const SalesCashier: React.FC = () => {
   };
 
   const handleDeleteCustomer = (cust: Customer) => {
-    if (window.confirm(isRtl ? `هل أنت تأكد من حذف العميل (${cust.name})؟` : `Delete customer ${cust.name}?`)) {
-      deleteCustomer(cust.id);
-      if (selectedCustomer?.id === cust.id) {
-        setSelectedCustomer(null);
-      }
-    }
+    setDeletingCustTarget(cust);
   };
 
   // Open Checkout Modal
@@ -1705,6 +1701,52 @@ export const SalesCashier: React.FC = () => {
                 className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer"
               >
                 {isRtl ? 'إلاق' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: CONFIRM DELETE CUSTOMER MODAL */}
+      {deletingCustTarget && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 flex flex-col gap-4 border border-slate-100 animate-scale-up">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">delete_forever</span>
+              </div>
+              <h3 className="font-bold text-base text-slate-900">
+                {isRtl ? 'تأكيد حذف العميل' : 'Confirm Customer Deletion'}
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed font-medium">
+              {isRtl
+                ? `هل أنت متأكد من حذف العميل (${deletingCustTarget.name}) من قاعدة البيانات؟`
+                : `Are you sure you want to delete customer (${deletingCustTarget.name})?`}
+            </p>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingCustTarget(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  deleteCustomer(deletingCustTarget.id);
+                  if (selectedCustomer?.id === deletingCustTarget.id) {
+                    setSelectedCustomer(null);
+                  }
+                  setDeletingCustTarget(null);
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer"
+              >
+                {isRtl ? 'حذف العميل' : 'Delete Customer'}
               </button>
             </div>
           </div>
