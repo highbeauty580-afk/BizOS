@@ -242,3 +242,86 @@ export interface BuyerPersona {
   motivationsAndPains: string[];
   buyingChannels: string[];
 }
+
+// 6. Sales Auto Integration & Data Mapping Types
+export type SalesEntryMode = 'manual' | 'auto_integration';
+
+export type ConnectionType = 'shopify' | 'woocommerce' | 'custom_rest' | 'webhook';
+export type AuthType = 'bearer' | 'api_key' | 'basic' | 'custom_header';
+
+export interface IntegrationConnector {
+  id: string;
+  name: string;
+  type: ConnectionType;
+  baseUrl: string;
+  apiKey?: string;
+  maskedKey?: string;
+  authType: AuthType;
+  headerName?: string;
+  status: 'active' | 'inactive' | 'error' | 'draft';
+  lastSyncAt?: string;
+  createdDate: string;
+  autoDeductInventory: boolean;
+  unconfirmedHoldMinutes: number;
+  matchingCustomerRule: 'email_or_phone' | 'email_only' | 'phone_only' | 'always_create';
+  matchingProductRule: 'sku' | 'barcode' | 'name' | 'default_item';
+  defaultItemId?: string;
+}
+
+export type TransformationType = 'direct' | 'parse_number' | 'parse_float' | 'date_format' | 'trim' | 'default_value';
+
+export interface FieldMapping {
+  id: string;
+  connectorId: string;
+  sourcePath: string; // e.g. "order.total_price" or "customer.email"
+  sourceDataType: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  sourceSampleValue?: string;
+  targetField: 'external_id' | 'customerName' | 'customerPhone' | 'customerEmail' | 'total' | 'subtotal' | 'tax' | 'item_sku' | 'item_name' | 'item_price' | 'item_quantity' | 'order_date' | 'payment_method';
+  transformation: TransformationType;
+  defaultValue?: string;
+  isRequired: boolean;
+  status: 'valid' | 'type_mismatch_warning' | 'missing_required';
+}
+
+export interface IntegratedOrder {
+  id: string;
+  connectorId: string;
+  connectorName: string;
+  externalId: string; // Used for deduplication
+  receivedAt: string;
+  rawPayload: Record<string, any>;
+  mappedData: {
+    externalId: string;
+    customerName: string;
+    customerPhone: string;
+    customerEmail: string;
+    subtotal: number;
+    tax: number;
+    total: number;
+    paymentMethod: PaymentMethod;
+    date: string;
+    items: Array<{
+      sku: string;
+      name: string;
+      unitPrice: number;
+      quantity: number;
+      matchedFastItemId?: string;
+    }>;
+  };
+  status: 'pending_approval' | 'approved' | 'rejected' | 'duplicate_skipped';
+  rejectionReason?: string;
+  stockReserved: boolean;
+  reservedUntil?: string;
+  transactionReceiptNo?: string;
+}
+
+export interface IntegrationTestReport {
+  timestamp: string;
+  success: boolean;
+  recordsTested: number;
+  rawSamplePayload: Record<string, any>;
+  mappedResult: Record<string, any>;
+  warnings: string[];
+  errors: string[];
+}
+

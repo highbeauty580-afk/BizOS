@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { FastItem, StagedItem, Transaction, PendingSale, PaymentMethod, Customer } from '../types';
+import { FastItem, StagedItem, Transaction, PendingSale, PaymentMethod, Customer, SalesEntryMode } from '../types';
+import { AutoIntegrationSales } from './AutoIntegrationSales';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -21,6 +22,9 @@ export const SalesCashier: React.FC = () => {
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // Entry Mode: 'manual' (يدوي) | 'auto_integration' (ربط تلقائي)
+  const [salesEntryMode, setSalesEntryMode] = useState<SalesEntryMode>('manual');
 
   // Section Tabs: 'pos' (Cashier Terminal), 'customers' (Customer Database), 'history' (Sales History), 'pending' (Incomplete / Held Sales)
   const [activeTab, setActiveTab] = useState<'pos' | 'customers' | 'history' | 'pending'>('pos');
@@ -385,11 +389,57 @@ export const SalesCashier: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Top Header Card & Section Tabs */}
-      <div
-        style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-        className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors"
-      >
+      {/* Top Mode Switcher: يدوي | ربط تلقائي */}
+      <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-bold text-slate-500 px-2">
+            {isRtl ? 'طريقة تسجيل المبيعات:' : 'Sales Mode:'}
+          </span>
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+            <button
+              onClick={() => setSalesEntryMode('manual')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                salesEntryMode === 'manual'
+                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">touch_app</span>
+              <span>{isRtl ? 'يدوي' : 'Manual'}</span>
+            </button>
+
+            <button
+              onClick={() => setSalesEntryMode('auto_integration')}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                salesEntryMode === 'auto_integration'
+                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="material-symbols-outlined text-base">hub</span>
+              <span>{isRtl ? 'ربط تلقائي' : 'Auto Integration'}</span>
+            </button>
+          </div>
+        </div>
+
+        {salesEntryMode === 'auto_integration' && (
+          <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            {isRtl ? 'محرك المزامنة الربط البرمجي خيار نشط' : 'API Engine Active'}
+          </span>
+        )}
+      </div>
+
+      {/* Render Auto Integration View or Manual POS View */}
+      {salesEntryMode === 'auto_integration' ? (
+        <AutoIntegrationSales />
+      ) : (
+        <>
+          {/* Top Header Card & Section Tabs */}
+          <div
+            style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
+            className="p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-colors"
+          >
         <div className="flex items-center gap-3">
           <div
             className="w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-sm"
@@ -1751,6 +1801,8 @@ export const SalesCashier: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );
