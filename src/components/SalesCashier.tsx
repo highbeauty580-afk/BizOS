@@ -389,11 +389,11 @@ export const SalesCashier: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Top Mode Switcher: يدوي | ربط تلقائي */}
-      <div className="bg-white p-2.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      {/* Top Mode Switcher: الربط اليدوي | الربط الآلي */}
+      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-500 px-2">
-            {isRtl ? 'طريقة تسجيل المبيعات:' : 'Sales Mode:'}
+          <span className="text-xs font-bold text-slate-500 px-1">
+            {isRtl ? 'طريقة الربط وتسجيل المبيعات:' : 'Integration Mode:'}
           </span>
           <div className="flex items-center bg-slate-100 p-1 rounded-xl">
             <button
@@ -405,7 +405,7 @@ export const SalesCashier: React.FC = () => {
               }`}
             >
               <span className="material-symbols-outlined text-base">touch_app</span>
-              <span>{isRtl ? 'يدوي' : 'Manual'}</span>
+              <span>{isRtl ? 'الربط اليدوي' : 'Manual Linking'}</span>
             </button>
 
             <button
@@ -417,20 +417,19 @@ export const SalesCashier: React.FC = () => {
               }`}
             >
               <span className="material-symbols-outlined text-base">hub</span>
-              <span>{isRtl ? 'ربط تلقائي' : 'Auto Integration'}</span>
+              <span>{isRtl ? 'الربط الآلي' : 'Automated Linking'}</span>
             </button>
           </div>
         </div>
 
         {salesEntryMode === 'auto_integration' && (
-          <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+          <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            {isRtl ? 'محرك المزامنة الربط البرمجي خيار نشط' : 'API Engine Active'}
+            {isRtl ? 'محرك الربط الآلي والمزامنة التلقائية نشط' : 'Auto Engine Active'}
           </span>
         )}
       </div>
 
-      {/* Render Auto Integration View or Manual POS View */}
       {salesEntryMode === 'auto_integration' ? (
         <AutoIntegrationSales />
       ) : (
