@@ -1,35 +1,82 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Read Supabase environment variables from Vite env
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseUrl.startsWith('http') &&
-  !supabaseUrl.includes('your-project-id') &&
-  supabaseAnonKey &&
-  !supabaseAnonKey.includes('your-anon')
-);
-
-// Initialize Supabase Client with Anon Key (Safe for Frontend)
-// CRITICAL SECURITY RULE: Service Role keys are NEVER placed in client code.
-export const supabase: SupabaseClient = createClient(
-  isSupabaseConfigured ? supabaseUrl : 'https://placeholder.supabase.co',
-  isSupabaseConfigured ? supabaseAnonKey : 'placeholder-anon-key',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-    },
-    global: {
-      headers: {
-        'x-application-name': 'BizOS-Cloud',
-      },
-    },
+// Read Supabase credentials from dynamic store (localStorage) or Vite env
+export function getSupabaseUrl(): string {
+  try {
+    return localStorage.getItem('bizos_supabase_url') || import.meta.env.VITE_SUPABASE_URL || '';
+  } catch {
+    return import.meta.env.VITE_SUPABASE_URL || '';
   }
-);
+}
+
+export function getSupabaseAnonKey(): string {
+  try {
+    return localStorage.getItem('bizos_supabase_anon_key') || import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  } catch {
+    return import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+  }
+}
+
+let currentUrl = getSupabaseUrl();
+let currentAnonKey = getSupabaseAnonKey();
+
+export function checkIsConfigured(url: string = currentUrl, key: string = currentAnonKey): boolean {
+  return Boolean(
+    url &&
+    url.startsWith('http') &&
+    !url.includes('your-project-id') &&
+    key &&
+    !key.includes('your-anon')
+  );
+}
+
+export let isSupabaseConfigured = checkIsConfigured();
+
+function createNewSupabaseClient(url: string, key: string) {
+  const configured = checkIsConfigured(url, key);
+  return createClient(
+    configured ? url : 'https://placeholder.supabase.co',
+    configured ? key : 'placeholder-anon-key',
+    {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+      global: {
+        headers: {
+          'x-application-name': 'BizOS-Cloud',
+        },
+      },
+    }
+  );
+}
+
+export let supabase: SupabaseClient = createNewSupabaseClient(currentUrl, currentAnonKey);
+
+export function updateSupabaseConfig(url: string, key: string) {
+  const cleanUrl = url.trim();
+  const cleanKey = key.trim();
+  try {
+    if (cleanUrl) {
+      localStorage.setItem('bizos_supabase_url', cleanUrl);
+    } else {
+      localStorage.removeItem('bizos_supabase_url');
+    }
+    if (cleanKey) {
+      localStorage.setItem('bizos_supabase_anon_key', cleanKey);
+    } else {
+      localStorage.removeItem('bizos_supabase_anon_key');
+    }
+  } catch (err) {
+    console.warn('Failed to update localStorage for Supabase keys:', err);
+  }
+
+  currentUrl = getSupabaseUrl();
+  currentAnonKey = getSupabaseAnonKey();
+  isSupabaseConfigured = checkIsConfigured(currentUrl, currentAnonKey);
+  supabase = createNewSupabaseClient(currentUrl, currentAnonKey);
+}
 
 export interface SupabaseHealthResult {
   success: boolean;
@@ -46,19 +93,19 @@ export interface SupabaseHealthResult {
  */
 export async function testSupabaseConnection(): Promise<SupabaseHealthResult> {
   const startTime = Date.now();
+  const activeUrl = getSupabaseUrl();
 
   if (!isSupabaseConfigured) {
     return {
       success: false,
       configured: false,
-      url: supabaseUrl || 'غير محددة (Not Configured)',
-      statusMessageAr: 'بيانات اتصال Supabase غير مكتملة في متغيرات البيئة (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY).',
+      url: activeUrl || 'غير محددة (Not Configured)',
+      statusMessageAr: 'بيانات اتصال Supabase غير مكتملة (أدخل URL والـ Anon Key أدناه).',
       latencyMs: 0,
       rlsActive: false,
       details: [
-        '✗ لم يتم العثور على VITE_SUPABASE_URL أو VITE_SUPABASE_ANON_KEY صالحة.',
-        'ℹ️ يرجى إضافة متغيرات البيئة في ملف .env واكتفاء بالـ Anon Key فقط.',
-        '🛡️ التطبيق يعمل حالياً بوضع الأمان والربط الجاهز دون أي توقف.',
+        'ℹ️ أسطع أدناه بإدخال Project URL و Anon / Publishable Key واضغط على حفظ واختبار الاتصال.',
+        '🛡️ التطبيق يعمل حالياً بأمان التخزين المحلي Offline-First دون أي انقطاع.',
       ],
     };
   }
@@ -72,7 +119,7 @@ export async function testSupabaseConnection(): Promise<SupabaseHealthResult> {
       return {
         success: false,
         configured: true,
-        url: supabaseUrl,
+        url: activeUrl,
         statusMessageAr: `فشل الاتصال بـ Supabase: ${authError.message}`,
         latencyMs,
         rlsActive: true,
@@ -99,7 +146,7 @@ export async function testSupabaseConnection(): Promise<SupabaseHealthResult> {
       rlsPassed = true;
     }
 
-    const maskedUrl = supabaseUrl.replace(/^(https?:\/\/[^.]+)\..*$/, '$1.supabase.co');
+    const maskedUrl = activeUrl.replace(/^(https?:\/\/[^.]+)\..*$/, '$1.supabase.co');
 
     return {
       success: true,
@@ -120,7 +167,7 @@ export async function testSupabaseConnection(): Promise<SupabaseHealthResult> {
     return {
       success: false,
       configured: true,
-      url: supabaseUrl,
+      url: activeUrl,
       statusMessageAr: 'حدث خطأ أثناء محاولة فحص الاتصال بـ Supabase.',
       latencyMs,
       rlsActive: true,

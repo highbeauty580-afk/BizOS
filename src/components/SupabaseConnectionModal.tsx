@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Database, CheckCircle2, AlertTriangle, RefreshCw, ShieldCheck, Lock, ExternalLink, Info, Copy, Check } from 'lucide-react';
-import { testSupabaseConnection, isSupabaseConfigured, SupabaseHealthResult } from '../lib/supabase';
+import { Database, CheckCircle2, AlertTriangle, RefreshCw, ShieldCheck, Lock, ExternalLink, Info, Copy, Check, Save, KeyRound } from 'lucide-react';
+import { testSupabaseConnection, isSupabaseConfigured, SupabaseHealthResult, getSupabaseUrl, getSupabaseAnonKey, updateSupabaseConfig } from '../lib/supabase';
 
 interface SupabaseConnectionModalProps {
   isOpen: boolean;
@@ -16,6 +16,10 @@ export const SupabaseConnectionModal: React.FC<SupabaseConnectionModalProps> = (
   const [testing, setTesting] = useState(false);
   const [health, setHealth] = useState<SupabaseHealthResult | null>(null);
   const [copiedEnv, setCopiedEnv] = useState(false);
+  
+  const [urlInput, setUrlInput] = useState('');
+  const [keyInput, setKeyInput] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const runTest = async () => {
     setTesting(true);
@@ -26,9 +30,26 @@ export const SupabaseConnectionModal: React.FC<SupabaseConnectionModalProps> = (
 
   useEffect(() => {
     if (isOpen) {
+      setUrlInput(getSupabaseUrl());
+      setKeyInput(getSupabaseAnonKey());
       runTest();
     }
   }, [isOpen]);
+
+  const handleSaveAndTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    updateSupabaseConfig(urlInput, keyInput);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 2500);
+    await runTest();
+  };
+
+  const handleClear = async () => {
+    setUrlInput('');
+    setKeyInput('');
+    updateSupabaseConfig('', '');
+    await runTest();
+  };
 
   if (!isOpen) return null;
 
@@ -121,6 +142,73 @@ VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`;
             </div>
           )}
         </div>
+
+        {/* Interactive Key Input Form */}
+        <form onSubmit={handleSaveAndTest} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-4">
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-emerald-600" />
+              {isRtl ? 'إدخال مفاتيح اتصال Supabase مباشرة:' : 'Direct Supabase Credentials Setup:'}
+            </h4>
+            {saveSuccess && (
+              <span className="text-xs text-emerald-600 font-bold flex items-center gap-1 animate-pulse">
+                <Check className="w-3.5 h-3.5" />
+                {isRtl ? 'تم الحفظ وفحص الاتصال!' : 'Saved & Tested!'}
+              </span>
+            )}
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                {isRtl ? '1. رابط المشروع (Project URL):' : '1. Project URL:'}
+              </label>
+              <input
+                type="url"
+                required
+                placeholder="https://your-project-id.supabase.co"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-slate-900 bg-white text-left dir-ltr"
+              />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">
+                {isRtl ? '2. مفتاح المجهول/العام (Anon / Publishable Key):' : '2. Anon / Publishable Key:'}
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                value={keyInput}
+                onChange={(e) => setKeyInput(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-slate-900 bg-white text-left dir-ltr"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="submit"
+              disabled={testing}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {isRtl ? 'حفظ واختبار الاتصال الآن' : 'Save & Test Connection'}
+            </button>
+
+            {(urlInput || keyInput) && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-xs text-rose-600 hover:text-rose-800 font-semibold px-3 py-1.5 rounded-lg hover:bg-rose-50 cursor-pointer"
+              >
+                {isRtl ? 'مسح المفاتيح' : 'Clear Keys'}
+              </button>
+            )}
+          </div>
+        </form>
 
         {/* Security Rules & Protections Summary */}
         <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-3">
