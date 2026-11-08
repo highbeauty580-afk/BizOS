@@ -83,27 +83,61 @@ export async function fetchCustomersFromSupabase(): Promise<Customer[]> {
 }
 
 export async function saveCustomerToSupabase(customer: Customer): Promise<boolean> {
-  if (!isSupabaseConfigured) return false;
+  if (!isSupabaseConfigured) {
+    console.warn('ℹ️ Supabase credentials not yet configured. Customer saved to local state.');
+    return false;
+  }
   try {
+    console.log('1. Starting customer save process in Supabase...', customer);
+
+    // 1. Fetch active session user ID or fallback to default tenant UUID
+    const { data: authData } = await supabase.auth.getSession();
+    const currentTenantId = authData?.session?.user?.id || '00000000-0000-0000-0000-000000000000';
+
+    // 2. Build strict payload with required NOT NULL tenant_id
     const payload: any = {
+      tenant_id: currentTenantId,
       customer_name: customer.name,
-      customer_phone_1: customer.phone,
+      customer_phone_1: customer.phone || '0000000000',
       customer_phone_2: customer.taxNumber || null,
       customer_email: customer.email || null,
       customer_type: customer.company ? 'Company' : 'Individual',
       customer_status: 'Active',
       credit_limit: 5000.0,
     };
-    if (customer.id && !customer.id.startsWith('cust-')) {
+
+    // DO NOT send customer_pk for new items so database generates it via gen_random_uuid()
+    if (customer.id && !customer.id.startsWith('cust-') && customer.id.includes('-')) {
       payload.customer_pk = customer.id;
     }
-    const { error } = await supabase.from('customers').upsert([payload]);
+
+    console.log('2. Sending Customer Payload to Supabase:', payload);
+
+    const { data, error } = await supabase
+      .from('customers')
+      .insert([payload])
+      .select();
+
     if (error) {
-      console.warn('Supabase public.customers upsert error:', error.message);
+      console.error('❌ Supabase Insert Error:', error.message, error.details, error.hint);
+      
+      // Fallback to upsert if customer_pk was provided
+      if (payload.customer_pk) {
+        const { data: upsertData, error: upsertError } = await supabase.from('customers').upsert([payload]).select();
+        if (upsertError) {
+          console.error('❌ Supabase Upsert Error:', upsertError.message, upsertError.details, upsertError.hint);
+          return false;
+        }
+        console.log('✅ Successfully upserted customer in Supabase:', upsertData);
+        return true;
+      }
+      return false;
     }
-    return !error;
-  } catch (err) {
-    console.warn('Error saving customer to Supabase public.customers:', err);
+
+    console.log('✅ Successfully inserted customer in Supabase:', data);
+    return true;
+  } catch (err: any) {
+    console.error('❌ Supabase Customer Exception:', err);
     return false;
   }
 }

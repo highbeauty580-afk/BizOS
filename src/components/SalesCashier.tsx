@@ -254,6 +254,8 @@ export const SalesCashier: React.FC = () => {
 
   const handleSaveCustomer = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Submit triggered", custForm);
+
     if (!custForm.name.trim()) return;
 
     const payload = {
