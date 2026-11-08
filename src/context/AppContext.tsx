@@ -26,6 +26,19 @@ import {
   WipMaterialUsage,
   WipBatch,
 } from '../types';
+import { isSupabaseConfigured } from '../lib/supabase';
+import {
+  fetchProductsFromSupabase,
+  saveProductToSupabase,
+  deleteProductFromSupabase,
+  fetchCustomersFromSupabase,
+  saveCustomerToSupabase,
+  deleteCustomerFromSupabase,
+  fetchEmployeesFromSupabase,
+  saveEmployeeToSupabase,
+  fetchTransactionsFromSupabase,
+  executeSupabasePosCheckout,
+} from '../lib/supabaseSync';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
   indigo: {
@@ -493,6 +506,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.lang = language;
   }, [language]);
 
+  // Load real-time data from Supabase Cloud on mount if configured
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    async function syncSupabaseData() {
+      try {
+        const [spProducts, spCustomers, spEmployees, spTransactions] = await Promise.all([
+          fetchProductsFromSupabase(),
+          fetchCustomersFromSupabase(),
+          fetchEmployeesFromSupabase(),
+          fetchTransactionsFromSupabase(),
+        ]);
+
+        if (spProducts.length > 0) setFastItems(spProducts);
+        if (spCustomers.length > 0) setCustomers(spCustomers);
+        if (spEmployees.length > 0) setEmployees(spEmployees);
+        if (spTransactions.length > 0) setTransactions(spTransactions);
+      } catch (err) {
+        console.warn('Real-time Supabase data fetch notice:', err);
+      }
+    }
+    syncSupabaseData();
+  }, []);
+
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
   };
@@ -501,17 +537,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addCustomer = (custData: Omit<Customer, 'id'>): Customer => {
     const newCust: Customer = { ...custData, id: `cust-${Date.now()}` };
     setCustomers((prev) => [newCust, ...prev]);
+    saveCustomerToSupabase(newCust);
     return newCust;
   };
 
   const updateCustomer = (id: string, data: Partial<Customer>) => {
     setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...data } : c))
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, ...data };
+          saveCustomerToSupabase(updated);
+          return updated;
+        }
+        return c;
+      })
     );
   };
 
   const deleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    deleteCustomerFromSupabase(id);
   };
 
   // Sales Handlers
@@ -529,6 +574,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setFastItems((prev) => [...prev, newItem]);
+    saveProductToSupabase(newItem);
 
     // Log initial stock creation if quantity > 0
     if (newItem.stockQuantity > 0) {
@@ -623,6 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteFastItem = (id: string) => {
     setFastItems((prev) => prev.filter((i) => i.id !== id));
+    deleteProductFromSupabase(id);
   };
 
   // WIP & Manufacturing Handlers
@@ -761,6 +808,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTransaction = (tx: Omit<Transaction, 'id'>) => {
     const newTx: Transaction = { ...tx, id: `tx-${Date.now()}` };
     setTransactions((prev) => [newTx, ...prev]);
+
+    // Atomic POS Checkout Flow Execution in Supabase
+    executeSupabasePosCheckout({
+      items: tx.items || [],
+      subtotal: tx.subtotal,
+      tax: tx.tax,
+      total: tx.total,
+      paymentMethod: tx.paymentMethod,
+      cashierName: tx.cashier || 'الكاشير',
+      customerName: tx.customerName,
+    });
   };
 
   const updateTransactionNote = (id: string, note: string) => {
@@ -992,6 +1050,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addEmployee = (emp: Omit<Employee, 'id'>) => {
     const newEmp: Employee = { ...emp, id: `emp-${Date.now()}` };
     setEmployees((prev) => [...prev, newEmp]);
+    saveEmployeeToSupabase(newEmp);
   };
 
   const updateEmployee = (id: string, data: Partial<Employee>) => {
