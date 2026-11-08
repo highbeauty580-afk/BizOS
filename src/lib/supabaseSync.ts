@@ -62,21 +62,22 @@ export async function deleteProductFromSupabase(productId: string): Promise<bool
   }
 }
 
-// 2. Customers Sync
+// 2. Customers Sync (Directly connected to public.customers table in Supabase)
 export async function fetchCustomersFromSupabase(): Promise<Customer[]> {
   if (!isSupabaseConfigured) return [];
   try {
-    const { data, error } = await supabase.from('customers').select('*');
+    const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
     if (error || !data) return [];
     return data.map((c: any) => ({
       id: c.customer_pk || c.id,
       name: c.customer_name,
-      phone: c.customer_phone_1,
+      phone: c.customer_phone_1 || c.phone || '',
       email: c.customer_email || '',
       company: c.customer_type === 'Company' ? c.customer_name : undefined,
+      taxNumber: c.customer_phone_2 || undefined,
     }));
   } catch (err) {
-    console.warn('Error fetching customers from Supabase:', err);
+    console.warn('Error fetching customers from Supabase public.customers:', err);
     return [];
   }
 }
@@ -87,6 +88,7 @@ export async function saveCustomerToSupabase(customer: Customer): Promise<boolea
     const payload: any = {
       customer_name: customer.name,
       customer_phone_1: customer.phone,
+      customer_phone_2: customer.taxNumber || null,
       customer_email: customer.email || null,
       customer_type: customer.company ? 'Company' : 'Individual',
       customer_status: 'Active',
@@ -96,9 +98,12 @@ export async function saveCustomerToSupabase(customer: Customer): Promise<boolea
       payload.customer_pk = customer.id;
     }
     const { error } = await supabase.from('customers').upsert([payload]);
+    if (error) {
+      console.warn('Supabase public.customers upsert error:', error.message);
+    }
     return !error;
   } catch (err) {
-    console.warn('Error saving customer to Supabase:', err);
+    console.warn('Error saving customer to Supabase public.customers:', err);
     return false;
   }
 }
