@@ -18,27 +18,9 @@ import {
   StockMovement,
   Expense,
   ExpenseCategory,
-  ExpensePaymentMethod,
-  ExpensePaymentStatus,
-  InventoryType,
   WipStage,
-  WipStatus,
-  WipMaterialUsage,
   WipBatch,
 } from '../types';
-import { isSupabaseConfigured } from '../lib/supabase';
-import {
-  fetchProductsFromSupabase,
-  saveProductToSupabase,
-  deleteProductFromSupabase,
-  fetchCustomersFromSupabase,
-  saveCustomerToSupabase,
-  deleteCustomerFromSupabase,
-  fetchEmployeesFromSupabase,
-  saveEmployeeToSupabase,
-  fetchTransactionsFromSupabase,
-  executeSupabasePosCheckout,
-} from '../lib/supabaseSync';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
   indigo: {
@@ -107,78 +89,7 @@ export const DEFAULT_CUSTOM_PALETTE: CustomPalette = {
   surfaceBg: '#ffffff',
 };
 
-// Canvas Color Extraction helper
-export const extractPaletteFromImage = (dataUrl: string): Promise<Partial<CustomPalette>> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'Anonymous';
-    img.src = dataUrl;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return resolve({});
-
-      canvas.width = 80;
-      canvas.height = 80;
-      ctx.drawImage(img, 0, 0, 80, 80);
-
-      const imageData = ctx.getImageData(0, 0, 80, 80).data;
-      const colorCounts: Record<string, number> = {};
-
-      for (let i = 0; i < imageData.length; i += 16) {
-        const r = imageData[i];
-        const g = imageData[i + 1];
-        const b = imageData[i + 2];
-        const a = imageData[i + 3];
-
-        if (a < 128) continue;
-        const qR = Math.round(r / 20) * 20;
-        const qG = Math.round(g / 20) * 20;
-        const qB = Math.round(b / 20) * 20;
-
-        const hex = `#${((1 << 24) + (qR << 16) + (qG << 8) + qB).toString(16).slice(1)}`;
-        colorCounts[hex] = (colorCounts[hex] || 0) + 1;
-      }
-
-      const sortedColors = Object.keys(colorCounts).sort((a, b) => colorCounts[b] - colorCounts[a]);
-
-      const primary = sortedColors[0] || '#3525cd';
-      const secondary = sortedColors[1] || '#0f172a';
-
-      resolve({
-        primaryAccent: primary,
-        topBarBg: '#ffffff',
-        topBarText: '#0f172a',
-        sidebarBg: secondary,
-        sidebarText: '#ffffff',
-        pageBg: '#f8fafc',
-        surfaceBg: '#ffffff',
-        brandLogoUrl: dataUrl,
-      });
-    };
-    img.onerror = () => resolve({});
-  });
-};
-
-// Default Customers Data (Empty - No default/sample data)
-const DEFAULT_CUSTOMERS: Customer[] = [];
-
-// Default Initial Data: Raw Materials & Finished Goods Inventory (Empty - No default/sample data)
-const DEFAULT_FAST_ITEMS: FastItem[] = [];
-
-// Default Work in Progress (تحت التصنيع) (Empty - No default/sample data)
-const DEFAULT_WIP_BATCHES: WipBatch[] = [];
-
-const DEFAULT_STOCK_MOVEMENTS: StockMovement[] = [];
-
-const DEFAULT_PENDING_SALES: PendingSale[] = [];
-
-const DEFAULT_TRANSACTIONS: Transaction[] = [];
-
-const DEFAULT_OPERATIONS_STEPS: OperationStep[] = [];
-
-const DEFAULT_FINANCE_ITEMS: FinanceItem[] = [];
-
+// Clean default states without any mock data or localStorage
 const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: 'cat-1', nameAr: 'الإيجار', nameEn: 'Rent', isDefault: true },
   { id: 'cat-2', nameAr: 'الرواتب والأجور', nameEn: 'Salaries & Wages', isDefault: true },
@@ -188,10 +99,6 @@ const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: 'cat-6', nameAr: 'التسويق والإعلانات', nameEn: 'Marketing & Advertising', isDefault: true },
   { id: 'cat-7', nameAr: 'مصروفات أخرى', nameEn: 'Other Expenses', isDefault: true },
 ];
-
-const DEFAULT_EXPENSES: Expense[] = [];
-
-const DEFAULT_EMPLOYEES: Employee[] = [];
 
 const DEFAULT_MARKETING_MIX: MarketingMixP[] = [
   {
@@ -266,29 +173,34 @@ interface AppContextType {
   businessName: string;
   setBusinessName: (name: string) => void;
 
-  // Customer State
+  // Customers
   customers: Customer[];
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   addCustomer: (cust: Omit<Customer, 'id'>) => Customer;
   updateCustomer: (id: string, data: Partial<Customer>) => void;
   deleteCustomer: (id: string) => void;
 
-  // Sales & Inventory State
+  // Sales & Inventory
   dailySalesTarget: number;
   updateDailyTarget: (val: number) => void;
   fastItems: FastItem[];
+  setFastItems: React.Dispatch<React.SetStateAction<FastItem[]>>;
   addFastItem: (item: Omit<FastItem, 'id'>) => void;
   updateFastItem: (id: string, data: Partial<FastItem>) => void;
   updateFastItemStock: (id: string, newStock: number) => void;
   deleteFastItem: (id: string) => void;
   restockItem: (id: string, qtyToAdd: number, reason: string) => void;
   stockMovements: StockMovement[];
+  setStockMovements: React.Dispatch<React.SetStateAction<StockMovement[]>>;
   returnTransactionItems: (items: StagedItem[], referenceNo: string, reason: string) => void;
   transactions: Transaction[];
+  setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
   updateTransactionNote: (id: string, note: string) => void;
 
   // Work in Progress (WIP / Manufacturing) State
   wipBatches: WipBatch[];
+  setWipBatches: React.Dispatch<React.SetStateAction<WipBatch[]>>;
   startWipBatch: (batchData: Omit<WipBatch, 'id' | 'batchNo' | 'completedQuantity' | 'scrappedQuantity' | 'status'>) => void;
   updateWipBatchStage: (id: string, stage: WipStage, notes?: string) => void;
   recordWipScrap: (id: string, scrappedQty: number) => void;
@@ -304,6 +216,7 @@ interface AppContextType {
 
   // Operations State
   operationSteps: OperationStep[];
+  setOperationSteps: React.Dispatch<React.SetStateAction<OperationStep[]>>;
   addStep: (step: Omit<OperationStep, 'id' | 'stepNumber'>) => void;
   updateStep: (id: string, step: Partial<OperationStep>) => void;
   deleteStep: (id: string) => void;
@@ -311,12 +224,14 @@ interface AppContextType {
 
   // Finance State
   financeItems: FinanceItem[];
+  setFinanceItems: React.Dispatch<React.SetStateAction<FinanceItem[]>>;
   addFinanceItem: (item: Omit<FinanceItem, 'id'>) => void;
   updateFinanceItem: (id: string, item: Partial<FinanceItem>) => void;
   deleteFinanceItem: (id: string) => void;
 
   // Expenses State
   expenses: Expense[];
+  setExpenses: React.Dispatch<React.SetStateAction<Expense[]>>;
   expenseCategories: ExpenseCategory[];
   addExpense: (expense: Omit<Expense, 'id' | 'receiptNo' | 'createdAt'>) => void;
   updateExpense: (id: string, data: Partial<Expense>) => void;
@@ -328,6 +243,7 @@ interface AppContextType {
 
   // HR State
   employees: Employee[];
+  setEmployees: React.Dispatch<React.SetStateAction<Employee[]>>;
   addEmployee: (emp: Omit<Employee, 'id'>) => void;
   updateEmployee: (id: string, emp: Partial<Employee>) => void;
   deleteEmployee: (id: string) => void;
@@ -347,187 +263,32 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentPage, setCurrentPage] = useState<PageId>('home');
-  const [language, setLanguage] = useState<Language>('en');
+  const [language, setLanguage] = useState<Language>('ar');
   const [theme, setTheme] = useState<ColorTheme>('indigo');
   const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
-  const [businessName, setBusinessName] = useState<string>('My Business');
+  const [businessName, setBusinessName] = useState<string>('BizOS Enterprise');
 
-  // Customers
-  const [customers, setCustomers] = useState<Customer[]>(DEFAULT_CUSTOMERS);
-
-  // Sales & Inventory
+  // Pure React State (No localStorage, No sessionStorage, No mock data)
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [dailySalesTarget, setDailySalesTarget] = useState<number>(5000.0);
-  const [fastItems, setFastItems] = useState<FastItem[]>(DEFAULT_FAST_ITEMS);
-  const [wipBatches, setWipBatches] = useState<WipBatch[]>(DEFAULT_WIP_BATCHES);
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(DEFAULT_STOCK_MOVEMENTS);
-  const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
-  const [pendingSales, setPendingSales] = useState<PendingSale[]>(DEFAULT_PENDING_SALES);
-
-  // Operations
-  const [operationSteps, setOperationSteps] = useState<OperationStep[]>(DEFAULT_OPERATIONS_STEPS);
-
-  // Finance
-  const [financeItems, setFinanceItems] = useState<FinanceItem[]>(DEFAULT_FINANCE_ITEMS);
-
-  // Expenses
+  const [fastItems, setFastItems] = useState<FastItem[]>([]);
+  const [wipBatches, setWipBatches] = useState<WipBatch[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
+  const [operationSteps, setOperationSteps] = useState<OperationStep[]>([]);
+  const [financeItems, setFinanceItems] = useState<FinanceItem[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_EXPENSE_CATEGORIES);
-  const [expenses, setExpenses] = useState<Expense[]>(DEFAULT_EXPENSES);
-
-  // HR
-  const [employees, setEmployees] = useState<Employee[]>(DEFAULT_EMPLOYEES);
-
-  // Marketing
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [marketingMix, setMarketingMix] = useState<MarketingMixP[]>(DEFAULT_MARKETING_MIX);
   const [buyerPersona, setBuyerPersona] = useState<BuyerPersona>(DEFAULT_BUYER_PERSONA);
-
-  // Load from LocalStorage on mount
-  useEffect(() => {
-    try {
-      localStorage.removeItem('bizos_state_v1'); // clear legacy state
-      const saved = localStorage.getItem('bizos_state_v2');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.language) setLanguage(parsed.language);
-        if (parsed.theme) setTheme(parsed.theme);
-        if (parsed.customPalette) setCustomPalette(parsed.customPalette);
-        if (parsed.businessName) setBusinessName(parsed.businessName);
-        if (parsed.customers) {
-          const sampleCustIds = ['cust-1', 'cust-2', 'cust-3'];
-          setCustomers(parsed.customers.filter((c: Customer) => !sampleCustIds.includes(c.id)));
-        }
-        if (parsed.fastItems) {
-          const sampleItemIds = ['rm-1', 'rm-2', 'rm-3', 'rm-4', 'fg-1', 'fg-2', 'fg-3', 'fg-4'];
-          setFastItems(parsed.fastItems.filter((i: FastItem) => !sampleItemIds.includes(i.id)));
-        }
-        if (parsed.wipBatches) {
-          const sampleWipIds = ['wip-1', 'wip-2'];
-          setWipBatches(parsed.wipBatches.filter((w: WipBatch) => !sampleWipIds.includes(w.id)));
-        }
-        if (parsed.stockMovements) setStockMovements(parsed.stockMovements);
-        if (parsed.transactions) setTransactions(parsed.transactions);
-        if (parsed.pendingSales) setPendingSales(parsed.pendingSales);
-        if (parsed.operationSteps) setOperationSteps(parsed.operationSteps);
-        if (parsed.financeItems) setFinanceItems(parsed.financeItems);
-        if (parsed.expenseCategories) setExpenseCategories(parsed.expenseCategories);
-        if (parsed.expenses) setExpenses(parsed.expenses);
-        if (parsed.employees) setEmployees(parsed.employees);
-        if (parsed.marketingMix) {
-          const cleanedMix = parsed.marketingMix.map((p: MarketingMixP) => {
-            const isLegacyDescription =
-              p.descriptionAr?.includes('منتجات وحلول') ||
-              p.descriptionAr?.includes('تسعير تنافسي') ||
-              p.descriptionAr?.includes('منظومة توزيع') ||
-              p.descriptionAr?.includes('استراتيجية ترويج') ||
-              p.descriptionEn?.includes('Premium grade') ||
-              p.descriptionEn?.includes('Competitive value-based') ||
-              p.descriptionEn?.includes('Omnichannel presence') ||
-              p.descriptionEn?.includes('Targeted multi-channel');
-
-            if (isLegacyDescription) {
-              return {
-                ...p,
-                descriptionAr: '',
-                descriptionEn: '',
-                bulletPoints: [],
-              };
-            }
-            return p;
-          });
-          setMarketingMix(cleanedMix);
-        }
-        if (parsed.buyerPersona) {
-          // If loaded persona contains legacy mock name or title, reset to clean default
-          if (
-            parsed.buyerPersona.name === 'Abdullah Al-Harbi' ||
-            parsed.buyerPersona.profileDescriptionAr?.includes('عبد الله يدير')
-          ) {
-            setBuyerPersona(DEFAULT_BUYER_PERSONA);
-          } else {
-            setBuyerPersona(parsed.buyerPersona);
-          }
-        }
-      }
-    } catch (err) {
-      console.warn('Failed to load bizos_state from localStorage:', err);
-    }
-  }, []);
-
-  // Sync to LocalStorage on changes
-  useEffect(() => {
-    try {
-      const stateToSave = {
-        language,
-        theme,
-        customPalette,
-        businessName,
-        customers,
-        dailySalesTarget,
-        fastItems,
-        wipBatches,
-        stockMovements,
-        transactions,
-        pendingSales,
-        operationSteps,
-        financeItems,
-        expenseCategories,
-        expenses,
-        employees,
-        marketingMix,
-        buyerPersona,
-      };
-      localStorage.setItem('bizos_state_v2', JSON.stringify(stateToSave));
-    } catch (err) {
-      console.warn('Failed to save bizos_state to localStorage:', err);
-    }
-  }, [
-    language,
-    theme,
-    customPalette,
-    businessName,
-    customers,
-    dailySalesTarget,
-    fastItems,
-    wipBatches,
-    stockMovements,
-    transactions,
-    pendingSales,
-    operationSteps,
-    financeItems,
-    expenseCategories,
-    expenses,
-    employees,
-    marketingMix,
-    buyerPersona,
-  ]);
 
   // Set HTML dir attribute on language change
   useEffect(() => {
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = language;
   }, [language]);
-
-  // Load real-time data from Supabase Cloud on mount if configured
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-    async function syncSupabaseData() {
-      try {
-        const [spProducts, spCustomers, spEmployees, spTransactions] = await Promise.all([
-          fetchProductsFromSupabase(),
-          fetchCustomersFromSupabase(),
-          fetchEmployeesFromSupabase(),
-          fetchTransactionsFromSupabase(),
-        ]);
-
-        if (spProducts.length > 0) setFastItems(spProducts);
-        if (spCustomers.length > 0) setCustomers(spCustomers);
-        if (spEmployees.length > 0) setEmployees(spEmployees);
-        if (spTransactions.length > 0) setTransactions(spTransactions);
-      } catch (err) {
-        console.warn('Real-time Supabase data fetch notice:', err);
-      }
-    }
-    syncSupabaseData();
-  }, []);
 
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
@@ -537,26 +298,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addCustomer = (custData: Omit<Customer, 'id'>): Customer => {
     const newCust: Customer = { ...custData, id: `cust-${Date.now()}` };
     setCustomers((prev) => [newCust, ...prev]);
-    saveCustomerToSupabase(newCust);
     return newCust;
   };
 
   const updateCustomer = (id: string, data: Partial<Customer>) => {
     setCustomers((prev) =>
-      prev.map((c) => {
-        if (c.id === id) {
-          const updated = { ...c, ...data };
-          saveCustomerToSupabase(updated);
-          return updated;
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === id ? { ...c, ...data } : c))
     );
   };
 
   const deleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
-    deleteCustomerFromSupabase(id);
   };
 
   // Sales Handlers
@@ -572,61 +324,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       stockQuantity: itemData.stockQuantity ?? 0,
       unit: itemData.unit || 'قطعة',
     };
-
     setFastItems((prev) => [...prev, newItem]);
-    saveProductToSupabase(newItem);
-
-    // Log initial stock creation if quantity > 0
-    if (newItem.stockQuantity > 0) {
-      const now = new Date();
-      const logEntry: StockMovement = {
-        id: `sm-${Date.now()}`,
-        itemId: newId,
-        itemName: newItem.nameAr || newItem.name,
-        type: 'restock',
-        quantityChange: newItem.stockQuantity,
-        quantityBefore: 0,
-        quantityAfter: newItem.stockQuantity,
-        date: now.toISOString().split('T')[0],
-        time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        reason: 'إضافة منتج جديد وتحديد المخزون الافتتاحي',
-      };
-      setStockMovements((prev) => [logEntry, ...prev]);
-    }
   };
 
   const updateFastItem = (id: string, data: Partial<FastItem>) => {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     setFastItems((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const oldStock = item.stockQuantity;
-          const newStock = data.stockQuantity !== undefined ? data.stockQuantity : oldStock;
-
-          if (data.stockQuantity !== undefined && data.stockQuantity !== oldStock) {
-            const diff = newStock - oldStock;
-            const logEntry: StockMovement = {
-              id: `sm-${Date.now()}`,
-              itemId: item.id,
-              itemName: data.nameAr || data.name || item.nameAr || item.name,
-              type: diff > 0 ? 'restock' : 'adjustment',
-              quantityChange: diff,
-              quantityBefore: oldStock,
-              quantityAfter: newStock,
-              date: dateStr,
-              time: timeStr,
-              reason: diff > 0 ? 'تعديل وتوريد كمية جديدة' : 'تعديل تسوية مخزنية يدوية',
-            };
-            setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-          }
-
-          return { ...item, ...data };
-        }
-        return item;
-      })
+      prev.map((item) => (item.id === id ? { ...item, ...data } : item))
     );
   };
 
@@ -636,83 +339,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const restockItem = (itemId: string, qtyToAdd: number, reason: string) => {
     if (qtyToAdd <= 0) return;
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     setFastItems((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) {
-          const oldStock = item.stockQuantity;
-          const newStock = oldStock + qtyToAdd;
-
-          const logEntry: StockMovement = {
-            id: `sm-${Date.now()}`,
-            itemId: item.id,
-            itemName: item.nameAr || item.name,
-            type: 'restock',
-            quantityChange: qtyToAdd,
-            quantityBefore: oldStock,
-            quantityAfter: newStock,
-            date: dateStr,
-            time: timeStr,
-            reason: reason.trim() || 'إضافة وتوريد شحنة جديدة للمخزون',
-          };
-          setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-
-          return { ...item, stockQuantity: newStock };
-        }
-        return item;
-      })
+      prev.map((item) => (item.id === itemId ? { ...item, stockQuantity: item.stockQuantity + qtyToAdd } : item))
     );
   };
 
   const deleteFastItem = (id: string) => {
     setFastItems((prev) => prev.filter((i) => i.id !== id));
-    deleteProductFromSupabase(id);
   };
 
-  // WIP & Manufacturing Handlers
+  // WIP Handlers
   const startWipBatch = (
     batchData: Omit<WipBatch, 'id' | 'batchNo' | 'completedQuantity' | 'scrappedQuantity' | 'status'>
   ) => {
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const batchNo = `WIP-${now.getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-
-    // 1. Deduct raw materials used from inventory
-    if (batchData.rawMaterialsUsed && batchData.rawMaterialsUsed.length > 0) {
-      setFastItems((prevItems) =>
-        prevItems.map((catalogItem) => {
-          const used = batchData.rawMaterialsUsed.find((rm) => rm.rawMaterialId === catalogItem.id);
-          if (used) {
-            const currentStock = catalogItem.stockQuantity;
-            const updatedStock = Math.max(0, currentStock - used.quantityUsed);
-
-            const logEntry: StockMovement = {
-              id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-              itemId: catalogItem.id,
-              itemName: catalogItem.nameAr || catalogItem.name,
-              type: 'adjustment',
-              quantityChange: -used.quantityUsed,
-              quantityBefore: currentStock,
-              quantityAfter: updatedStock,
-              date: dateStr,
-              time: timeStr,
-              reason: `بدء تشغيلة تصنيع (${batchNo}) - خصم مواد خام`,
-              referenceNo: batchNo,
-            };
-            setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-
-            return { ...catalogItem, stockQuantity: updatedStock };
-          }
-          return catalogItem;
-        })
-      );
-    }
-
-    // 2. Create new WIP Batch
     const newBatch: WipBatch = {
       ...batchData,
       id: `wip-${Date.now()}`,
@@ -721,7 +362,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       scrappedQuantity: 0,
       status: 'in_progress',
     };
-
     setWipBatches((prev) => [newBatch, ...prev]);
   };
 
@@ -734,27 +374,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const recordWipScrap = (id: string, scrappedQty: number) => {
     if (scrappedQty <= 0) return;
     setWipBatches((prev) =>
-      prev.map((b) => {
-        if (b.id === id) {
-          return {
-            ...b,
-            scrappedQuantity: (b.scrappedQuantity || 0) + scrappedQty,
-          };
-        }
-        return b;
-      })
+      prev.map((b) => (b.id === id ? { ...b, scrappedQuantity: (b.scrappedQuantity || 0) + scrappedQty } : b))
     );
   };
 
   const completeWipBatch = (id: string, completedQty: number, scrappedQty: number = 0) => {
-    const targetBatch = wipBatches.find((b) => b.id === id);
-    if (!targetBatch || targetBatch.status === 'completed') return; // Prevent double completion
-
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    // 1. Mark batch as completed
     setWipBatches((prev) =>
       prev.map((b) => {
         if (b.id === id) {
@@ -763,42 +387,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status: 'completed',
             completedQuantity: completedQty,
             scrappedQuantity: (b.scrappedQuantity || 0) + scrappedQty,
-            completedDate: dateStr,
           };
         }
         return b;
       })
     );
-
-    // 2. Add completed finished goods to Finished Goods inventory
-    if (completedQty > 0) {
-      setFastItems((prevItems) =>
-        prevItems.map((catalogItem) => {
-          if (catalogItem.id === targetBatch.finishedGoodId || catalogItem.name === targetBatch.finishedGoodName) {
-            const currentStock = catalogItem.stockQuantity;
-            const updatedStock = currentStock + completedQty;
-
-            const logEntry: StockMovement = {
-              id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-              itemId: catalogItem.id,
-              itemName: catalogItem.nameAr || catalogItem.name,
-              type: 'restock',
-              quantityChange: completedQty,
-              quantityBefore: currentStock,
-              quantityAfter: updatedStock,
-              date: dateStr,
-              time: timeStr,
-              reason: `إكتمال تشغيلة تصنيع (${targetBatch.batchNo}) - إضافة إلى المنتجات الجاهزة`,
-              referenceNo: targetBatch.batchNo,
-            };
-            setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-
-            return { ...catalogItem, stockQuantity: updatedStock };
-          }
-          return catalogItem;
-        })
-      );
-    }
   };
 
   const deleteWipBatch = (id: string) => {
@@ -808,17 +401,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTransaction = (tx: Omit<Transaction, 'id'>) => {
     const newTx: Transaction = { ...tx, id: `tx-${Date.now()}` };
     setTransactions((prev) => [newTx, ...prev]);
-
-    // Atomic POS Checkout Flow Execution in Supabase
-    executeSupabasePosCheckout({
-      items: tx.items || [],
-      subtotal: tx.subtotal,
-      tax: tx.tax,
-      total: tx.total,
-      paymentMethod: tx.paymentMethod,
-      cashierName: tx.cashier || 'الكاشير',
-      customerName: tx.customerName,
-    });
   };
 
   const updateTransactionNote = (id: string, note: string) => {
@@ -852,10 +434,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deductStockForTransaction = (items: StagedItem[]) => {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     setFastItems((prevItems) =>
       prevItems.map((catalogItem) => {
         const matched = items.filter(
@@ -863,24 +441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (matched.length > 0) {
           const totalQtyDeducted = matched.reduce((sum, item) => sum + item.quantity, 0);
-          const currentStock = catalogItem.stockQuantity ?? 50;
-          const updatedStock = Math.max(0, currentStock - totalQtyDeducted);
-
-          const logEntry: StockMovement = {
-            id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            itemId: catalogItem.id,
-            itemName: catalogItem.nameAr || catalogItem.name,
-            type: 'sale',
-            quantityChange: -totalQtyDeducted,
-            quantityBefore: currentStock,
-            quantityAfter: updatedStock,
-            date: dateStr,
-            time: timeStr,
-            reason: 'عملية بيع مؤكدة عبر الكاشير',
-          };
-          setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-
-          return { ...catalogItem, stockQuantity: updatedStock };
+          return { ...catalogItem, stockQuantity: Math.max(0, catalogItem.stockQuantity - totalQtyDeducted) };
         }
         return catalogItem;
       })
@@ -888,10 +449,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const returnTransactionItems = (items: StagedItem[], referenceNo: string, reason: string) => {
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
     setFastItems((prevItems) =>
       prevItems.map((catalogItem) => {
         const matched = items.filter(
@@ -899,25 +456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (matched.length > 0) {
           const totalQtyReturned = matched.reduce((sum, item) => sum + item.quantity, 0);
-          const currentStock = catalogItem.stockQuantity;
-          const updatedStock = currentStock + totalQtyReturned;
-
-          const logEntry: StockMovement = {
-            id: `sm-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            itemId: catalogItem.id,
-            itemName: catalogItem.nameAr || catalogItem.name,
-            type: 'return',
-            quantityChange: totalQtyReturned,
-            quantityBefore: currentStock,
-            quantityAfter: updatedStock,
-            date: dateStr,
-            time: timeStr,
-            reason: reason || `إرجاع عملية بيع ملغاة ${referenceNo}`,
-            referenceNo,
-          };
-          setStockMovements((prevLogs) => [logEntry, ...prevLogs]);
-
-          return { ...catalogItem, stockQuantity: updatedStock };
+          return { ...catalogItem, stockQuantity: catalogItem.stockQuantity + totalQtyReturned };
         }
         return catalogItem;
       })
@@ -990,16 +529,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const updateExpense = (id: string, data: Partial<Expense>) => {
     setExpenses((prev) =>
-      prev.map((e) => {
-        if (e.id === id) {
-          const updated = { ...e, ...data, updatedAt: new Date().toISOString() };
-          if (data.paymentMethod && data.paymentMethod !== 'Credit' && e.paymentMethod === 'Credit') {
-            updated.status = 'Paid';
-          }
-          return updated;
-        }
-        return e;
-      })
+      prev.map((e) => (e.id === id ? { ...e, ...data } : e))
     );
   };
 
@@ -1010,18 +540,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const settleExpense = (id: string, paymentMethod: 'Cash' | 'Electronic') => {
     const today = new Date().toISOString().split('T')[0];
     setExpenses((prev) =>
-      prev.map((e) => {
-        if (e.id === id) {
-          return {
-            ...e,
-            status: 'Paid',
-            settledDate: today,
-            settledPaymentMethod: paymentMethod,
-            updatedAt: new Date().toISOString(),
-          };
-        }
-        return e;
-      })
+      prev.map((e) => (e.id === id ? { ...e, status: 'Paid', settledDate: today, settledPaymentMethod: paymentMethod } : e))
     );
   };
 
@@ -1050,7 +569,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addEmployee = (emp: Omit<Employee, 'id'>) => {
     const newEmp: Employee = { ...emp, id: `emp-${Date.now()}` };
     setEmployees((prev) => [...prev, newEmp]);
-    saveEmployeeToSupabase(newEmp);
   };
 
   const updateEmployee = (id: string, data: Partial<Employee>) => {
@@ -1058,14 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteEmployee = (id: string) => {
-    setEmployees((prev) => {
-      const deletedEmp = prev.find((e) => e.id === id);
-      const fallbackManagerId = deletedEmp ? deletedEmp.directManagerId : null;
-
-      return prev
-        .filter((e) => e.id !== id)
-        .map((e) => (e.directManagerId === id ? { ...e, directManagerId: fallbackManagerId } : e));
-    });
+    setEmployees((prev) => prev.filter((e) => e.id !== id));
   };
 
   // Marketing Handlers
@@ -1082,25 +593,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setBuyerPersona(DEFAULT_BUYER_PERSONA);
   };
 
-  // Reset function
   const resetToDefault = () => {
-    if (window.confirm('Reset all business data to initial defaults?')) {
-      setDailySalesTarget(5000.0);
-      setFastItems(DEFAULT_FAST_ITEMS);
-      setTransactions(DEFAULT_TRANSACTIONS);
-      setPendingSales(DEFAULT_PENDING_SALES);
-      setOperationSteps(DEFAULT_OPERATIONS_STEPS);
-      setFinanceItems(DEFAULT_FINANCE_ITEMS);
-      setEmployees(DEFAULT_EMPLOYEES);
-      setMarketingMix(DEFAULT_MARKETING_MIX);
-      setBuyerPersona(DEFAULT_BUYER_PERSONA);
-      setCustomPalette(DEFAULT_CUSTOM_PALETTE);
-      localStorage.removeItem('bizos_state_v1');
-      localStorage.removeItem('bizos_state_v2');
-    }
+    setFastItems([]);
+    setCustomers([]);
+    setTransactions([]);
+    setPendingSales([]);
+    setOperationSteps([]);
+    setFinanceItems([]);
+    setExpenses([]);
+    setEmployees([]);
   };
 
-  // Theme config mapped or overridden by customPalette.primaryAccent
   const baseTheme = THEME_CONFIGS[theme] || THEME_CONFIGS.indigo;
   const themeConfig: ThemeConfig = {
     ...baseTheme,
@@ -1123,6 +626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setBusinessName,
 
         customers,
+        setCustomers,
         addCustomer,
         updateCustomer,
         deleteCustomer,
@@ -1130,13 +634,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dailySalesTarget,
         updateDailyTarget,
         fastItems,
+        setFastItems,
         addFastItem,
         updateFastItem,
         updateFastItemStock,
         deleteFastItem,
         restockItem,
         stockMovements,
+        setStockMovements,
         wipBatches,
+        setWipBatches,
         startWipBatch,
         updateWipBatchStage,
         recordWipScrap,
@@ -1144,6 +651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteWipBatch,
         returnTransactionItems,
         transactions,
+        setTransactions,
         addTransaction,
         updateTransactionNote,
 
@@ -1154,17 +662,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deductStockForTransaction,
 
         operationSteps,
+        setOperationSteps,
         addStep,
         updateStep,
         deleteStep,
         reorderStep,
 
         financeItems,
+        setFinanceItems,
         addFinanceItem,
         updateFinanceItem,
         deleteFinanceItem,
 
         expenses,
+        setExpenses,
         expenseCategories,
         addExpense,
         updateExpense,
@@ -1175,6 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteExpenseCategory,
 
         employees,
+        setEmployees,
         addEmployee,
         updateEmployee,
         deleteEmployee,

@@ -1,7 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { FastItem, StagedItem, Transaction, PendingSale, PaymentMethod, Customer, SalesEntryMode } from '../types';
+import { FastItem, StagedItem, Transaction, PendingSale, PaymentMethod, Customer, CustomerType, CustomerStatus, SalesEntryMode } from '../types';
 import { AutoIntegrationSales } from './AutoIntegrationSales';
+import {
+  fetchCustomersFromSupabase,
+  addCustomerToSupabase,
+  updateCustomerStatusInSupabase,
+  updateCustomerCreditLimitInSupabase,
+  deleteCustomerFromSupabase,
+} from '../lib/customersService';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -9,6 +16,7 @@ export const SalesCashier: React.FC = () => {
     customPalette,
     fastItems,
     customers,
+    setCustomers,
     addCustomer,
     updateCustomer,
     deleteCustomer,
@@ -22,6 +30,17 @@ export const SalesCashier: React.FC = () => {
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // Fetch Customers from Supabase public.customers on mount
+  useEffect(() => {
+    async function loadCustomersFromSupabase() {
+      const { data, error } = await fetchCustomersFromSupabase();
+      if (!error && data.length > 0) {
+        setCustomers(data);
+      }
+    }
+    loadCustomersFromSupabase();
+  }, [setCustomers]);
 
   // Entry Mode: 'manual' (يدوي) | 'auto_integration' (ربط تلقائي)
   const [salesEntryMode, setSalesEntryMode] = useState<SalesEntryMode>('manual');
@@ -42,13 +61,26 @@ export const SalesCashier: React.FC = () => {
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [deletingCustTarget, setDeletingCustTarget] = useState<Customer | null>(null);
+
+  // Form State for Add Customer Modal
   const [custForm, setCustForm] = useState({
     name: '',
-    phone: '',
+    phone1: '',
+    phone2: '',
+    address: '',
     email: '',
-    company: '',
-    taxNumber: '',
+    type: 'Individual' as CustomerType,
   });
+
+  // Modal 1: Engagement Status Rules Modal (تحديد درجة تفاعل العملاء)
+  const [isEngagementModalOpen, setIsEngagementModalOpen] = useState(false);
+  const [engagementTargetCustomer, setEngagementTargetCustomer] = useState<Customer | null>(null);
+  const [newEngagementStatus, setNewEngagementStatus] = useState<CustomerStatus>('New');
+
+  // Modal 2: Credit Limit Control Modal (إدارة حدود الائتمان)
+  const [isCreditLimitModalOpen, setIsCreditLimitModalOpen] = useState(false);
+  const [creditLimitTargetCustomer, setCreditLimitTargetCustomer] = useState<Customer | null>(null);
+  const [newCreditLimitInput, setNewCreditLimitInput] = useState<string>('0.00');
 
   // Manual Item Form State
   const [manualDescription, setManualDescription] = useState('');
@@ -232,10 +264,11 @@ export const SalesCashier: React.FC = () => {
     setEditingCustomer(null);
     setCustForm({
       name: '',
-      phone: '',
+      phone1: '',
+      phone2: '',
+      address: '',
       email: '',
-      company: '',
-      taxNumber: '',
+      type: 'Individual',
     });
     setIsAddCustomerModalOpen(true);
   };
@@ -244,46 +277,130 @@ export const SalesCashier: React.FC = () => {
     setEditingCustomer(cust);
     setCustForm({
       name: cust.name,
-      phone: cust.phone || '',
+      phone1: cust.phone || '',
+      phone2: cust.phone2 || '',
+      address: cust.address || '',
       email: cust.email || '',
-      company: cust.company || '',
-      taxNumber: cust.taxNumber || '',
+      type: cust.type || 'Individual',
     });
     setIsAddCustomerModalOpen(true);
   };
 
-  const handleSaveCustomer = (e: React.FormEvent) => {
+  const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Submit triggered", custForm);
+    console.log("1. Submit triggered - Customer Form Data:", custForm);
 
-    if (!custForm.name.trim()) return;
+    if (!custForm.name.trim() || !custForm.phone1.trim() || !custForm.address.trim()) {
+      alert(isRtl ? 'يرجى استكمال الحقول الإجبارية: اسم العميل، رقم الهاتف الأول، والعنوان!' : 'Please fill required fields: Customer Name, Phone 1, and Address!');
+      return;
+    }
 
-    const payload = {
+    const customerParams = {
       name: custForm.name.trim(),
-      phone: custForm.phone.trim() || '0000000000',
+      phone1: custForm.phone1.trim(),
+      phone2: custForm.phone2.trim() || undefined,
+      address: custForm.address.trim(),
       email: custForm.email.trim() || undefined,
-      company: custForm.company.trim() || undefined,
-      taxNumber: custForm.taxNumber.trim() || undefined,
+      type: custForm.type || 'Individual',
+      status: 'New' as CustomerStatus,
+      creditLimit: 0.0,
     };
 
     if (editingCustomer) {
-      updateCustomer(editingCustomer.id, payload);
-      const updatedObj = { ...editingCustomer, ...payload };
+      updateCustomer(editingCustomer.id, {
+        name: customerParams.name,
+        phone: customerParams.phone1,
+        phone2: customerParams.phone2,
+        address: customerParams.address,
+        email: customerParams.email,
+        type: customerParams.type,
+      });
+      const updatedObj = { ...editingCustomer, ...customerParams, phone: customerParams.phone1 };
       if (selectedCustomer?.id === editingCustomer.id) {
         setSelectedCustomer(updatedObj);
       }
+      alert(isRtl ? 'تم تحديث بيانات العميل بنجاح!' : 'Customer updated successfully!');
     } else {
-      const created = addCustomer(payload);
-      setSelectedCustomer(created);
+      // Direct async insertion into Supabase public.customers table
+      console.log('2. Inserting Customer Payload directly to Supabase public.customers:', customerParams);
+      const result = await addCustomerToSupabase(customerParams);
+
+      if (result.success && result.data) {
+        console.log('✅ Successfully inserted customer in Supabase:', result.data);
+        alert(isRtl ? 'تم حفظ العميل بنجاح في قاعدة بيانات Supabase!' : 'Customer saved successfully in Supabase!');
+        
+        const createdCustomer = result.data;
+        setCustomers((prev) => [createdCustomer, ...prev]);
+        setSelectedCustomer(createdCustomer);
+      } else {
+        console.error('❌ Supabase Insert Error:', result.error);
+        alert(isRtl ? `خطأ أثناء الحفظ في Supabase: ${result.error || 'تأكد من الاتصال'}` : `Error saving to Supabase: ${result.error}`);
+        
+        // Fallback local save
+        const fallbackCreated = addCustomer({
+          name: customerParams.name,
+          phone: customerParams.phone1,
+          phone2: customerParams.phone2,
+          address: customerParams.address,
+          email: customerParams.email,
+          type: customerParams.type,
+          status: 'New',
+          creditLimit: 0.0,
+        });
+        setSelectedCustomer(fallbackCreated);
+      }
     }
 
-    setCustForm({ name: '', phone: '', email: '', company: '', taxNumber: '' });
+    setCustForm({ name: '', phone1: '', phone2: '', address: '', email: '', type: 'Individual' });
     setEditingCustomer(null);
     setIsAddCustomerModalOpen(false);
   };
 
-  const handleDeleteCustomer = (cust: Customer) => {
-    setDeletingCustTarget(cust);
+  const handleSaveEngagementStatus = async () => {
+    if (!engagementTargetCustomer) return;
+    const res = await updateCustomerStatusInSupabase(engagementTargetCustomer.id, newEngagementStatus);
+    if (res.success) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === engagementTargetCustomer.id ? { ...c, status: newEngagementStatus } : c))
+      );
+      if (selectedCustomer?.id === engagementTargetCustomer.id) {
+        setSelectedCustomer((prev) => prev ? { ...prev, status: newEngagementStatus } : null);
+      }
+      alert(isRtl ? 'تم تحديث درجة تفاعل العميل بنجاح!' : 'Customer engagement status updated!');
+    } else {
+      alert(isRtl ? `فشل تحديث الحالة: ${res.error}` : `Failed to update status: ${res.error}`);
+    }
+    setIsEngagementModalOpen(false);
+    setEngagementTargetCustomer(null);
+  };
+
+  const handleSaveCreditLimit = async () => {
+    if (!creditLimitTargetCustomer) return;
+    const numericLimit = parseFloat(newCreditLimitInput) || 0.0;
+    const res = await updateCustomerCreditLimitInSupabase(creditLimitTargetCustomer.id, numericLimit);
+    if (res.success) {
+      setCustomers((prev) =>
+        prev.map((c) => (c.id === creditLimitTargetCustomer.id ? { ...c, creditLimit: numericLimit } : c))
+      );
+      if (selectedCustomer?.id === creditLimitTargetCustomer.id) {
+        setSelectedCustomer((prev) => prev ? { ...prev, creditLimit: numericLimit } : null);
+      }
+      alert(isRtl ? 'تم تحديث حدود الائتمان بنجاح!' : 'Credit limit updated successfully!');
+    } else {
+      alert(isRtl ? `فشل تحديث حدود الائتمان: ${res.error}` : `Failed to update credit limit: ${res.error}`);
+    }
+    setIsCreditLimitModalOpen(false);
+    setCreditLimitTargetCustomer(null);
+  };
+
+  const handleDeleteCustomer = async (cust: Customer) => {
+    if (window.confirm(isRtl ? `هل أنت تأكد من حذف العميل (${cust.name})؟` : `Delete customer ${cust.name}?`)) {
+      await deleteCustomerFromSupabase(cust.id);
+      deleteCustomer(cust.id);
+      if (selectedCustomer?.id === cust.id) {
+        setSelectedCustomer(null);
+      }
+    }
   };
 
   // Open Checkout Modal
@@ -1032,7 +1149,7 @@ export const SalesCashier: React.FC = () => {
             </div>
 
             {/* Header Right Actions / Switcher Pills */}
-            <div className="flex items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
+            <div className="flex flex-wrap items-center gap-2 bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80">
               <button
                 onClick={handleOpenAddCustomer}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 whitespace-nowrap"
@@ -1042,14 +1159,35 @@ export const SalesCashier: React.FC = () => {
               </button>
 
               <button
-                onClick={() => setActiveTab('customers')}
-                className="px-3.5 py-2 bg-white text-indigo-900 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  if (customers.length > 0) {
+                    setEngagementTargetCustomer(customers[0]);
+                    setNewEngagementStatus(customers[0].status || 'New');
+                    setIsEngagementModalOpen(true);
+                  } else {
+                    alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد درجة التفاعل.' : 'Please add a customer first.');
+                  }
+                }}
+                className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-base text-indigo-600">group</span>
-                <span>{isRtl ? 'قاعدة العملاء' : 'Customer DB'}</span>
-                <span className="px-1.5 py-0.2 rounded-md bg-indigo-100 text-indigo-800 text-[10px] font-mono font-bold">
-                  {customers.length}
-                </span>
+                <span className="material-symbols-outlined text-base text-amber-500">analytics</span>
+                <span>{isRtl ? 'تحديد درجة تفاعل العملاء' : 'Engagement Rules'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (customers.length > 0) {
+                    setCreditLimitTargetCustomer(customers[0]);
+                    setNewCreditLimitInput((customers[0].creditLimit || 0).toString());
+                    setIsCreditLimitModalOpen(true);
+                  } else {
+                    alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد حدود الائتمان.' : 'Please add a customer first.');
+                  }
+                }}
+                className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-base text-emerald-600">credit_score</span>
+                <span>{isRtl ? 'إدارة حدود الائتمان' : 'Credit Limits'}</span>
               </button>
             </div>
           </div>
@@ -1066,7 +1204,7 @@ export const SalesCashier: React.FC = () => {
                   {customers.length}
                 </span>
                 <span className="text-[11px] text-slate-400 font-medium">
-                  {isRtl ? 'عملاء مسجلون بالنظام' : 'Registered clients in system'}
+                  {isRtl ? 'عملاء مسجلون في Supabase' : 'Registered clients in Supabase'}
                 </span>
               </div>
               <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
@@ -1074,14 +1212,14 @@ export const SalesCashier: React.FC = () => {
               </div>
             </div>
 
-            {/* Stat Card 2: Corporate & Partners */}
+            {/* Stat Card 2: Corporate & Companies */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-bold text-slate-600">
-                  {isRtl ? 'حسابات الشركات والشركاء' : 'Companies & Partners'}
+                  {isRtl ? 'عدد حسابات الشركات' : 'Company Accounts'}
                 </span>
                 <span className="text-2xl font-black text-slate-900 font-mono">
-                  {customers.filter((c) => Boolean(c.company)).length}
+                  {customers.filter((c) => c.type === 'Company' || Boolean(c.company)).length}
                 </span>
                 <span className="text-[11px] text-slate-400 font-medium">
                   {isRtl ? 'مؤسسات وشركات تجارية' : 'Commercial entities'}
@@ -1092,17 +1230,17 @@ export const SalesCashier: React.FC = () => {
               </div>
             </div>
 
-            {/* Stat Card 3: Individuals & Direct */}
+            {/* Stat Card 3: Individuals */}
             <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div className="flex flex-col gap-0.5">
                 <span className="text-xs font-bold text-slate-600">
-                  {isRtl ? 'الأفراد والعملاء المباشرون' : 'Individuals & Direct'}
+                  {isRtl ? 'عدد الأفراد المباشرين' : 'Individual Accounts'}
                 </span>
                 <span className="text-2xl font-black text-slate-900 font-mono">
-                  {customers.filter((c) => !c.company).length}
+                  {customers.filter((c) => c.type !== 'Company' && !c.company).length}
                 </span>
                 <span className="text-[11px] text-slate-400 font-medium">
-                  {isRtl ? 'حسابات أفراد ونقدي' : 'Individual accounts'}
+                  {isRtl ? 'عملاء أفراد نقدي' : 'Individual accounts'}
                 </span>
               </div>
               <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -1113,13 +1251,15 @@ export const SalesCashier: React.FC = () => {
 
           {/* 3. Search and Action Bar */}
           <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-            <button
-              onClick={handleOpenAddCustomer}
-              className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
-            >
-              <span className="material-symbols-outlined text-base">person_add</span>
-              <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleOpenAddCustomer}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
+              >
+                <span className="material-symbols-outlined text-base">person_add</span>
+                <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
+              </button>
+            </div>
 
             <div className="relative w-full sm:w-96">
               <span className="material-symbols-outlined absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
@@ -1129,13 +1269,13 @@ export const SalesCashier: React.FC = () => {
                 type="text"
                 value={custDatabaseSearch}
                 onChange={(e) => setCustDatabaseSearch(e.target.value)}
-                placeholder={isRtl ? 'ابحث باسم العميل، رقم الهاتف، أو الشركة...' : 'Search by name, phone, or company...'}
+                placeholder={isRtl ? 'ابحث باسم العميل، رقم الهاتف، العنوان...' : 'Search by name, phone, address...'}
                 className="w-full pr-10 pl-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500 shadow-2xs"
               />
             </div>
           </div>
 
-          {/* 4. Customer List / Empty State Container */}
+          {/* 4. Customer Cards Container */}
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-6 sm:p-8 min-h-[220px] flex flex-col justify-center">
             {(() => {
               const searchLower = custDatabaseSearch.trim().toLowerCase();
@@ -1144,7 +1284,8 @@ export const SalesCashier: React.FC = () => {
                 return (
                   c.name.toLowerCase().includes(searchLower) ||
                   (c.phone && c.phone.toLowerCase().includes(searchLower)) ||
-                  (c.company && c.company.toLowerCase().includes(searchLower)) ||
+                  (c.phone2 && c.phone2.toLowerCase().includes(searchLower)) ||
+                  (c.address && c.address.toLowerCase().includes(searchLower)) ||
                   (c.email && c.email.toLowerCase().includes(searchLower))
                 );
               });
@@ -1156,7 +1297,7 @@ export const SalesCashier: React.FC = () => {
                       no_accounts
                     </span>
                     <span className="font-bold text-slate-500 text-sm">
-                      {isRtl ? 'لا يوجد عملاء مطابقون للبحث' : 'No matching customers found'}
+                      {isRtl ? 'لا يوجد عملاء مطابقون في قاعدة البيانات' : 'No matching customers in database'}
                     </span>
                   </div>
                 );
@@ -1165,9 +1306,11 @@ export const SalesCashier: React.FC = () => {
               return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {filteredCusts.map((cust) => {
-                    const custTxs = transactions.filter((t) => t.customerName === cust.name);
-                    const totalSpent = custTxs.reduce((sum, t) => sum + t.total, 0);
                     const isSelectedForPOS = selectedCustomer?.id === cust.id;
+                    const statusVal = cust.status || 'New';
+                    const isNew = statusVal === 'New';
+                    const isActive = statusVal === 'Active';
+                    const isChurned = statusVal === 'Churned';
 
                     return (
                       <div
@@ -1185,14 +1328,17 @@ export const SalesCashier: React.FC = () => {
                                 {cust.name.substring(0, 2).toUpperCase()}
                               </div>
                               <div className="flex flex-col min-w-0">
-                                <h3 className="text-sm font-bold text-slate-900 truncate">
-                                  {cust.name}
-                                </h3>
-                                {cust.company && (
-                                  <span className="text-[10px] font-semibold text-slate-500 truncate">
-                                    🏢 {cust.company}
+                                <div className="flex items-center gap-1.5">
+                                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                                    {cust.name}
+                                  </h3>
+                                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200/70 text-slate-700 shrink-0">
+                                    {cust.type === 'Company' ? (isRtl ? 'شركة' : 'Company') : (isRtl ? 'فرد' : 'Individual')}
                                   </span>
-                                )}
+                                </div>
+                                <span className="text-[10px] text-slate-500 font-mono truncate">
+                                  {cust.address ? `📍 ${cust.address}` : (isRtl ? 'بدون عنوان' : 'No address')}
+                                </span>
                               </div>
                             </div>
 
@@ -1214,28 +1360,67 @@ export const SalesCashier: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex flex-col gap-1 text-xs text-slate-600 font-medium">
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-sm text-slate-400">call</span>
-                              <span className="font-mono text-slate-800 font-bold">{cust.phone || '—'}</span>
-                            </div>
-
-                            {cust.email && (
-                              <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-sm text-slate-400">mail</span>
-                                <span className="text-slate-700 font-mono text-[11px] truncate">{cust.email}</span>
+                          {/* Phone & Status Badges */}
+                          <div className="flex flex-col gap-1.5 text-xs text-slate-600 font-medium">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm text-slate-400">call</span>
+                                <span className="font-mono text-slate-800 font-bold">{cust.phone || '—'}</span>
                               </div>
-                            )}
-                          </div>
-
-                          <div className="mt-1 pt-2 border-t border-slate-200/60 grid grid-cols-2 gap-2 text-[11px]">
-                            <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
-                              <span className="text-slate-400 text-[10px]">{isRtl ? 'عدد الفواتير' : 'Orders'}</span>
-                              <span className="font-bold text-slate-900 font-mono text-xs">{custTxs.length}</span>
+                              {cust.phone2 && (
+                                <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                                  احتياطي: {cust.phone2}
+                                </span>
+                              )}
                             </div>
-                            <div className="bg-white p-2 rounded-lg border border-slate-200/80 flex flex-col">
-                              <span className="text-slate-400 text-[10px]">{isRtl ? 'إجمالي الشراء' : 'Total Spent'}</span>
-                              <span className="font-extrabold text-emerald-700 font-mono text-xs">${totalSpent.toFixed(2)}</span>
+
+                            {/* Customer Status Badge (حالة العميل: جديد / متفاعل / منقطع) */}
+                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                              <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حالة العميل:' : 'Status:'}</span>
+                              <button
+                                onClick={() => {
+                                  setEngagementTargetCustomer(cust);
+                                  setNewEngagementStatus(cust.status || 'New');
+                                  setIsEngagementModalOpen(true);
+                                }}
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 cursor-pointer transition-transform active:scale-95 ${
+                                  isNew
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : isActive
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                                <span>
+                                  {isNew
+                                    ? (isRtl ? 'جديد (افتراضي)' : 'New')
+                                    : isActive
+                                    ? (isRtl ? 'متفاعل' : 'Active')
+                                    : (isRtl ? 'منقطع' : 'Churned')}
+                                </span>
+                                <span className="material-symbols-outlined text-[12px]">edit</span>
+                              </button>
+                            </div>
+
+                            {/* Credit Limit Badge (حدود الائتمان: نقداً فقط / مبلغ) */}
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حدود الائتمان:' : 'Credit Limit:'}</span>
+                              <button
+                                onClick={() => {
+                                  setCreditLimitTargetCustomer(cust);
+                                  setNewCreditLimitInput((cust.creditLimit || 0).toString());
+                                  setIsCreditLimitModalOpen(true);
+                                }}
+                                className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200 flex items-center gap-1 cursor-pointer"
+                              >
+                                <span className="material-symbols-outlined text-[12px] text-emerald-600">credit_score</span>
+                                <span>
+                                  {cust.creditLimit && cust.creditLimit > 0
+                                    ? `${cust.creditLimit} ر.س`
+                                    : (isRtl ? 'نقداً فقط' : 'Cash Only')}
+                                </span>
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1524,7 +1709,7 @@ export const SalesCashier: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL 2: ADD / EDIT CUSTOMER MODAL (Matching Image 2 Design) */}
+      {/* MODAL 2: ADD / EDIT CUSTOMER MODAL (Matching User Requirements for Supabase public.customers) */}
       {isAddCustomerModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 sm:p-7 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-scale-up">
@@ -1558,71 +1743,128 @@ export const SalesCashier: React.FC = () => {
 
             {/* Modal Form */}
             <form onSubmit={handleSaveCustomer} className="flex flex-col gap-4 text-xs font-medium">
-              {/* Field 1: Full Name */}
+              {/* Field 1: Customer Name (اسم العميل - اجباري) */}
               <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-800 text-xs">
-                  {isRtl ? 'اسم العميل ثلاثي / التجاري' : 'Customer Full Name / Commercial Name'}
+                <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                  <span>{isRtl ? 'اسم العميل' : 'Customer Name'}</span>
+                  <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded font-bold">{isRtl ? 'اجباري' : 'Required'}</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={custForm.name}
                   onChange={(e) => setCustForm({ ...custForm, name: e.target.value })}
-                  placeholder={isRtl ? 'مثال: شركة الخليج للتجارة' : 'e.g. Gulf Trading Company'}
+                  placeholder={isRtl ? 'مثال: محمد أحمد علي / شركة التقنية' : 'e.g. John Doe / Tech Corp'}
                   className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
 
-              {/* Field 2 & 3: Phone & Company */}
+              {/* Field 2 & 3: Primary Phone & Backup Phone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-slate-800 text-xs">
-                    {isRtl ? 'رقم الهاتف' : 'Phone Number'}
+                  <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                    <span>{isRtl ? 'رقم هاتف العميل الأول' : 'Primary Phone'}</span>
+                    <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded font-bold">{isRtl ? 'اجباري' : 'Required'}</span>
                   </label>
                   <input
                     type="text"
-                    value={custForm.phone}
-                    onChange={(e) => setCustForm({ ...custForm, phone: e.target.value })}
-                    placeholder="+966 50 000 0000"
+                    required
+                    value={custForm.phone1}
+                    onChange={(e) => setCustForm({ ...custForm, phone1: e.target.value })}
+                    placeholder="0500000000"
                     className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <label className="font-bold text-slate-800 text-xs">
-                    {isRtl ? 'الشركة / المنشأة' : 'Company / Entity'}
+                  <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                    <span>{isRtl ? 'رقم الهاتف الثاني / الاحتياطي' : 'Secondary Phone'}</span>
+                    <span className="text-[10px] text-slate-400 font-normal">{isRtl ? 'اختياري' : 'Optional'}</span>
                   </label>
                   <input
                     type="text"
-                    value={custForm.company}
-                    onChange={(e) => setCustForm({ ...custForm, company: e.target.value })}
-                    placeholder={isRtl ? 'مؤسسة الابتكار' : 'Innovation Est.'}
-                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                    value={custForm.phone2}
+                    onChange={(e) => setCustForm({ ...custForm, phone2: e.target.value })}
+                    placeholder="0550000000"
+                    className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                   />
                 </div>
               </div>
 
-              {/* Field 4: Email */}
+              {/* Field 4: Customer Address (عنوان العميل - اجباري) */}
               <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-800 text-xs">
-                  {isRtl ? 'البريد الإلكتروني' : 'Email Address'}
+                <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                  <span>{isRtl ? 'عنوان العميل' : 'Customer Address'}</span>
+                  <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded font-bold">{isRtl ? 'اجباري' : 'Required'}</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={custForm.address}
+                  onChange={(e) => setCustForm({ ...custForm, address: e.target.value })}
+                  placeholder={isRtl ? 'مثال: الرياض - حي العليا - شارع الملك فهد' : 'e.g. Riyadh - Olaya District'}
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              {/* Field 5: Customer Email (البريد الإلكتروني - اختياري) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                  <span>{isRtl ? 'البريد الإلكتروني الخاص بالعميل' : 'Customer Email'}</span>
+                  <span className="text-[10px] text-slate-400 font-normal">{isRtl ? 'اختياري' : 'Optional'}</span>
                 </label>
                 <input
                   type="email"
                   value={custForm.email}
                   onChange={(e) => setCustForm({ ...custForm, email: e.target.value })}
-                  placeholder="client@company.com"
+                  placeholder="client@domain.com"
                   className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-500 transition-colors"
                 />
+              </div>
+
+              {/* Field 6: Customer Type (أفراد أم شركات - اجباري) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                  <span>{isRtl ? 'نوع العميل (أفراد أم شركات)' : 'Customer Type'}</span>
+                  <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.2 rounded font-bold">{isRtl ? 'اجباري' : 'Required'}</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCustForm({ ...custForm, type: 'Individual' })}
+                    className={`py-2.5 px-4 rounded-2xl font-bold text-xs border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      custForm.type === 'Individual'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">person</span>
+                    <span>{isRtl ? 'أفراد (Individual)' : 'Individual'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setCustForm({ ...custForm, type: 'Company' })}
+                    className={`py-2.5 px-4 rounded-2xl font-bold text-xs border flex items-center justify-center gap-2 cursor-pointer transition-all ${
+                      custForm.type === 'Company'
+                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-base">domain</span>
+                    <span>{isRtl ? 'شركات (Company)' : 'Company'}</span>
+                  </button>
+                </div>
               </div>
 
               {/* Modal Footer Buttons */}
               <div className="flex items-center gap-3 pt-3 mt-2 border-t border-slate-100">
                 <button
                   type="submit"
-                  className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-sm transition-transform active:scale-95 cursor-pointer"
+                  className="px-7 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-2xl shadow-sm transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
-                  {isRtl ? 'حفظ العميل' : 'Save Customer'}
+                  <span className="material-symbols-outlined text-base">save</span>
+                  <span>{isRtl ? 'حفظ العميل في Supabase' : 'Save Customer to Supabase'}</span>
                 </button>
 
                 <button
@@ -1637,6 +1879,161 @@ export const SalesCashier: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: ENGAGEMENT STATUS RULES MODAL (تحديد درجة تفاعل العملاء) */}
+      {isEngagementModalOpen && engagementTargetCustomer && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-5 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <span className="material-symbols-outlined text-amber-500">analytics</span>
+                <span>{isRtl ? `تحديد درجة تفاعل العميل (${engagementTargetCustomer.name})` : 'Customer Engagement Status'}</span>
+              </h3>
+              <button onClick={() => setIsEngagementModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-600 leading-relaxed">
+                {isRtl
+                  ? 'يمكنك تحديد وتحديث حالة العميل يدوياً أو وفقاً لعدد مرات الشراء والتفاعل خلال فترة معينة:'
+                  : 'Select engagement status for customer based on purchase frequency:'}
+              </p>
+
+              <div className="grid grid-cols-1 gap-2.5 pt-1">
+                {/* Option 1: جديد */}
+                <button
+                  type="button"
+                  onClick={() => setNewEngagementStatus('New')}
+                  className={`p-3 rounded-2xl border text-right font-bold transition-all flex items-center justify-between cursor-pointer ${
+                    newEngagementStatus === 'New'
+                      ? 'border-blue-500 bg-blue-50 text-blue-900 shadow-xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                    <span>{isRtl ? 'جديد (حالة افتراضية لكل عميل)' : 'New (Default status)'}</span>
+                  </div>
+                  {newEngagementStatus === 'New' && <span>✓</span>}
+                </button>
+
+                {/* Option 2: متفاعل */}
+                <button
+                  type="button"
+                  onClick={() => setNewEngagementStatus('Active')}
+                  className={`p-3 rounded-2xl border text-right font-bold transition-all flex items-center justify-between cursor-pointer ${
+                    newEngagementStatus === 'Active'
+                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+                    <span>{isRtl ? 'متفاعل (عميل دائم الشراء والتفاعل)' : 'Active (Regular buyer)'}</span>
+                  </div>
+                  {newEngagementStatus === 'Active' && <span>✓</span>}
+                </button>
+
+                {/* Option 3: منقطع */}
+                <button
+                  type="button"
+                  onClick={() => setNewEngagementStatus('Churned')}
+                  className={`p-3 rounded-2xl border text-right font-bold transition-all flex items-center justify-between cursor-pointer ${
+                    newEngagementStatus === 'Churned'
+                      ? 'border-amber-500 bg-amber-50 text-amber-900 shadow-xs'
+                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-600"></span>
+                    <span>{isRtl ? 'منقطع (انقطع عن الشراء منذ فترة)' : 'Churned (Inactive buyer)'}</span>
+                  </div>
+                  {newEngagementStatus === 'Churned' && <span>✓</span>}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setIsEngagementModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                onClick={handleSaveEngagementStatus}
+                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+              >
+                {isRtl ? 'حفظ درجة التفاعل' : 'Save Status'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: CREDIT LIMIT CONTROL MODAL (إدارة حدود الائتمان) */}
+      {isCreditLimitModalOpen && creditLimitTargetCustomer && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-5 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <span className="material-symbols-outlined text-emerald-600">credit_score</span>
+                <span>{isRtl ? `إدارة حدود الائتمان والآجل للعميل (${creditLimitTargetCustomer.name})` : 'Credit Limit Management'}</span>
+              </h3>
+              <button onClick={() => setIsCreditLimitModalOpen(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <p className="text-slate-600 leading-relaxed">
+                {isRtl
+                  ? 'حدود الائتمان توضع افتراضياً على (0.00 ر.س — نقداً فقط). يمكنك إدخال المبلغ الأقصى المسموح به بالآجل:'
+                  : 'Credit limits default to (0.00 - Cash Only). Enter maximum credit line:'}
+              </p>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800 text-xs">
+                  {isRtl ? 'حد الائتمان المسموح (ر.س):' : 'Credit Limit Amount ($):'}
+                </label>
+                <input
+                  type="number"
+                  step="100"
+                  min="0"
+                  value={newCreditLimitInput}
+                  onChange={(e) => setNewCreditLimitInput(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full h-11 px-4 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-slate-500 italic">
+                  {parseFloat(newCreditLimitInput) <= 0
+                    ? (isRtl ? 'الحالة الحالية: نقداً فقط (لا يسمح بالبيع بالآجل)' : 'Current Status: Cash Only')
+                    : (isRtl ? `يسمح للعميل بالدين والآجل حتى ${newCreditLimitInput} ر.س` : `Allows credit up to ${newCreditLimitInput}`)}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setIsCreditLimitModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                onClick={handleSaveCreditLimit}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md cursor-pointer"
+              >
+                {isRtl ? 'حفظ حد الائتمان' : 'Save Credit Limit'}
+              </button>
+            </div>
           </div>
         </div>
       )}

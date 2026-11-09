@@ -32,13 +32,21 @@ export interface CustomPalette {
 // 1. Home / POS Sales Types
 export type PaymentMethod = 'Cash' | 'Card' | 'Bank Transfer' | 'Invoice';
 
+export type CustomerType = 'Individual' | 'Company';
+export type CustomerStatus = 'New' | 'Active' | 'Churned';
+
 export interface Customer {
   id: string;
   name: string;
   phone: string;
+  phone2?: string;
+  address?: string;
   email?: string;
   company?: string;
   taxNumber?: string;
+  type?: CustomerType;
+  status?: CustomerStatus;
+  creditLimit?: number;
 }
 
 export type InventoryType = 'raw_material' | 'work_in_progress' | 'finished_goods';

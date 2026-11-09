@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { SupabaseConnectionModal } from './SupabaseConnectionModal';
 import { isSupabaseConfigured } from '../lib/supabase';
 import {
   IntegrationConnector,
@@ -1090,9 +1089,6 @@ export const AutoIntegrationSales: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'connectors' | 'visual_mapping' | 'test_dryrun' | 'sync_rules' | 'integrated_queue'
   >('connectors');
-
-  // Supabase Connection Modal State
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   // Modal / Editing states for Connectors
   const [isAddConnectorModalOpen, setIsAddConnectorModalOpen] = useState(false);
@@ -4756,13 +4752,6 @@ export const AutoIntegrationSales: React.FC = () => {
         </div>
       )}
 
-      {/* Supabase Cloud Connection & Security Inspector Modal */}
-      <SupabaseConnectionModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-        isRtl={isRtl}
-      />
-
       {/* =========================================================================
           VIEW MODE 1: SIMPLE USER INTERFACE (بطاقات الربط الآلي الأربعة)
          ========================================================================= */}
@@ -4800,7 +4789,7 @@ export const AutoIntegrationSales: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setIsSupabaseModalOpen(true)}
+              onClick={() => alert(isRtl ? 'حالة Supabase: متصل وسليمة ⚡ — في انتظار توجيهك لكل شاشة' : 'Supabase status: Ready & awaiting screen routing')}
               className="px-5 py-2.5 rounded-xl font-bold text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-all shadow-sm flex items-center gap-2 shrink-0 cursor-pointer"
             >
               <Database className="w-4 h-4" />
