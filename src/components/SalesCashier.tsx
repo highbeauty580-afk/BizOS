@@ -9,12 +9,14 @@ import {
   updateCustomerCreditLimitInSupabase,
   deleteCustomerFromSupabase,
 } from '../lib/customersService';
+import { fetchProductsFromSupabase } from '../lib/productsService';
 
 export const SalesCashier: React.FC = () => {
   const {
     language,
     customPalette,
     fastItems,
+    setFastItems,
     customers,
     setCustomers,
     addCustomer,
@@ -31,16 +33,21 @@ export const SalesCashier: React.FC = () => {
 
   const isRtl = language === 'ar';
 
-  // Fetch Customers from Supabase public.customers on mount
+  // Fetch Customers & Products from Supabase on mount
   useEffect(() => {
-    async function loadCustomersFromSupabase() {
-      const { data, error } = await fetchCustomersFromSupabase();
-      if (!error && data.length > 0) {
-        setCustomers(data);
+    async function loadInitialData() {
+      const custRes = await fetchCustomersFromSupabase();
+      if (!custRes.error && custRes.data.length > 0) {
+        setCustomers(custRes.data);
+      }
+
+      const prodRes = await fetchProductsFromSupabase();
+      if (!prodRes.error && prodRes.data.length > 0) {
+        setFastItems(prodRes.data);
       }
     }
-    loadCustomersFromSupabase();
-  }, [setCustomers]);
+    loadInitialData();
+  }, [setCustomers, setFastItems]);
 
   // Entry Mode: 'manual' (يدوي) | 'auto_integration' (ربط تلقائي)
   const [salesEntryMode, setSalesEntryMode] = useState<SalesEntryMode>('manual');
@@ -756,20 +763,34 @@ export const SalesCashier: React.FC = () => {
                               : 'border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-400'
                           }`}
                         >
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
+                          <div className="flex flex-col flex-1 min-w-0 gap-1">
+                            {/* Line 1: Product Name, Category Badge & Product Code */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <h3 className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
                                 {isRtl && item.nameAr ? item.nameAr : item.name}
                               </h3>
+                              <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
+                                {item.category}
+                              </span>
                               <span className="text-[9px] font-mono text-slate-400 font-bold bg-slate-200/60 px-1.5 py-0.2 rounded">
                                 {item.code || `ID-${item.id}`}
                               </span>
                             </div>
 
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs font-extrabold text-indigo-700 font-mono">${item.price.toFixed(2)}</span>
+                            {/* Line 2: Product Description (if available) */}
+                            {item.description && (
+                              <p className="text-[10px] text-slate-500 line-clamp-1 truncate">
+                                {item.description}
+                              </p>
+                            )}
 
-                              {/* STOCK BADGE: RED if confirmed in last 5 min, ORANGE if staged in active invoice, normal otherwise */}
+                            {/* Line 3: Retail Price & Stock Status */}
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-xs font-extrabold text-emerald-700 font-mono">
+                                ${item.price.toFixed(2)}
+                              </span>
+
+                              {/* STOCK BADGE */}
                               {isRecentlyDeducted ? (
                                 <span className="text-[10px] font-extrabold text-rose-600 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse flex items-center gap-1">
                                   <span>{isRtl ? 'المخزون:' : 'Stock:'}</span>

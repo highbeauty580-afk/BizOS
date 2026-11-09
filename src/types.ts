@@ -65,6 +65,7 @@ export interface FastItem {
   maxStock: number; // الحد الأعلى للمخزون
   code?: string;
   unit?: string;     // الوحدة (قطعة، علبة، كجم، إلخ)
+  description?: string; // وصف المنتج
 }
 
 export type WipStage = 'preparation' | 'processing' | 'assembly' | 'quality_check' | 'packaging';

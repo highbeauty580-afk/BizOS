@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import {
   FastItem,
@@ -9,12 +9,18 @@ import {
   WipStage,
   WipMaterialUsage,
 } from '../types';
+import {
+  fetchProductsFromSupabase,
+  addProductToSupabase,
+  deleteProductFromSupabase,
+} from '../lib/productsService';
 
 export const InventoryManager: React.FC = () => {
   const {
     language,
     customPalette,
     fastItems,
+    setFastItems,
     addFastItem,
     updateFastItem,
     deleteFastItem,
@@ -33,6 +39,30 @@ export const InventoryManager: React.FC = () => {
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // Fetch Products from Supabase public.products on mount
+  useEffect(() => {
+    async function loadProductsFromSupabase() {
+      const { data, error } = await fetchProductsFromSupabase();
+      if (!error && data.length > 0) {
+        setFastItems(data);
+      }
+    }
+    loadProductsFromSupabase();
+  }, [setFastItems]);
+
+  // Dynamic Categories State
+  const [categories, setCategories] = useState<string[]>([
+    'Retail',
+    'Service',
+    'Wholesale',
+    'أجهزة ومعدات',
+    'ملابس وموضة',
+    'أغذية ومشروبات',
+    'أخرى',
+  ]);
+  const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
 
   // Main View Mode: 'inventory' | 'customers'
   const [mainTab, setMainTab] = useState<'inventory' | 'customers'>('inventory');
@@ -61,14 +91,15 @@ export const InventoryManager: React.FC = () => {
   const [modalInventoryTypeTarget, setModalInventoryTypeTarget] = useState<InventoryType>('finished_goods');
   const [editingItem, setEditingItem] = useState<FastItem | null>(null);
 
-  // Form State for Items
+  // Form State for Items (Product Name, Category, Description, Unit Wholesale Cost, Unit Retail Price, Product Code)
   const [formName, setFormName] = useState('');
   const [formNameAr, setFormNameAr] = useState('');
   const [formCode, setFormCode] = useState('');
   const [formCategory, setFormCategory] = useState<string>('Retail');
+  const [formDescription, setFormDescription] = useState('');
   const [formPrice, setFormPrice] = useState<string>('0');
   const [formCostPrice, setFormCostPrice] = useState<string>('0');
-  const [formStockQuantity, setFormStockQuantity] = useState<string>('0');
+  const [formStockQuantity, setFormStockQuantity] = useState<string>('50');
   const [formMinStock, setFormMinStock] = useState<string>('10');
   const [formMaxStock, setFormMaxStock] = useState<string>('100');
   const [formUnit, setFormUnit] = useState('قطعة');
@@ -152,7 +183,8 @@ export const InventoryManager: React.FC = () => {
     setFormName('');
     setFormNameAr('');
     setFormCode(targetType === 'raw_material' ? `RM-${Math.floor(100 + Math.random() * 900)}` : `PRD-${Math.floor(100 + Math.random() * 900)}`);
-    setFormCategory(targetType === 'raw_material' ? 'Raw Materials' : 'Retail');
+    setFormCategory(targetType === 'raw_material' ? 'Raw Materials' : categories[0] || 'Retail');
+    setFormDescription('');
     setFormPrice(targetType === 'raw_material' ? '15.00' : '50.00');
     setFormCostPrice(targetType === 'raw_material' ? '10.00' : '25.00');
     setFormStockQuantity('50');
@@ -171,6 +203,7 @@ export const InventoryManager: React.FC = () => {
     setFormNameAr(item.nameAr || '');
     setFormCode(item.code || '');
     setFormCategory(item.category);
+    setFormDescription(item.description || '');
     setFormPrice(item.price.toString());
     setFormCostPrice((item.costPrice ?? 0).toString());
     setFormStockQuantity(item.stockQuantity.toString());
@@ -182,7 +215,7 @@ export const InventoryManager: React.FC = () => {
   };
 
   // Submit Add / Edit Product Form
-  const handleSubmitProductForm = (e: React.FormEvent) => {
+  const handleSubmitProductForm = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
 
@@ -193,23 +226,7 @@ export const InventoryManager: React.FC = () => {
     const maxNum = parseInt(formMaxStock, 10);
 
     if (!formName.trim()) {
-      setFormError(isRtl ? 'يرجى إدخال اسم الصنف باللغة الإنجليزية أو العربية' : 'Please enter item name.');
-      return;
-    }
-    if (isNaN(priceNum) || priceNum < 0) {
-      setFormError(isRtl ? 'السعر يجب أن يكون رقماً موجباً' : 'Price must be positive.');
-      return;
-    }
-    if (isNaN(stockNum) || stockNum < 0) {
-      setFormError(isRtl ? 'الكمية لا يمكن أن تكون سالبة' : 'Stock quantity cannot be negative.');
-      return;
-    }
-    if (isNaN(minNum) || minNum < 0) {
-      setFormError(isRtl ? 'الحد الأدنى لا يمكن أن يكون سالباً' : 'Minimum stock threshold cannot be negative.');
-      return;
-    }
-    if (isNaN(maxNum) || maxNum <= minNum) {
-      setFormError(isRtl ? 'يجب أن يكون الحد الأعلى أكبر تماماً من الحد الأدنى' : 'Max threshold must be strictly greater than min threshold.');
+      setFormError(isRtl ? 'يرجى إدخال اسم المنتج' : 'Please enter product name.');
       return;
     }
 
@@ -220,30 +237,57 @@ export const InventoryManager: React.FC = () => {
         code: formCode.trim() || undefined,
         category: formCategory,
         inventoryType: modalInventoryTypeTarget,
-        price: priceNum,
+        price: isNaN(priceNum) ? 0 : priceNum,
         costPrice: isNaN(costNum) ? 0 : costNum,
-        stockQuantity: stockNum,
-        minStock: minNum,
-        maxStock: maxNum,
+        description: formDescription.trim() || undefined,
+        stockQuantity: isNaN(stockNum) ? 0 : stockNum,
         unit: formUnit.trim() || 'قطعة',
       });
+      alert(isRtl ? 'تم تحديث بيانات المنتج بنجاح!' : 'Product updated successfully!');
+      setIsAddEditModalOpen(false);
     } else {
-      addFastItem({
-        name: formName.trim(),
-        nameAr: formNameAr.trim() || undefined,
-        code: formCode.trim() || undefined,
-        category: formCategory,
-        inventoryType: modalInventoryTypeTarget,
-        price: priceNum,
-        costPrice: isNaN(costNum) ? 0 : costNum,
-        stockQuantity: stockNum,
-        minStock: minNum,
-        maxStock: maxNum,
-        unit: formUnit.trim() || 'قطعة',
-      });
-    }
+      // Direct insertion into Supabase public.products table
+      const productParams = {
+        product_name: formName.trim(),
+        product_type: formCategory || 'Retail',
+        product_description: formDescription.trim() || undefined,
+        unit_cost: isNaN(costNum) ? 0 : costNum,
+        unit_price: isNaN(priceNum) ? 0 : priceNum,
+        product_code: formCode.trim() || undefined,
+      };
 
-    setIsAddEditModalOpen(false);
+      console.log('2. Sending Product Payload to Supabase public.products:', productParams);
+      const res = await addProductToSupabase(productParams);
+
+      if (!res.success || !res.data) {
+        console.error('❌ Supabase Error in products:', res.error);
+        alert(isRtl ? `خطأ في السيرفر: ${res.error}` : `Server Error: ${res.error}`);
+        setFormError(res.error || (isRtl ? 'فشل حفظ المنتج في السيرفر' : 'Failed to save product'));
+        return; // STOP execution immediately!
+      }
+
+      console.log('✅ Success in products:', res.data);
+      alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات!' : 'Product saved successfully in database!');
+
+      const createdProduct = res.data;
+      setFastItems((prev) => [createdProduct, ...prev]);
+      setIsAddEditModalOpen(false);
+    }
+  };
+
+  // Add Category Handler ("إنشاء صنف")
+  const handleCreateCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const catName = newCategoryName.trim();
+    if (!catName) return;
+
+    if (!categories.includes(catName)) {
+      setCategories((prev) => [...prev, catName]);
+    }
+    setFormCategory(catName);
+    setNewCategoryName('');
+    setIsAddCategoryModalOpen(false);
+    alert(isRtl ? `تم إضافة صنف جديد: (${catName}) بنجاح!` : `New category (${catName}) added!`);
   };
 
   // Open Start WIP Manufacturing Modal
@@ -1383,74 +1427,106 @@ export const InventoryManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Names */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'الاسم بالإنجليزية *' : 'English Name *'}</label>
-                  <input
-                    type="text"
-                    value={formName}
-                    onChange={(e) => setFormName(e.target.value)}
-                    required
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'الاسم بالعربية' : 'Arabic Name'}</label>
-                  <input
-                    type="text"
-                    value={formNameAr}
-                    onChange={(e) => setFormNameAr(e.target.value)}
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+              {/* 1. اسم المنتج (Product Name) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-800">{isRtl ? 'اسم المنتج *' : 'Product Name *'}</label>
+                <input
+                  type="text"
+                  value={formName}
+                  onChange={(e) => setFormName(e.target.value)}
+                  placeholder={isRtl ? 'أدخل اسم المنتج...' : 'Enter product name...'}
+                  required
+                  className="p-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:border-indigo-500"
+                />
               </div>
 
-              {/* Code & Unit */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'كود الصنف / الباركوم' : 'Code / SKU'}</label>
-                  <input
-                    type="text"
-                    value={formCode}
-                    onChange={(e) => setFormCode(e.target.value)}
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none"
-                  />
+              {/* 2. صنف المنتج (Product Category Dropdown) + زر إنشاء صنف */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'صنف المنتج *' : 'Product Category *'}</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCategoryModalOpen(true)}
+                    className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-0.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>+</span>
+                    <span>{isRtl ? 'إنشاء صنف' : 'Create Category'}</span>
+                  </button>
                 </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'وحدة القياس (قطعة، كجم، إلخ)' : 'Unit'}</label>
-                  <input
-                    type="text"
-                    value={formUnit}
-                    onChange={(e) => setFormUnit(e.target.value)}
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none"
-                  />
-                </div>
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="p-2.5 rounded-xl border border-slate-300 text-xs font-bold bg-white focus:outline-none focus:border-indigo-500"
+                >
+                  {categories.map((cat, idx) => (
+                    <option key={idx} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Prices */}
+              {/* 3. وصف المنتج (Product Description) */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-800">{isRtl ? 'وصف المنتج (اختياري)' : 'Product Description (Optional)'}</label>
+                <textarea
+                  rows={2}
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  placeholder={isRtl ? 'أدخل وصفاً تفصيلياً للمنتج...' : 'Enter product description...'}
+                  className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500 resize-none"
+                />
+              </div>
+
+              {/* 4 & 5. سعر قطعة المنتج جملة & سعر قطعة المنتج للمستهلك */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'سعر البيع ($)' : 'Selling Price ($)'}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value)}
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-700">{isRtl ? 'تكلفة الشراء / الإنتاج ($)' : 'Cost Price ($)'}</label>
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'سعر قطعة المنتج جملة ($) *' : 'Wholesale Unit Cost ($) *'}</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formCostPrice}
                     onChange={(e) => setFormCostPrice(e.target.value)}
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none"
+                    placeholder="0.00"
+                    required
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'سعر قطعة المنتج للمستهلك ($) *' : 'Retail Unit Price ($) *'}</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formPrice}
+                    onChange={(e) => setFormPrice(e.target.value)}
+                    placeholder="0.00"
+                    required
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* 6. كود المنتج & وحدة القياس */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'كود المنتج / الباركوم' : 'Product Code / SKU'}</label>
+                  <input
+                    type="text"
+                    value={formCode}
+                    onChange={(e) => setFormCode(e.target.value)}
+                    placeholder="PRD-101"
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'وحدة القياس' : 'Unit'}</label>
+                  <input
+                    type="text"
+                    value={formUnit}
+                    onChange={(e) => setFormUnit(e.target.value)}
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
@@ -1500,9 +1576,60 @@ export const InventoryManager: React.FC = () => {
                 <button
                   type="submit"
                   style={{ backgroundColor: customPalette.primaryAccent }}
-                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-90"
+                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-90 cursor-pointer"
                 >
-                  {editingItem ? (isRtl ? 'حفظ التعديلات' : 'Save Changes') : (isRtl ? 'إضافة الصنف للمخزون' : 'Add to Inventory')}
+                  {editingItem ? (isRtl ? 'حفظ التعديلات' : 'Save Changes') : (isRtl ? 'إضافة المنتج إلى Supabase' : 'Save Product to Supabase')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL FOR CREATE CATEGORY (إنشاء صنف) --- */}
+      {isAddCategoryModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-4 border border-slate-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-indigo-600">category</span>
+                <h3 className="text-base font-bold text-slate-900">
+                  {isRtl ? 'إنشاء صنف جديد' : 'Create New Category'}
+                </h3>
+              </div>
+              <button onClick={() => setIsAddCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateCategory} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-slate-800">{isRtl ? 'ادخل اسم الصنف *' : 'Enter Category Name *'}</label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder={isRtl ? 'مثال: إلكترونيات، مستلزمات مكتبية...' : 'e.g. Electronics, Office Supplies...'}
+                  required
+                  autoFocus
+                  className="p-3 rounded-xl border border-slate-300 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCategoryModalOpen(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  style={{ backgroundColor: customPalette.primaryAccent }}
+                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 cursor-pointer"
+                >
+                  {isRtl ? 'حفظ الصنف' : 'Save Category'}
                 </button>
               </div>
             </form>
