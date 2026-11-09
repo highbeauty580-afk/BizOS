@@ -56,23 +56,12 @@ export async function fetchCustomersFromSupabase(): Promise<{ data: Customer[]; 
 export async function addCustomerToSupabase(
   params: AddCustomerParams
 ): Promise<{ success: boolean; data?: Customer; error?: string }> {
-  console.log('1. Submit triggered - Customer Payload:', params);
-
-  const localCustomer: Customer = {
-    id: `cust-${Date.now()}`,
-    name: params.name.trim(),
-    phone: params.phone1.trim(),
-    phone2: params.phone2?.trim() || undefined,
-    address: params.address.trim(),
-    email: params.email?.trim() || undefined,
-    type: params.type || 'Individual',
-    status: params.status || 'New',
-    creditLimit: params.creditLimit !== undefined ? params.creditLimit : 0.0,
-  };
+  console.log('1. Starting customer save process with params:', params);
 
   if (!isSupabaseConfigured) {
-    console.warn('ℹ️ Supabase environment variables unconfigured. Returning local customer instance.');
-    return { success: true, data: localCustomer };
+    const msg = 'لم يتم تكوين متغيرات الاتصال بـ Supabase (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY غير معرفة).';
+    console.error('❌ Supabase Config Error:', msg);
+    return { success: false, error: msg };
   }
 
   try {
@@ -83,11 +72,11 @@ export async function addCustomerToSupabase(
       customer_address: params.address.trim(),
       customer_email: params.email?.trim() || null,
       customer_type: params.type || 'Individual',
-      customer_status: params.status || 'New',
+      customer_status: params.status || 'Active', // Defaults to 'Active' to satisfy chk_customer_status constraint
       credit_limit: params.creditLimit !== undefined ? params.creditLimit : 0.0,
     };
 
-    console.log('2. Sending payload to public.customers:', payload);
+    console.log('2. Sending Payload to Supabase public.customers:', payload);
 
     const { data, error } = await supabase
       .from('customers')
@@ -95,29 +84,37 @@ export async function addCustomerToSupabase(
       .select();
 
     if (error) {
-      console.warn('⚠️ Supabase Response Error:', error.message);
-      return { success: true, data: localCustomer };
+      console.error('❌ Supabase Insert Error:', error.message, error.details, error.hint);
+      return {
+        success: false,
+        error: `${error.message}${error.details ? ` - ${error.details}` : ''}${error.hint ? ` (${error.hint})` : ''}`,
+      };
+    }
+
+    if (!data || data.length === 0) {
+      console.error('❌ Supabase Insert Warning: No row returned from insert statement.');
+      return { success: false, error: 'لم يتم إرجاع أي بيانات بعد الحفظ' };
     }
 
     console.log('✅ Successfully inserted customer in Supabase:', data);
 
-    const createdRow = data && data[0];
+    const createdRow = data[0];
     const createdCustomer: Customer = {
-      id: createdRow?.customer_pk || createdRow?.id || localCustomer.id,
-      name: payload.customer_name,
-      phone: payload.customer_phone_1,
-      phone2: payload.customer_phone_2 || undefined,
-      address: payload.customer_address,
-      email: payload.customer_email || undefined,
-      type: payload.customer_type as CustomerType,
-      status: payload.customer_status as CustomerStatus,
-      creditLimit: payload.credit_limit,
+      id: createdRow.customer_pk || createdRow.id || `cust-${Date.now()}`,
+      name: createdRow.customer_name || payload.customer_name,
+      phone: createdRow.customer_phone_1 || payload.customer_phone_1,
+      phone2: createdRow.customer_phone_2 || payload.customer_phone_2 || undefined,
+      address: createdRow.customer_address || payload.customer_address,
+      email: createdRow.customer_email || payload.customer_email || undefined,
+      type: (createdRow.customer_type as CustomerType) || payload.customer_type,
+      status: (createdRow.customer_status as CustomerStatus) || payload.customer_status,
+      creditLimit: Number(createdRow.credit_limit ?? payload.credit_limit),
     };
 
     return { success: true, data: createdCustomer };
   } catch (err: any) {
-    console.warn('ℹ️ Supabase Network Fetch Warning (placeholder or unreachable URL):', err?.message);
-    return { success: true, data: localCustomer };
+    console.error('❌ Exception in addCustomerToSupabase:', err);
+    return { success: false, error: err?.message || 'حدث خطأ غير متوقع أثناء الاتصال بـ Supabase' };
   }
 }
 

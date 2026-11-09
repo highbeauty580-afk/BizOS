@@ -288,7 +288,7 @@ export const SalesCashier: React.FC = () => {
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("1. Submit triggered - Customer Form Data:", custForm);
+    console.log("1. Starting customer save process...", custForm);
 
     if (!custForm.name.trim() || !custForm.phone1.trim() || !custForm.address.trim()) {
       alert(isRtl ? 'يرجى استكمال الحقول الإجبارية: اسم العميل، رقم الهاتف الأول، والعنوان!' : 'Please fill required fields: Customer Name, Phone 1, and Address!');
@@ -302,7 +302,7 @@ export const SalesCashier: React.FC = () => {
       address: custForm.address.trim(),
       email: custForm.email.trim() || undefined,
       type: custForm.type || 'Individual',
-      status: 'New' as CustomerStatus,
+      status: 'Active' as CustomerStatus, // Defaulting to 'Active' to satisfy chk_customer_status constraint
       creditLimit: 0.0,
     };
 
@@ -320,40 +320,30 @@ export const SalesCashier: React.FC = () => {
         setSelectedCustomer(updatedObj);
       }
       alert(isRtl ? 'تم تحديث بيانات العميل بنجاح!' : 'Customer updated successfully!');
+      setCustForm({ name: '', phone1: '', phone2: '', address: '', email: '', type: 'Individual' });
+      setEditingCustomer(null);
+      setIsAddCustomerModalOpen(false);
     } else {
-      // Direct async insertion into Supabase public.customers table
-      console.log('2. Inserting Customer Payload directly to Supabase public.customers:', customerParams);
+      console.log('2. Sending Payload to Supabase public.customers:', customerParams);
       const result = await addCustomerToSupabase(customerParams);
 
-      if (result.success && result.data) {
-        console.log('✅ Successfully inserted customer in Supabase:', result.data);
-        alert(isRtl ? 'تم حفظ العميل بنجاح في قاعدة بيانات Supabase!' : 'Customer saved successfully in Supabase!');
-        
-        const createdCustomer = result.data;
-        setCustomers((prev) => [createdCustomer, ...prev]);
-        setSelectedCustomer(createdCustomer);
-      } else {
+      if (!result.success || !result.data) {
         console.error('❌ Supabase Insert Error:', result.error);
-        alert(isRtl ? `خطأ أثناء الحفظ في Supabase: ${result.error || 'تأكد من الاتصال'}` : `Error saving to Supabase: ${result.error}`);
-        
-        // Fallback local save
-        const fallbackCreated = addCustomer({
-          name: customerParams.name,
-          phone: customerParams.phone1,
-          phone2: customerParams.phone2,
-          address: customerParams.address,
-          email: customerParams.email,
-          type: customerParams.type,
-          status: 'New',
-          creditLimit: 0.0,
-        });
-        setSelectedCustomer(fallbackCreated);
+        alert(isRtl ? `فشل الحفظ: ${result.error}` : `Save failed: ${result.error}`);
+        return; // توقف هنا ولا تكتمل لرسالة النجاح!
       }
-    }
 
-    setCustForm({ name: '', phone1: '', phone2: '', address: '', email: '', type: 'Individual' });
-    setEditingCustomer(null);
-    setIsAddCustomerModalOpen(false);
+      console.log('✅ Successfully inserted customer:', result.data);
+      alert(isRtl ? 'تم الحفظ بنجاح في قاعدة البيانات!' : 'Saved successfully in database!');
+
+      const createdCustomer = result.data;
+      setCustomers((prev) => [createdCustomer, ...prev]);
+      setSelectedCustomer(createdCustomer);
+
+      setCustForm({ name: '', phone1: '', phone2: '', address: '', email: '', type: 'Individual' });
+      setEditingCustomer(null);
+      setIsAddCustomerModalOpen(false);
+    }
   };
 
   const handleSaveEngagementStatus = async () => {
