@@ -58,14 +58,17 @@ export interface FastItem {
   category: 'Retail' | 'Service' | 'Wholesale' | 'Other' | string;
   inventoryType?: InventoryType; // 'raw_material' | 'work_in_progress' | 'finished_goods'
   price: number;
-  costPrice?: number;
+  costPrice?: number; // Maps to unit_cost and Stock_Cost
   icon?: string;
   stockQuantity: number;
   minStock: number; // الحد الأدنى للمخزون
   maxStock: number; // الحد الأعلى للمخزون
-  code?: string;
-  unit?: string;     // الوحدة (قطعة، علبة، كجم، إلخ)
+  code?: string;     // Maps to product_code and Stock_code
+  unit?: string;     // Maps to Measure_PType and Measure_SType
   description?: string; // وصف المنتج
+  amount?: number;      // القيمة الإجمالية المسجلة في المخزون (Stock_Cost * Quantity)
+  product_pk?: string;  // Primary Key from products table
+  stock_pk?: string;    // Primary Key from stock table
 }
 
 export type WipStage = 'preparation' | 'processing' | 'assembly' | 'quality_check' | 'packaging';
@@ -133,7 +136,7 @@ export interface Transaction {
   tax: number;
   total: number;
   paymentMethod: PaymentMethod;
-  status: 'Completed' | 'Refunded' | 'Pending';
+  status: 'Completed' | 'Refunded' | 'Pending' | 'Returned';
   shiftNotes: string;
   cashier: string;
   amountPaid?: number;

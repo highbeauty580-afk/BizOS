@@ -14,6 +14,11 @@ import {
   addProductToSupabase,
   deleteProductFromSupabase,
 } from '../lib/productsService';
+import {
+  fetchStockFromSupabase,
+  addStockToSupabase,
+  updateStockQuantityInSupabase,
+} from '../lib/stockService';
 
 export const InventoryManager: React.FC = () => {
   const {
@@ -40,15 +45,28 @@ export const InventoryManager: React.FC = () => {
 
   const isRtl = language === 'ar';
 
-  // Fetch Products from Supabase public.products on mount
+  // Fetch Products & Stock from Supabase on mount
   useEffect(() => {
-    async function loadProductsFromSupabase() {
-      const { data, error } = await fetchProductsFromSupabase();
-      if (!error && data.length > 0) {
-        setFastItems(data);
+    async function loadInitialData() {
+      const prodRes = await fetchProductsFromSupabase();
+      const stockRes = await fetchStockFromSupabase();
+
+      const combined: FastItem[] = [];
+      if (!prodRes.error && prodRes.data.length > 0) {
+        combined.push(...prodRes.data);
+      }
+      if (!stockRes.error && stockRes.data.length > 0) {
+        stockRes.data.forEach((stk) => {
+          if (!combined.some((c) => c.id === stk.id || c.name === stk.name)) {
+            combined.push(stk);
+          }
+        });
+      }
+      if (combined.length > 0) {
+        setFastItems(combined);
       }
     }
-    loadProductsFromSupabase();
+    loadInitialData();
   }, [setFastItems]);
 
   // Dynamic Categories State
@@ -187,7 +205,7 @@ export const InventoryManager: React.FC = () => {
     setFormDescription('');
     setFormPrice(targetType === 'raw_material' ? '15.00' : '50.00');
     setFormCostPrice(targetType === 'raw_material' ? '10.00' : '25.00');
-    setFormStockQuantity('50');
+    setFormStockQuantity('0');
     setFormMinStock('10');
     setFormMaxStock('200');
     setFormUnit(targetType === 'raw_material' ? 'كجم' : 'قطعة');
@@ -226,7 +244,7 @@ export const InventoryManager: React.FC = () => {
     const maxNum = parseInt(formMaxStock, 10);
 
     if (!formName.trim()) {
-      setFormError(isRtl ? 'يرجى إدخال اسم المنتج' : 'Please enter product name.');
+      setFormError(isRtl ? 'يرجى إدخال الاسم' : 'Please enter item name.');
       return;
     }
 
@@ -241,38 +259,128 @@ export const InventoryManager: React.FC = () => {
         costPrice: isNaN(costNum) ? 0 : costNum,
         description: formDescription.trim() || undefined,
         stockQuantity: isNaN(stockNum) ? 0 : stockNum,
+        minStock: isNaN(minNum) ? 10 : minNum,
+        maxStock: isNaN(maxNum) ? 100 : maxNum,
         unit: formUnit.trim() || 'قطعة',
       });
-      alert(isRtl ? 'تم تحديث بيانات المنتج بنجاح!' : 'Product updated successfully!');
+      
+      const isProduct = modalInventoryTypeTarget === 'finished_goods';
+      await updateStockQuantityInSupabase(editingItem.id, isNaN(stockNum) ? 0 : stockNum, isNaN(costNum) ? 0 : costNum, isProduct);
+      
+      alert(isRtl ? 'تم تحديث بيانات الصنف بالمخزون بنجاح!' : 'Stock item updated successfully!');
       setIsAddEditModalOpen(false);
     } else {
-      // Direct insertion into Supabase public.products table
-      const productParams = {
-        product_name: formName.trim(),
-        product_type: formCategory || 'Retail',
-        product_description: formDescription.trim() || undefined,
-        unit_cost: isNaN(costNum) ? 0 : costNum,
-        unit_price: isNaN(priceNum) ? 0 : priceNum,
-        product_code: formCode.trim() || undefined,
-      };
+      // CHECK IF ITEM ALREADY EXISTS (RE-SUPPLY LOGIC)
+      const existingItem = fastItems.find(i => 
+        i.name.toLowerCase() === formName.trim().toLowerCase() || 
+        (i.nameAr && i.nameAr === formNameAr.trim())
+      );
 
-      console.log('2. Sending Product Payload to Supabase public.products:', productParams);
-      const res = await addProductToSupabase(productParams);
-
-      if (!res.success || !res.data) {
-        console.error('❌ Supabase Error in products:', res.error);
-        alert(isRtl ? `خطأ في السيرفر: ${res.error}` : `Server Error: ${res.error}`);
-        setFormError(res.error || (isRtl ? 'فشل حفظ المنتج في السيرفر' : 'Failed to save product'));
-        return; // STOP execution immediately!
+      if (existingItem) {
+        // Just update stock for existing item
+        const newTotalQty = existingItem.stockQuantity + (isNaN(stockNum) ? 0 : stockNum);
+        const targetCost = isNaN(costNum) ? (existingItem.costPrice || 0) : costNum;
+        
+        const isProduct = existingItem.inventoryType === 'finished_goods';
+        const res = await updateStockQuantityInSupabase(existingItem.id, newTotalQty, targetCost, isProduct);
+        
+        if (res.success) {
+          updateFastItem(existingItem.id, {
+            stockQuantity: newTotalQty,
+            costPrice: targetCost,
+            price: modalInventoryTypeTarget === 'finished_goods' ? (isNaN(priceNum) ? existingItem.price : priceNum) : targetCost,
+            amount: targetCost * newTotalQty
+          });
+          alert(isRtl ? 'تم تحديث الكمية للصنف الموجود مسبقاً بنجاح!' : 'Existing item quantity updated successfully!');
+          setIsAddEditModalOpen(false);
+          return;
+        } else {
+          alert(isRtl ? `فشل تحديث الصنف: ${res.error}` : `Update failed: ${res.error}`);
+          return;
+        }
       }
 
-      console.log('✅ Success in products:', res.data);
-      alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات!' : 'Product saved successfully in database!');
+      if (modalInventoryTypeTarget === 'raw_material') {
+        // Adding Raw Material to public.stock table
+        const stockParams: any = {
+          stock_name: formName.trim(),
+          stock_type: 'Raw material',
+          minimum_limit: isNaN(minNum) ? 10 : minNum,
+          maximum_limit: isNaN(maxNum) ? 100 : maxNum,
+          quantity: isNaN(stockNum) ? 0 : stockNum,
+          stock_cost: isNaN(costNum) ? 0 : costNum,
+          stock_code: formCode.trim() || undefined,
+          measure_stype: formUnit.trim() || 'كجم',
+        };
 
-      const createdProduct = res.data;
-      setFastItems((prev) => [createdProduct, ...prev]);
-      setIsAddEditModalOpen(false);
+        const res = await addStockToSupabase(stockParams);
+
+        if (!res.success || !res.data) {
+          alert(isRtl ? `خطأ في السيرفر: ${res.error}` : `Server Error: ${res.error}`);
+          setFormError(res.error || (isRtl ? 'فشل حفظ المادة الخام' : 'Failed to save raw material'));
+          return;
+        }
+
+        const createdRawMat: FastItem = {
+          id: res.data.stock_pk || res.data.id || `rm-${Date.now()}`,
+          name: formName.trim(),
+          nameAr: formNameAr.trim() || formName.trim(),
+          code: formCode.trim() || undefined,
+          category: 'Raw Materials',
+          inventoryType: 'raw_material',
+          price: isNaN(costNum) ? 0 : costNum,
+          costPrice: isNaN(costNum) ? 0 : costNum,
+          stockQuantity: isNaN(stockNum) ? 0 : stockNum,
+          minStock: isNaN(minNum) ? 10 : minNum,
+          maxStock: isNaN(maxNum) ? 100 : maxNum,
+          unit: formUnit.trim() || 'كجم',
+          amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum)
+        };
+
+        setFastItems((prev) => [createdRawMat, ...prev]);
+        setIsAddEditModalOpen(false);
+      } else {
+        // Adding Finished Good to public.products & public.stock
+        const productParams = {
+          product_name: formName.trim(),
+          product_type: formCategory || 'Retail',
+          product_description: formDescription.trim() || undefined,
+          unit_cost: isNaN(costNum) ? 0 : costNum,
+          unit_price: isNaN(priceNum) ? 0 : priceNum,
+          product_code: formCode.trim() || undefined,
+          measure_ptype: formUnit.trim() || 'قطعة',
+        };
+
+        const res = await addProductToSupabase(productParams);
+
+        if (!res.success || !res.data) {
+          alert(isRtl ? `خطأ في السيرفر: ${res.error}` : `Server Error: ${res.error}`);
+          setFormError(res.error || (isRtl ? 'فشل حفظ المنتج' : 'Failed to save product'));
+          return;
+        }
+
+        const createdProduct = res.data;
+
+        // Also create matching stock row in public.stock
+        const stockParams: any = {
+          stock_name: formName.trim(),
+          stock_type: 'Stocked Product',
+          minimum_limit: isNaN(minNum) ? 10 : minNum,
+          maximum_limit: isNaN(maxNum) ? 200 : maxNum,
+          quantity: isNaN(stockNum) ? 0 : stockNum,
+          stock_cost: isNaN(costNum) ? 0 : costNum,
+          product_fk: createdProduct.id, 
+          stock_code: formCode.trim() || undefined,
+          measure_stype: formUnit.trim() || 'قطعة',
+        };
+        await addStockToSupabase(stockParams);
+
+        alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات!' : 'Product saved successfully!');
+        setFastItems((prev) => [createdProduct, ...prev]);
+        setIsAddEditModalOpen(false);
+      }
     }
+
   };
 
   // Add Category Handler ("إنشاء صنف")
@@ -359,22 +467,42 @@ export const InventoryManager: React.FC = () => {
       notes: wipNotes.trim() || undefined,
     });
 
+    // SYNC WITH SUPABASE: Deduct Raw Materials
+    wipSelectedMaterials.forEach(async (mat) => {
+      const stockItem = rawMaterials.find((r) => r.id === mat.rawMaterialId);
+      if (stockItem) {
+        const newQty = stockItem.stockQuantity - mat.quantityUsed;
+        const cost = stockItem.costPrice || stockItem.price || 0;
+        await updateStockQuantityInSupabase(stockItem.id, newQty, cost, false);
+      }
+    });
+
     setIsStartWipModalOpen(false);
+    alert(isRtl ? 'تم بدء تشغيلة التصنيع وخصم المواد الخام من المخزون!' : 'WIP Batch started and raw materials deducted!');
   };
 
   // Quick Restock Handler
-  const handleConfirmRestock = (e: React.FormEvent) => {
+  const handleConfirmRestock = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!restockItemTarget) return;
 
     const qty = parseInt(restockQty, 10);
     if (isNaN(qty) || qty <= 0) return;
 
+    const newStockQty = restockItemTarget.stockQuantity + qty;
+    const cost = restockItemTarget.costPrice || restockItemTarget.price || 0;
+
     restockItem(
       restockItemTarget.id,
       qty,
       restockReason.trim() || (isRtl ? 'إضافة شحنة وتوريد جديد للمخزون' : 'Stock Replenishment')
     );
+
+    // Mapped update to public.stock in Supabase
+    const isProduct = restockItemTarget.inventoryType === 'finished_goods';
+    await updateStockQuantityInSupabase(restockItemTarget.id, newStockQty, cost, isProduct);
+
+    alert(isRtl ? `تم توريد (${qty}) قطعة للمخزون وحفظ الكمية في قاعدة البيانات!` : `Restocked ${qty} items successfully!`);
 
     setRestockItemTarget(null);
     setRestockQty('');
@@ -392,7 +520,17 @@ export const InventoryManager: React.FC = () => {
     if (isNaN(actualQty) || actualQty < 0) return;
 
     completeWipBatch(completeWipTarget.id, actualQty, scrapQty);
+    
+    // SYNC WITH SUPABASE: Add Finished Good to stock
+    const targetGood = fastItems.find(i => i.id === completeWipTarget.finishedGoodId);
+    if (targetGood) {
+      const newQty = targetGood.stockQuantity + actualQty;
+      const cost = targetGood.costPrice || targetGood.price || 0;
+      updateStockQuantityInSupabase(targetGood.id, newQty, cost, true);
+    }
+
     setCompleteWipTarget(null);
+    alert(isRtl ? 'تم إكمال التشغيلة وإضافة المنتج النهائي للمخزون!' : 'WIP Batch completed and added to finished goods!');
   };
 
   // Submit Record Scrap
@@ -1007,8 +1145,9 @@ export const InventoryManager: React.FC = () => {
                         <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-700 font-bold">
                           <th className="p-3.5">{isRtl ? 'اسم الصنف والكود' : 'Item & Code'}</th>
                           <th className="p-3.5">{isRtl ? 'نوع التصنيف' : 'Classification'}</th>
-                          <th className="p-3.5">{isRtl ? 'سعر البيع / التكلفة' : 'Price / Cost'}</th>
+                          <th className="p-3.5">{isRtl ? 'سعر التكلفة / البيع' : 'Cost / Price'}</th>
                           <th className="p-3.5">{isRtl ? 'الكمية الحالية' : 'Current Stock'}</th>
+                          <th className="p-3.5">{isRtl ? 'القيمة الإجمالية (Amount)' : 'Total Amount'}</th>
                           <th className="p-3.5">{isRtl ? 'الحد الأدنى' : 'Min Limit'}</th>
                           <th className="p-3.5">{isRtl ? 'الحد الأعلى' : 'Max Limit'}</th>
                           <th className="p-3.5">{isRtl ? 'حالة التنبيه' : 'Alert Status'}</th>
@@ -1027,6 +1166,9 @@ export const InventoryManager: React.FC = () => {
                           const isRaw = item.inventoryType === 'raw_material';
 
                           const fillPct = Math.min(100, Math.round((current / max) * 100));
+                          const unitCost = item.costPrice ?? item.price ?? 0;
+                          // Use amount from DB if available, otherwise local calculation
+                          const recordedAmount = item.amount !== undefined ? item.amount : (unitCost * current);
 
                           return (
                             <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
@@ -1051,12 +1193,12 @@ export const InventoryManager: React.FC = () => {
                                 )}
                               </td>
 
-                              {/* Price */}
+                              {/* Price / Cost */}
                               <td className="p-3.5 font-mono">
                                 <div className="flex flex-col">
-                                  <span className="font-extrabold text-slate-900">${item.price.toFixed(2)}</span>
-                                  {item.costPrice !== undefined && item.costPrice > 0 && (
-                                    <span className="text-[10px] text-slate-400">{isRtl ? 'تكلفة:' : 'Cost:'} ${item.costPrice.toFixed(2)}</span>
+                                  <span className="font-extrabold text-slate-900">${unitCost.toFixed(2)}</span>
+                                  {!isRaw && (
+                                    <span className="text-[10px] text-emerald-700 font-semibold">{isRtl ? 'بيع:' : 'Retail:'} ${item.price.toFixed(2)}</span>
                                   )}
                                 </div>
                               </td>
@@ -1069,6 +1211,14 @@ export const InventoryManager: React.FC = () => {
                                   </span>
                                   <span className="text-[10px] text-slate-400">{item.unit || 'قطعة'}</span>
                                 </div>
+                              </td>
+
+                              {/* Total Calculated Amount (Recorded in DB) */}
+                              <td className="p-3.5 font-mono">
+                                <span className="font-extrabold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200/50 shadow-sm inline-flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[10px] text-indigo-400">database</span>
+                                  <span>${recordedAmount.toFixed(2)}</span>
+                                </span>
                               </td>
 
                               {/* Min Limit */}
@@ -1397,91 +1547,77 @@ export const InventoryManager: React.FC = () => {
             )}
 
             <form onSubmit={handleSubmitProductForm} className="flex flex-col gap-3.5">
-              {/* Type Switcher */}
+              {/* 1. اسم المادة/المنتج (Name) */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-slate-700">{isRtl ? 'تصنيف الصنف المخزني:' : 'Inventory Type:'}</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setModalInventoryTypeTarget('raw_material')}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      modalInventoryTypeTarget === 'raw_material'
-                        ? 'bg-amber-600 text-white border-amber-600'
-                        : 'bg-slate-50 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    📦 {isRtl ? 'مادة خام (تصنيع)' : 'Raw Material'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setModalInventoryTypeTarget('finished_goods')}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      modalInventoryTypeTarget === 'finished_goods'
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-slate-50 text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    🛒 {isRtl ? 'منتج جاهز (بيع)' : 'Finished Good'}
-                  </button>
-                </div>
-              </div>
-
-              {/* 1. اسم المنتج (Product Name) */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-slate-800">{isRtl ? 'اسم المنتج *' : 'Product Name *'}</label>
+                <label className="text-xs font-bold text-slate-800">
+                  {modalInventoryTypeTarget === 'raw_material'
+                    ? (isRtl ? 'اسم المادة الخام *' : 'Raw Material Name *')
+                    : (isRtl ? 'اسم المنتج *' : 'Product Name *')}
+                </label>
                 <input
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder={isRtl ? 'أدخل اسم المنتج...' : 'Enter product name...'}
+                  placeholder={
+                    modalInventoryTypeTarget === 'raw_material'
+                      ? (isRtl ? 'أدخل اسم المادة الخام...' : 'Enter raw material name...')
+                      : (isRtl ? 'أدخل اسم المنتج...' : 'Enter product name...')
+                  }
                   required
                   className="p-2.5 rounded-xl border border-slate-300 text-xs font-semibold focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              {/* 2. صنف المنتج (Product Category Dropdown) + زر إنشاء صنف */}
-              <div className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'صنف المنتج *' : 'Product Category *'}</label>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddCategoryModalOpen(true)}
-                    className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-0.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>+</span>
-                    <span>{isRtl ? 'إنشاء صنف' : 'Create Category'}</span>
-                  </button>
-                </div>
-                <select
-                  value={formCategory}
-                  onChange={(e) => setFormCategory(e.target.value)}
-                  className="p-2.5 rounded-xl border border-slate-300 text-xs font-bold bg-white focus:outline-none focus:border-indigo-500"
-                >
-                  {categories.map((cat, idx) => (
-                    <option key={idx} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. وصف المنتج (Product Description) */}
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-bold text-slate-800">{isRtl ? 'وصف المنتج (اختياري)' : 'Product Description (Optional)'}</label>
-                <textarea
-                  rows={2}
-                  value={formDescription}
-                  onChange={(e) => setFormDescription(e.target.value)}
-                  placeholder={isRtl ? 'أدخل وصفاً تفصيلياً للمنتج...' : 'Enter product description...'}
-                  className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500 resize-none"
-                />
-              </div>
-
-              {/* 4 & 5. سعر قطعة المنتج جملة & سعر قطعة المنتج للمستهلك */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 2. صنف المنتج (Product Category Dropdown) - للمنتجات الجاهزة فقط */}
+              {modalInventoryTypeTarget === 'finished_goods' && (
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'سعر قطعة المنتج جملة ($) *' : 'Wholesale Unit Cost ($) *'}</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800">{isRtl ? 'صنف المنتج *' : 'Product Category *'}</label>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCategoryModalOpen(true)}
+                      className="text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-0.5 rounded-lg border border-indigo-200 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>+</span>
+                      <span>{isRtl ? 'إنشاء صنف' : 'Create Category'}</span>
+                    </button>
+                  </div>
+                  <select
+                    value={formCategory}
+                    onChange={(e) => setFormCategory(e.target.value)}
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-bold bg-white focus:outline-none focus:border-indigo-500"
+                  >
+                    {categories.map((cat, idx) => (
+                      <option key={idx} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* 3. وصف المنتج - للمنتجات الجاهزة فقط */}
+              {modalInventoryTypeTarget === 'finished_goods' && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'وصف المنتج (اختياري)' : 'Product Description (Optional)'}</label>
+                  <textarea
+                    rows={2}
+                    value={formDescription}
+                    onChange={(e) => setFormDescription(e.target.value)}
+                    placeholder={isRtl ? 'أدخل وصفاً تفصيلياً للمنتج...' : 'Enter product description...'}
+                    className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500 resize-none"
+                  />
+                </div>
+              )}
+
+              {/* 4 & 5. الأسعار: للمواد الخام سعر التكلفة/الجملة فقط، وللمنتجات الجاهزة السعران */}
+              <div className={`grid gap-3 ${modalInventoryTypeTarget === 'raw_material' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-800">
+                    {modalInventoryTypeTarget === 'raw_material'
+                      ? (isRtl ? 'سعر المادة الخام / التكلفة ($) *' : 'Raw Material Cost ($) *')
+                      : (isRtl ? 'سعر قطعة المنتج جملة ($) *' : 'Wholesale Unit Cost ($) *')}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -1493,29 +1629,31 @@ export const InventoryManager: React.FC = () => {
                   />
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'سعر قطعة المنتج للمستهلك ($) *' : 'Retail Unit Price ($) *'}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formPrice}
-                    onChange={(e) => setFormPrice(e.target.value)}
-                    placeholder="0.00"
-                    required
-                    className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
+                {modalInventoryTypeTarget === 'finished_goods' && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-800">{isRtl ? 'سعر قطعة المنتج للمستهلك ($) *' : 'Retail Unit Price ($) *'}</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formPrice}
+                      onChange={(e) => setFormPrice(e.target.value)}
+                      placeholder="0.00"
+                      required
+                      className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono font-bold focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                )}
               </div>
 
-              {/* 6. كود المنتج & وحدة القياس */}
+              {/* 6. كود الصنف & وحدة القياس */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'كود المنتج / الباركوم' : 'Product Code / SKU'}</label>
+                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'الكود / الباركوم' : 'Code / SKU'}</label>
                   <input
                     type="text"
                     value={formCode}
                     onChange={(e) => setFormCode(e.target.value)}
-                    placeholder="PRD-101"
+                    placeholder="SKU-101"
                     className="p-2.5 rounded-xl border border-slate-300 text-xs font-mono focus:outline-none focus:border-indigo-500"
                   />
                 </div>
@@ -1526,43 +1664,46 @@ export const InventoryManager: React.FC = () => {
                     type="text"
                     value={formUnit}
                     onChange={(e) => setFormUnit(e.target.value)}
+                    placeholder={modalInventoryTypeTarget === 'raw_material' ? 'كجم' : 'قطعة'}
                     className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
-              {/* Quantities & Min / Max Thresholds */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-800">{isRtl ? 'الكمية المتاحة' : 'Current Stock'}</label>
-                  <input
-                    type="number"
-                    value={formStockQuantity}
-                    onChange={(e) => setFormStockQuantity(e.target.value)}
-                    className="p-2 rounded-xl border border-slate-300 text-xs font-mono font-bold bg-white focus:outline-none"
-                  />
-                </div>
+              {/* Quantities & Min / Max Thresholds (للمواد الخام دائماً، وللمنتجات الجاهزة عند التعديل) */}
+              {(modalInventoryTypeTarget === 'raw_material' || editingItem) && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-800">{isRtl ? 'الكمية المتاحة' : 'Current Stock'}</label>
+                    <input
+                      type="number"
+                      value={formStockQuantity}
+                      onChange={(e) => setFormStockQuantity(e.target.value)}
+                      className="p-2 rounded-xl border border-slate-300 text-xs font-mono font-bold bg-white focus:outline-none"
+                    />
+                  </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-amber-800">🔴 {isRtl ? 'الحد الأدنى' : 'Min Limit'}</label>
-                  <input
-                    type="number"
-                    value={formMinStock}
-                    onChange={(e) => setFormMinStock(e.target.value)}
-                    className="p-2 rounded-xl border border-amber-300 text-xs font-mono font-bold bg-amber-50 focus:outline-none"
-                  />
-                </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-amber-800">🔴 {isRtl ? 'الحد الأدنى' : 'Min Limit'}</label>
+                    <input
+                      type="number"
+                      value={formMinStock}
+                      onChange={(e) => setFormMinStock(e.target.value)}
+                      className="p-2 rounded-xl border border-amber-300 text-xs font-mono font-bold bg-amber-50 focus:outline-none"
+                    />
+                  </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-indigo-800">🟢 {isRtl ? 'الحد الأعلى' : 'Max Limit'}</label>
-                  <input
-                    type="number"
-                    value={formMaxStock}
-                    onChange={(e) => setFormMaxStock(e.target.value)}
-                    className="p-2 rounded-xl border border-indigo-300 text-xs font-mono font-bold bg-indigo-50 focus:outline-none"
-                  />
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-indigo-800">🟢 {isRtl ? 'الحد الأعلى' : 'Max Limit'}</label>
+                    <input
+                      type="number"
+                      value={formMaxStock}
+                      onChange={(e) => setFormMaxStock(e.target.value)}
+                      className="p-2 rounded-xl border border-indigo-300 text-xs font-mono font-bold bg-indigo-50 focus:outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button

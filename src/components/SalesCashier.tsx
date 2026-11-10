@@ -10,6 +10,7 @@ import {
   deleteCustomerFromSupabase,
 } from '../lib/customersService';
 import { fetchProductsFromSupabase } from '../lib/productsService';
+import { updateStockQuantityInSupabase } from '../lib/stockService';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -29,6 +30,8 @@ export const SalesCashier: React.FC = () => {
     restorePendingSale,
     cancelPendingSale,
     deductStockForTransaction,
+    returnTransactionItems,
+    setTransactions,
   } = useApp();
 
   const isRtl = language === 'ar';
@@ -442,8 +445,17 @@ export const SalesCashier: React.FC = () => {
     // 1. Add to sales history transactions
     addTransaction(newTx);
 
-    // 2. DEDUCT INVENTORY STOCK
+    // 2. DEDUCT INVENTORY STOCK LOCALLY & SYNC WITH SUPABASE public.stock
     deductStockForTransaction(cart);
+    cart.forEach(async (c) => {
+      const match = fastItems.find((fi) => fi.id === c.originalFastItemId || fi.name === c.name);
+      if (match) {
+        const remainingQty = Math.max(0, match.stockQuantity - c.quantity);
+        const unitCost = match.costPrice || match.price || 0;
+        // Sales are always 'Finished Goods', so we update by product_fk
+        await updateStockQuantityInSupabase(match.id, remainingQty, unitCost, true);
+      }
+    });
 
     // 3. Mark items as recently confirmed with timestamp for 5-minute red highlight
     const nowTs = Date.now();
@@ -1502,28 +1514,62 @@ export const SalesCashier: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
-                      <td className="p-3 font-mono font-bold text-indigo-600">{tx.receiptNo}</td>
-                      <td className="p-3 text-slate-600 font-mono">{tx.date} • {tx.time}</td>
-                      <td className="p-3 font-medium text-slate-900">{tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')}</td>
-                      <td className="p-3 text-slate-600 max-w-xs truncate">{tx.itemsSummary}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold text-[11px]">
-                          {tx.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="p-3 font-extrabold text-slate-900 font-mono">${tx.total.toFixed(2)}</td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => setViewingReceipt(tx)}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
-                        >
-                          {isRtl ? 'التفاصيل' : 'Details'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {transactions.map((tx) => {
+                    const isReturned = tx.status === 'Returned';
+                    return (
+                      <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="p-3 font-mono font-bold text-indigo-600">{tx.receiptNo}</td>
+                        <td className="p-3 text-slate-600 font-mono">{tx.date} • {tx.time}</td>
+                        <td className="p-3 font-medium text-slate-900">{tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')}</td>
+                        <td className="p-3 text-slate-600 max-w-xs truncate">{tx.itemsSummary}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${isReturned ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
+                            {isReturned ? (isRtl ? 'مرتجع' : 'Returned') : tx.paymentMethod}
+                          </span>
+                        </td>
+                        <td className="p-3 font-extrabold text-slate-900 font-mono">${tx.total.toFixed(2)}</td>
+                        <td className="p-3 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => setViewingReceipt(tx)}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
+                            >
+                              {isRtl ? 'التفاصيل' : 'Details'}
+                            </button>
+                            
+                            {!isReturned && (
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(isRtl ? 'هل تريد عمل مرتجع لهذه الفاتورة وإعادة المنتجات للمخزون؟' : 'Return this transaction and restore stock?')) {
+                                    // 1. Update Supabase Stock
+                                    for (const item of tx.items) {
+                                      const catalogItem = fastItems.find(fi => fi.id === item.originalFastItemId || fi.name === item.name);
+                                      if (catalogItem) {
+                                        const newQty = catalogItem.stockQuantity + item.quantity;
+                                        const cost = catalogItem.costPrice || catalogItem.price || 0;
+                                        const isProduct = catalogItem.inventoryType === 'finished_goods';
+                                        await updateStockQuantityInSupabase(catalogItem.id, newQty, cost, isProduct);
+                                      }
+                                    }
+                                    
+                                    // 2. Update Local State
+                                    returnTransactionItems(tx.items, tx.receiptNo, 'Customer Return');
+                                    setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned' } : t));
+                                    
+                                    alert(isRtl ? 'تم إرجاع الفاتورة وتحديث المخزون بنجاح!' : 'Transaction returned and stock updated!');
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
+                              >
+                                {isRtl ? 'مرتجع' : 'Return'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
                 </tbody>
               </table>
             </div>

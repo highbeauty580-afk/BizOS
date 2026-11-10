@@ -20,6 +20,7 @@ export interface AddProductParams {
   unit_cost: number;
   unit_price: number;
   product_code?: string;
+  measure_ptype?: string;
 }
 
 export async function fetchProductsFromSupabase(): Promise<{ data: FastItem[]; error: string | null }> {
@@ -48,10 +49,11 @@ export async function fetchProductsFromSupabase(): Promise<{ data: FastItem[]; e
       costPrice: parseFloat(row.unit_cost) || 0,
       code: row.product_code || row.code || undefined,
       description: row.product_description || undefined,
-      stockQuantity: Number(row.stock_quantity ?? 50),
-      minStock: Number(row.minimum_limit ?? row.min_stock ?? 10),
-      maxStock: Number(row.maximum_limit ?? row.max_stock ?? 200),
-      unit: row.unit || 'قطعة',
+      unit: row.Measure_PType || row.unit || 'قطعة',
+      product_pk: row.product_pk,
+      stockQuantity: 0, // Stock qty comes from stock table, this is just a placeholder or list view
+      minStock: 10,
+      maxStock: 100,
     }));
 
     return { data: mappedProducts, error: null };
@@ -67,16 +69,10 @@ export async function addProductToSupabase(
   console.log('1. Starting product save process with params:', params);
 
   if (!isSupabaseConfigured) {
-    const msg = 'لم يتم تكوين متغيرات الاتصال بـ Supabase (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY غير معرفة).';
-    console.error('❌ Supabase Config Error:', msg);
-    return { success: false, error: msg };
+    return { success: false, error: 'Supabase Config Error' };
   }
 
   try {
-    // Clean Payload Standards:
-    // - No tenant_id unless in state
-    // - No empty strings; send null or omit
-    // - Parse numbers correctly
     const cleanPayload = {
       product_name: params.product_name.trim(),
       product_type: params.product_type.trim() || 'Retail',
@@ -84,6 +80,7 @@ export async function addProductToSupabase(
       unit_cost: parseFloat(params.unit_cost as any) || 0,
       unit_price: parseFloat(params.unit_price as any) || 0,
       product_code: params.product_code?.trim() || null,
+      Measure_PType: params.measure_ptype?.trim() || 'قطعة',
     };
 
     console.log('2. Sending Clean Payload to public.products:', cleanPayload);
@@ -95,18 +92,12 @@ export async function addProductToSupabase(
 
     if (error) {
       console.error(`❌ Supabase Error in products:`, error.message, error.details);
-      return {
-        success: false,
-        error: `خطأ في السيرفر: ${error.message}${error.details ? ` - ${error.details}` : ''}`,
-      };
+      return { success: false, error: error.message };
     }
 
     if (!data || data.length === 0) {
-      console.error('❌ Supabase Error in products: No rows returned.');
       return { success: false, error: 'لم يتم حفظ البيانات، يرجى مراجعة المدخلات.' };
     }
-
-    console.log(`✅ Success in products:`, data);
 
     const createdRow = data[0];
     const createdProduct: FastItem = {
@@ -119,16 +110,16 @@ export async function addProductToSupabase(
       costPrice: parseFloat(createdRow.unit_cost ?? cleanPayload.unit_cost),
       code: createdRow.product_code || cleanPayload.product_code || undefined,
       description: createdRow.product_description || cleanPayload.product_description || undefined,
-      stockQuantity: Number(createdRow.stock_quantity ?? 50),
+      unit: createdRow.Measure_PType || cleanPayload.Measure_PType,
+      product_pk: createdRow.product_pk,
+      stockQuantity: 0,
       minStock: 10,
       maxStock: 200,
-      unit: 'قطعة',
     };
 
     return { success: true, data: createdProduct };
   } catch (err: any) {
-    console.error('❌ Exception in addProductToSupabase:', err);
-    return { success: false, error: err?.message || 'حدث خطأ غير متوقع أثناء الاتصال بـ Supabase' };
+    return { success: false, error: err?.message };
   }
 }
 
@@ -143,11 +134,7 @@ export async function deleteProductFromSupabase(
       .delete()
       .eq('product_pk', productPk);
 
-    if (error) {
-      console.error('❌ Failed to delete product from Supabase:', error.message, error.details);
-      return { success: false, error: error.message };
-    }
-
+    if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };

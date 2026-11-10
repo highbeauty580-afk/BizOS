@@ -340,9 +340,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const restockItem = (itemId: string, qtyToAdd: number, reason: string) => {
     if (qtyToAdd <= 0) return;
     setFastItems((prev) =>
-      prev.map((item) => (item.id === itemId ? { ...item, stockQuantity: item.stockQuantity + qtyToAdd } : item))
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const newQty = item.stockQuantity + qtyToAdd;
+          const cost = item.costPrice || item.price || 0;
+          return { ...item, stockQuantity: newQty, amount: newQty * cost };
+        }
+        return item;
+      })
     );
   };
+
 
   const deleteFastItem = (id: string) => {
     setFastItems((prev) => prev.filter((i) => i.id !== id));
@@ -363,6 +371,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'in_progress',
     };
     setWipBatches((prev) => [newBatch, ...prev]);
+
+    // Deduct Raw Materials from local stock
+    setFastItems((prevItems) =>
+      prevItems.map((item) => {
+        const usage = batchData.rawMaterialsUsed.find((m) => m.rawMaterialId === item.id);
+        if (usage) {
+          const newQty = Math.max(0, item.stockQuantity - usage.quantityUsed);
+          const cost = item.costPrice || item.price || 0;
+          return { ...item, stockQuantity: newQty, amount: newQty * cost };
+        }
+        return item;
+      })
+    );
   };
 
   const updateWipBatchStage = (id: string, stage: WipStage, notes?: string) => {
@@ -379,9 +400,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const completeWipBatch = (id: string, completedQty: number, scrappedQty: number = 0) => {
+    let finishedGoodId = '';
     setWipBatches((prev) =>
       prev.map((b) => {
         if (b.id === id) {
+          finishedGoodId = b.finishedGoodId;
           return {
             ...b,
             status: 'completed',
@@ -392,6 +415,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return b;
       })
     );
+
+    // Add Finished Good to local stock
+    if (finishedGoodId) {
+      setFastItems((prevItems) =>
+        prevItems.map((item) => {
+          if (item.id === finishedGoodId) {
+            const newQty = item.stockQuantity + completedQty;
+            const cost = item.costPrice || item.price || 0;
+            return { ...item, stockQuantity: newQty, amount: newQty * cost };
+          }
+          return item;
+        })
+      );
+    }
   };
 
   const deleteWipBatch = (id: string) => {
@@ -441,7 +478,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (matched.length > 0) {
           const totalQtyDeducted = matched.reduce((sum, item) => sum + item.quantity, 0);
-          return { ...catalogItem, stockQuantity: Math.max(0, catalogItem.stockQuantity - totalQtyDeducted) };
+          const newQty = Math.max(0, catalogItem.stockQuantity - totalQtyDeducted);
+          const cost = catalogItem.costPrice || catalogItem.price || 0;
+          return { ...catalogItem, stockQuantity: newQty, amount: newQty * cost };
         }
         return catalogItem;
       })
@@ -456,7 +495,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         if (matched.length > 0) {
           const totalQtyReturned = matched.reduce((sum, item) => sum + item.quantity, 0);
-          return { ...catalogItem, stockQuantity: catalogItem.stockQuantity + totalQtyReturned };
+          const newQty = catalogItem.stockQuantity + totalQtyReturned;
+          const cost = catalogItem.costPrice || catalogItem.price || 0;
+          return { ...catalogItem, stockQuantity: newQty, amount: newQty * cost };
         }
         return catalogItem;
       })
