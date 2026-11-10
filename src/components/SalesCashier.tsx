@@ -496,8 +496,13 @@ export const SalesCashier: React.FC = () => {
     if (createdOrderId) {
       const orderItemsPayload: AddOrderItemInput[] = cart.map((c) => {
         const itemTotal = Number((c.unitPrice * c.quantity).toFixed(2));
+        const matchedProd = fastItems.find(
+          (fi) => fi.id === c.originalFastItemId || fi.product_pk === c.originalFastItemId || fi.name === c.name || (fi.nameAr && fi.nameAr === c.name)
+        );
+        const resolvedProductPk = matchedProd?.product_pk || matchedProd?.id || c.originalFastItemId;
         return {
           orderFk: createdOrderId,
+          productFk: resolvedProductPk,
           itemName: c.name,
           unitPrice: c.unitPrice,
           quantityItems: c.quantity,
@@ -508,6 +513,8 @@ export const SalesCashier: React.FC = () => {
       const itemsRes = await addOrderItemsToSupabase(orderItemsPayload);
       if (!itemsRes.success) {
         console.error('❌ Failed to record order items in Supabase public.order_items:', itemsRes.error);
+      } else {
+        console.log(`✅ Successfully stored ${orderItemsPayload.length} order_items in Supabase with order_fk:`, createdOrderId);
       }
     }
 

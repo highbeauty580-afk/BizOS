@@ -282,6 +282,7 @@ export async function updateOrderStatusInSupabase(
 export interface OrderItemRecord {
   id?: string | number;
   order_fk: string | number;
+  product_fk?: string | number;
   Item_Name: string;
   unit_price: number;
   quantity_items: number;
@@ -291,6 +292,7 @@ export interface OrderItemRecord {
 
 export interface AddOrderItemInput {
   orderFk: string | number;
+  productFk?: string | number;
   itemName: string;
   unitPrice: number;
   quantityItems: number;
@@ -307,10 +309,34 @@ export async function addOrderItemsToSupabase(
     return { success: true, data: [] };
   }
 
+  // 1. Resolve product_fk to satisfy database NOT NULL constraint if missing
+  const needsProductLookup = items.some((it) => !it.productFk);
+  if (needsProductLookup) {
+    try {
+      const { data: prods } = await supabase.from('products').select('product_pk, product_name');
+      if (prods && prods.length > 0) {
+        const productMap: Record<string, string> = {};
+        prods.forEach((p: any) => {
+          if (p.product_name) productMap[p.product_name.trim().toLowerCase()] = p.product_pk;
+        });
+        const defaultProdPk = prods[0].product_pk;
+        items.forEach((it) => {
+          if (!it.productFk) {
+            const found = productMap[it.itemName.trim().toLowerCase()];
+            it.productFk = found || defaultProdPk;
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not lookup products for order_items:', e);
+    }
+  }
+
   // Exact payload as specified by user instructions:
-  // Item_Name, unit_price, quantity_items, total_item_price, order_fk
+  // Item_Name, unit_price, quantity_items, total_item_price, order_fk, product_fk
   const exactRows = items.map((it) => ({
     order_fk: it.orderFk,
+    product_fk: it.productFk || null,
     Item_Name: it.itemName.trim(),
     unit_price: parseFloat(it.unitPrice as any) || 0,
     quantity_items: parseInt(it.quantityItems as any, 10) || 1,
@@ -328,6 +354,7 @@ export async function addOrderItemsToSupabase(
       console.warn('⚠️ Supabase order_items exact insert warning, retrying with lowercase columns:', error.message);
       const lowerRows = items.map((it) => ({
         order_fk: it.orderFk,
+        product_fk: it.productFk || null,
         item_name: it.itemName.trim(),
         unit_price: parseFloat(it.unitPrice as any) || 0,
         quantity_items: parseInt(it.quantityItems as any, 10) || 1,
@@ -348,6 +375,7 @@ export async function addOrderItemsToSupabase(
       console.warn('⚠️ Supabase order_items retrying with order_id column:', error.message);
       const altRows = items.map((it) => ({
         order_id: it.orderFk,
+        product_fk: it.productFk || null,
         item_name: it.itemName.trim(),
         unit_price: parseFloat(it.unitPrice as any) || 0,
         quantity_items: parseInt(it.quantityItems as any, 10) || 1,
@@ -410,6 +438,7 @@ export function mapOrderItemRow(row: any): OrderItemRecord {
   return {
     id: row.id || row.item_id || row.order_item_pk,
     order_fk: row.order_fk ?? row.order_id ?? row.orderFk,
+    product_fk: row.product_fk ?? row.product_id ?? row.productFk,
     Item_Name: row.Item_Name || row.item_name || row.itemName || 'منتج',
     unit_price: parseFloat(row.unit_price || row.unitPrice || 0) || 0,
     quantity_items: parseInt(row.quantity_items || row.quantity || row.quantityItems || 1, 10) || 1,
