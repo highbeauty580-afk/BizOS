@@ -10,7 +10,7 @@ import {
   deleteCustomerFromSupabase,
 } from '../lib/customersService';
 import { fetchProductsFromSupabase } from '../lib/productsService';
-import { updateStockQuantityInSupabase } from '../lib/stockService';
+import { fetchStockFromSupabase, updateStockQuantityInSupabase } from '../lib/stockService';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -36,21 +36,55 @@ export const SalesCashier: React.FC = () => {
 
   const isRtl = language === 'ar';
 
-  // Fetch Customers & Products from Supabase on mount
+  // Fetch Customers, Products & Stock from Supabase on mount
   useEffect(() => {
     async function loadInitialData() {
+      // 1. Fetch Customers
       const custRes = await fetchCustomersFromSupabase();
       if (!custRes.error && custRes.data.length > 0) {
         setCustomers(custRes.data);
       }
 
+      // 2. Fetch Products & Stock
       const prodRes = await fetchProductsFromSupabase();
-      if (!prodRes.error && prodRes.data.length > 0) {
-        setFastItems(prodRes.data);
+      const stockRes = await fetchStockFromSupabase();
+
+      const products = prodRes.data || [];
+      const stocks = stockRes.data || [];
+
+      // 3. Merge Logic: Start with stock records (they contain quantity)
+      const combined: FastItem[] = stocks.map((stk) => {
+        if (stk.product_pk) {
+          const linkedProd = products.find((p) => p.id === stk.product_pk || p.product_pk === stk.product_pk);
+          if (linkedProd) {
+            return {
+              ...linkedProd,
+              stockQuantity: stk.stockQuantity,
+              minStock: stk.minStock,
+              maxStock: stk.maxStock,
+              amount: stk.amount,
+              stock_pk: stk.stock_pk,
+            };
+          }
+        }
+        return stk; // Raw materials or items only in stock table
+      });
+
+      // 4. Add products that are not yet in the stock table
+      products.forEach((p) => {
+        const alreadyAdded = combined.some((c) => c.id === p.id || (p.product_pk && c.product_pk === p.product_pk));
+        if (!alreadyAdded) {
+          combined.push(p);
+        }
+      });
+
+      if (combined.length > 0) {
+        setFastItems(combined);
       }
     }
     loadInitialData();
   }, [setCustomers, setFastItems]);
+
 
   // Entry Mode: 'manual' (يدوي) | 'auto_integration' (ربط تلقائي)
   const [salesEntryMode, setSalesEntryMode] = useState<SalesEntryMode>('manual');

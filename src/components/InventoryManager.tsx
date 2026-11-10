@@ -51,23 +51,42 @@ export const InventoryManager: React.FC = () => {
       const prodRes = await fetchProductsFromSupabase();
       const stockRes = await fetchStockFromSupabase();
 
-      const combined: FastItem[] = [];
-      if (!prodRes.error && prodRes.data.length > 0) {
-        combined.push(...prodRes.data);
-      }
-      if (!stockRes.error && stockRes.data.length > 0) {
-        stockRes.data.forEach((stk) => {
-          if (!combined.some((c) => c.id === stk.id || c.name === stk.name)) {
-            combined.push(stk);
+      const products = prodRes.data || [];
+      const stocks = stockRes.data || [];
+
+      // Merge logic: Map stock items and enrich with product details if linked
+      const combined: FastItem[] = stocks.map((stk) => {
+        if (stk.product_pk) {
+          const linkedProd = products.find((p) => p.id === stk.product_pk || p.product_pk === stk.product_pk);
+          if (linkedProd) {
+            return {
+              ...linkedProd,
+              stockQuantity: stk.stockQuantity,
+              minStock: stk.minStock,
+              maxStock: stk.maxStock,
+              amount: stk.amount,
+              stock_pk: stk.stock_pk,
+            };
           }
-        });
-      }
+        }
+        return stk; // Raw materials or items only in stock table
+      });
+
+      // Add products that are not yet in the stock table (newly created or orphan)
+      products.forEach((p) => {
+        const alreadyAdded = combined.some((c) => c.id === p.id || (p.product_pk && c.product_pk === p.product_pk));
+        if (!alreadyAdded) {
+          combined.push(p);
+        }
+      });
+
       if (combined.length > 0) {
         setFastItems(combined);
       }
     }
     loadInitialData();
   }, [setFastItems]);
+
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<string[]>([
@@ -375,8 +394,17 @@ export const InventoryManager: React.FC = () => {
         };
         await addStockToSupabase(stockParams);
 
+        // Update local createdProduct with quantities before adding to state
+        const enrichedProduct: FastItem = {
+          ...createdProduct,
+          stockQuantity: isNaN(stockNum) ? 0 : stockNum,
+          minStock: isNaN(minNum) ? 10 : minNum,
+          maxStock: isNaN(maxNum) ? 200 : maxNum,
+          amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum)
+        };
+
         alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات!' : 'Product saved successfully!');
-        setFastItems((prev) => [createdProduct, ...prev]);
+        setFastItems((prev) => [enrichedProduct, ...prev]);
         setIsAddEditModalOpen(false);
       }
     }
