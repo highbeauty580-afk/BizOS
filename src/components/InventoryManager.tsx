@@ -52,48 +52,6 @@ export const InventoryManager: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Invoice'>('Cash');
   const [paymentNotice, setPaymentNotice] = useState('');
 
-  // Fetch Products & Stock from Supabase on mount
-  useEffect(() => {
-    async function loadInitialData() {
-      const prodRes = await fetchProductsFromSupabase();
-      const stockRes = await fetchStockFromSupabase();
-
-      const products = prodRes.data || [];
-      const stocks = stockRes.data || [];
-
-      // Merge logic: Map stock items and enrich with product details if linked
-      const combined: FastItem[] = stocks.map((stk) => {
-        if (stk.product_pk) {
-          const linkedProd = products.find((p) => p.id === stk.product_pk || p.product_pk === stk.product_pk);
-          if (linkedProd) {
-            return {
-              ...linkedProd,
-              stockQuantity: stk.stockQuantity,
-              minStock: stk.minStock,
-              maxStock: stk.maxStock,
-              amount: stk.amount,
-              stock_pk: stk.stock_pk,
-            };
-          }
-        }
-        return stk; // Raw materials or items only in stock table
-      });
-
-      // Add products that are not yet in the stock table (newly created or orphan)
-      products.forEach((p) => {
-        const alreadyAdded = combined.some((c) => c.id === p.id || (p.product_pk && c.product_pk === p.product_pk));
-        if (!alreadyAdded) {
-          combined.push(p);
-        }
-      });
-
-      if (combined.length > 0) {
-        setFastItems(combined);
-      }
-    }
-    loadInitialData();
-  }, [setFastItems]);
-
 
   // Dynamic Categories State
   const [categories, setCategories] = useState<string[]>([

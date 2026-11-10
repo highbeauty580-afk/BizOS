@@ -21,6 +21,10 @@ import {
   WipStage,
   WipBatch,
 } from '../types';
+import { fetchCustomersFromSupabase } from '../lib/customersService';
+import { fetchProductsFromSupabase } from '../lib/productsService';
+import { fetchStockFromSupabase } from '../lib/stockService';
+import { fetchExpenseTransactionsFromSupabase } from '../lib/transactionsService';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
   indigo: {
@@ -258,6 +262,7 @@ interface AppContextType {
 
   // Global Helpers
   resetToDefault: () => void;
+  refreshDataFromSupabase: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -290,6 +295,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
     document.documentElement.lang = language;
   }, [language]);
+
+  // Central Supabase Data Loading on App Mount / Refresh
+  const refreshDataFromSupabase = async () => {
+    try {
+      // 1. Fetch Customers
+      const custRes = await fetchCustomersFromSupabase();
+      if (!custRes.error && custRes.data && custRes.data.length > 0) {
+        setCustomers(custRes.data);
+      }
+
+      // 2. Fetch Products & Stock
+      const prodRes = await fetchProductsFromSupabase();
+      const stockRes = await fetchStockFromSupabase();
+
+      const products = prodRes.data || [];
+      const stocks = stockRes.data || [];
+
+      const combined: FastItem[] = stocks.map((stk) => {
+        if (stk.product_pk) {
+          const linkedProd = products.find(
+            (p) => p.id === stk.product_pk || p.product_pk === stk.product_pk
+          );
+          if (linkedProd) {
+            return {
+              ...linkedProd,
+              stockQuantity: stk.stockQuantity,
+              minStock: stk.minStock,
+              maxStock: stk.maxStock,
+              amount: stk.amount,
+              stock_pk: stk.stock_pk,
+            };
+          }
+        }
+        return stk;
+      });
+
+      products.forEach((p) => {
+        const alreadyAdded = combined.some(
+          (c) => c.id === p.id || (p.product_pk && c.product_pk === p.product_pk)
+        );
+        if (!alreadyAdded) {
+          combined.push(p);
+        }
+      });
+
+      if (combined.length > 0) {
+        setFastItems(combined);
+      }
+
+      // 3. Fetch Expenses & Stock Transactions
+      const expRes = await fetchExpenseTransactionsFromSupabase();
+      if (!expRes.error && expRes.data && expRes.data.length > 0) {
+        setExpenses(expRes.data);
+      }
+    } catch (err) {
+      console.error('❌ Error refreshing Supabase data in AppContext:', err);
+    }
+  };
+
+  useEffect(() => {
+    refreshDataFromSupabase();
+  }, []);
 
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
@@ -740,6 +807,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearMarketingData,
 
         resetToDefault,
+        refreshDataFromSupabase,
       }}
     >
       {children}

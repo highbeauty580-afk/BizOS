@@ -22,19 +22,7 @@ export const ExpensesManager: React.FC = () => {
     addExpenseCategory,
     updateExpenseCategory,
     deleteExpenseCategory,
-    setExpenses,
   } = useApp();
-
-  // Load Initial Expenses from Supabase on mount
-  useEffect(() => {
-    async function loadExpensesFromDb() {
-      const res = await fetchExpenseTransactionsFromSupabase();
-      if (!res.error && res.data.length > 0) {
-        setExpenses(res.data);
-      }
-    }
-    loadExpensesFromDb();
-  }, [setExpenses]);
 
   const isRtl = language === 'ar';
 
