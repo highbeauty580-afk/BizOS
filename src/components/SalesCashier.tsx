@@ -447,7 +447,7 @@ export const SalesCashier: React.FC = () => {
   };
 
   // Confirm Sale & Process Inventory
-  const handleConfirmSale = () => {
+  const handleConfirmSale = async () => {
     if (cart.length === 0) return;
 
     const receiptNo = `#TX-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -487,13 +487,16 @@ export const SalesCashier: React.FC = () => {
     const dbMethod = methodMapping[paymentMethod] || 'Cash';
     const txName = `${finalCustomerName} فاتورة مبيعات`;
 
-    addFinancialTransactionToSupabase({
+    const finRes = await addFinancialTransactionToSupabase({
       amount: total,
       method: dbMethod,
       notice: shiftNotes.trim(),
       type: 'Sales_Trans',
       name: txName
     });
+    if (!finRes.success) {
+      console.error('❌ Failed to record financial transaction (Sales):', finRes.error);
+    }
     // ------------------------------------------------------------------
 
     // 1. Add to sales history transactions
@@ -1595,7 +1598,34 @@ export const SalesCashier: React.FC = () => {
                               <button
                                 onClick={async () => {
                                   if (window.confirm(isRtl ? 'هل تريد عمل مرتجع لهذه الفاتورة وإعادة المنتجات للمخزون؟' : 'Return this transaction and restore stock?')) {
-                                    // 1. Update Supabase Stock
+                                    // --- 1. RECORD FINANCIAL TRANSACTION FIRST (SYNC WITH SUPABASE) ---
+                                    const methodMapping: Record<PaymentMethod, string> = {
+                                      Cash: 'Cash',
+                                      Card: 'E_Wallet',
+                                      'Bank Transfer': 'Bank',
+                                      Invoice: 'Credit'
+                                    };
+                                    const dbMethod = methodMapping[tx.paymentMethod] || 'Cash';
+                                    const txName = `${tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')} فاتورة مرتجع`;
+
+                                    // Using absolute value for amount to avoid DB constraints, 
+                                    // the 'Return_Trans' type identifies it as a deduction.
+                                    const finRes = await addFinancialTransactionToSupabase({
+                                      amount: tx.total, 
+                                      method: dbMethod,
+                                      notice: `مرتجع للفاتورة رقم ${tx.receiptNo}`,
+                                      type: 'Return_Trans',
+                                      name: txName
+                                    });
+                                    
+                                    if (!finRes.success) {
+                                      console.error('❌ Failed to record return transaction:', finRes.error);
+                                      alert(isRtl ? `فشل تسجيل التحويل المالي للمرتجع: ${finRes.error}` : `Failed to record return transaction: ${finRes.error}`);
+                                      return; // Stop if financial record fails to keep data consistent
+                                    }
+                                    // ------------------------------------------------------------------
+
+                                    // 2. Update Supabase Stock
                                     for (const item of tx.items) {
                                       const catalogItem = fastItems.find(fi => fi.id === item.originalFastItemId || fi.name === item.name);
                                       if (catalogItem) {
@@ -1606,31 +1636,13 @@ export const SalesCashier: React.FC = () => {
                                       }
                                     }
                                     
-                                    // 2. Update Local State
+                                    // 3. Update Local State
                                     returnTransactionItems(tx.items, tx.receiptNo, 'Customer Return');
                                     setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned' } : t));
                                     
-                                    // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
-                                    const methodMapping: Record<PaymentMethod, string> = {
-                                      Cash: 'Cash',
-                                      Card: 'E_Wallet',
-                                      'Bank Transfer': 'Bank',
-                                      Invoice: 'Credit'
-                                    };
-                                    const dbMethod = methodMapping[tx.paymentMethod] || 'Cash';
-                                    const txName = `${tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')} فاتورة مرتجع`;
-
-                                    addFinancialTransactionToSupabase({
-                                      amount: -tx.total, // Returns are negative inflow/deduction
-                                      method: dbMethod,
-                                      notice: `مرتجع للفاتورة رقم ${tx.receiptNo}`,
-                                      type: 'Return_Trans',
-                                      name: txName
-                                    });
-                                    // ------------------------------------------------------------------
-
                                     alert(isRtl ? 'تم إرجاع الفاتورة وتحديث المخزون بنجاح!' : 'Transaction returned and stock updated!');
                                   }
+
                                 }}
                                 className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg font-bold text-[11px] transition-colors cursor-pointer"
                               >
