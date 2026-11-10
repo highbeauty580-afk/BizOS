@@ -140,3 +140,30 @@ export async function deleteProductFromSupabase(
     return { success: false, error: err?.message };
   }
 }
+export async function updateProductInSupabase(
+  productPk: string,
+  updates: Partial<AddProductParams>
+): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
+
+  try {
+    const cleanPayload: any = {};
+    if (updates.product_name) cleanPayload.product_name = updates.product_name.trim();
+    if (updates.product_type) cleanPayload.product_type = updates.product_type.trim();
+    if (updates.product_description !== undefined) cleanPayload.product_description = updates.product_description?.trim() || null;
+    if (updates.unit_cost !== undefined) cleanPayload.unit_cost = parseFloat(updates.unit_cost as any) || 0;
+    if (updates.unit_price !== undefined) cleanPayload.unit_price = parseFloat(updates.unit_price as any) || 0;
+    if (updates.product_code !== undefined) cleanPayload.product_code = updates.product_code?.trim() || null;
+    if (updates.measure_ptype) cleanPayload.Measure_PType = updates.measure_ptype.trim();
+
+    const { error } = await supabase
+      .from('products')
+      .update(cleanPayload)
+      .eq('product_pk', productPk);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message };
+  }
+}

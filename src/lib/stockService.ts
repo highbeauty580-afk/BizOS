@@ -150,9 +150,23 @@ export async function updateStockQuantityInSupabase(
 
     const { error } = await query;
     if (error) return { success: false, error: error.message };
+
+    // SYNC: Update products table if it's a finished good (isProductFk is true)
+    if (isProductFk) {
+      const { error: prodError } = await supabase
+        .from('products')
+        .update({ unit_cost: cost })
+        .eq('product_pk', identifier);
+      
+      if (prodError) {
+        console.warn('⚠️ Warning: Stock updated but product unit_cost failed to sync:', prodError.message);
+      }
+    }
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message };
   }
 }
+
 

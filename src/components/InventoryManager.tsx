@@ -12,6 +12,7 @@ import {
 import {
   fetchProductsFromSupabase,
   addProductToSupabase,
+  updateProductInSupabase,
   deleteProductFromSupabase,
 } from '../lib/productsService';
 import {
@@ -286,6 +287,18 @@ export const InventoryManager: React.FC = () => {
       const isProduct = modalInventoryTypeTarget === 'finished_goods';
       await updateStockQuantityInSupabase(editingItem.id, isNaN(stockNum) ? 0 : stockNum, isNaN(costNum) ? 0 : costNum, isProduct);
       
+      if (isProduct && editingItem.product_pk) {
+        await updateProductInSupabase(editingItem.product_pk, {
+          unit_cost: isNaN(costNum) ? 0 : costNum,
+          unit_price: isNaN(priceNum) ? 0 : priceNum,
+          product_name: formName.trim(),
+          product_code: formCode.trim() || undefined,
+          product_type: formCategory,
+          product_description: formDescription.trim() || undefined,
+          measure_ptype: formUnit.trim() || 'قطعة',
+        });
+      }
+
       alert(isRtl ? 'تم تحديث بيانات الصنف بالمخزون بنجاح!' : 'Stock item updated successfully!');
       setIsAddEditModalOpen(false);
     } else {
@@ -304,6 +317,13 @@ export const InventoryManager: React.FC = () => {
         const res = await updateStockQuantityInSupabase(existingItem.id, newTotalQty, targetCost, isProduct);
         
         if (res.success) {
+          if (isProduct && existingItem.product_pk) {
+            await updateProductInSupabase(existingItem.product_pk, {
+              unit_cost: targetCost,
+              unit_price: isNaN(priceNum) ? existingItem.price : priceNum
+            });
+          }
+
           updateFastItem(existingItem.id, {
             stockQuantity: newTotalQty,
             costPrice: targetCost,
