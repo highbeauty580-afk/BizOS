@@ -48,6 +48,7 @@ import {
 } from '../lib/transactionsService';
 import {
   fetchOrdersFromSupabase,
+  fetchOrderItemsFromSupabase,
   addOrderToSupabase,
   updateOrderStatusInSupabase,
   DEFAULT_DELIVERY_STATUS,
@@ -407,22 +408,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setExpenses(expRes.data);
       }
 
-      // 4. Fetch Sales Transactions & Orders from Supabase
+      // 4. Fetch Sales Transactions, Orders & Order Items from Supabase
       const salesRes = await fetchSalesTransactionsFromSupabase();
       const ordersRes = await fetchOrdersFromSupabase();
+      const orderItemsRes = await fetchOrderItemsFromSupabase();
 
       const ordersList = ordersRes.data || [];
+      const orderItemsList = orderItemsRes.data || [];
       let txList: Transaction[] = (salesRes.data || []) as Transaction[];
 
-      // Link orders with transactions
+      // Link orders and order_items with transactions
       txList = txList.map((tx) => {
         const matchedOrder = ordersList.find(
           (o) => o.id === tx.orderId || (o.customerName === tx.customerName && Math.abs(o.totalPrice - tx.total) < 0.01)
         );
+
+        // Find items in public.order_items for this order
+        const orderKey = matchedOrder?.orderPk ?? matchedOrder?.id ?? tx.orderId;
+        const matchingItems = orderItemsList.filter(
+          (it) => String(it.order_fk) === String(orderKey) || (tx.orderId && String(it.order_fk) === String(tx.orderId))
+        );
+
+        const restoredItems: StagedItem[] = matchingItems.length > 0
+          ? matchingItems.map((mi) => ({
+              id: `item-${mi.id || Math.random()}`,
+              name: mi.Item_Name,
+              category: 'Retail',
+              unitPrice: mi.unit_price,
+              quantity: mi.quantity_items,
+              discountPct: 0,
+            }))
+          : tx.items;
+
+        const summary = matchingItems.length > 0
+          ? matchingItems.map((i) => `${i.quantity_items}x ${i.Item_Name}`).join(', ')
+          : tx.itemsSummary;
+
         if (matchedOrder) {
           return {
             ...tx,
             orderId: matchedOrder.id,
+            items: restoredItems.length > 0 ? restoredItems : tx.items,
+            itemsSummary: summary || tx.itemsSummary,
             customerPhone1: matchedOrder.customerPhone1 || tx.customerPhone1,
             customerPhone2: matchedOrder.customerPhone2 || tx.customerPhone2,
             customerAddress: matchedOrder.customerAddress || tx.customerAddress,
@@ -433,26 +460,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         return {
           ...tx,
+          items: restoredItems.length > 0 ? restoredItems : tx.items,
+          itemsSummary: summary || tx.itemsSummary,
           deliveryStatus: tx.deliveryStatus || DEFAULT_DELIVERY_STATUS,
           preparingStatus: tx.preparingStatus || DEFAULT_PREPARING_STATUS,
           orderStatus: tx.orderStatus || (tx.status === 'Returned' ? 'مرتجع' : DEFAULT_ORDER_STATUS),
         };
       });
 
-      // Any order not in transactions yet, add as transaction
+      // Any order not in transactions yet, add as transaction with its items from order_items
       ordersList.forEach((order) => {
         const alreadyInTx = txList.some(
           (t) => t.orderId === order.id || (t.customerName === order.customerName && Math.abs(t.total - order.totalPrice) < 0.01)
         );
         if (!alreadyInTx) {
+          const matchingItems = orderItemsList.filter(
+            (it) => String(it.order_fk) === String(order.orderPk) || String(it.order_fk) === String(order.id)
+          );
+          const restoredItems: StagedItem[] = matchingItems.map((mi) => ({
+            id: `item-${mi.id || Math.random()}`,
+            name: mi.Item_Name,
+            category: 'Retail',
+            unitPrice: mi.unit_price,
+            quantity: mi.quantity_items,
+            discountPct: 0,
+          }));
+          const summaryStr = matchingItems.length > 0
+            ? matchingItems.map((i) => `${i.quantity_items}x ${i.Item_Name}`).join(', ')
+            : `طلب من ${order.customerName}`;
+
           txList.push({
             id: `ord-tx-${order.id}`,
             orderId: order.id,
             receiptNo: `ORD-${String(order.id).slice(-4)}`,
             time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             date: order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-            itemsSummary: `طلب من ${order.customerName}`,
-            items: [],
+            itemsSummary: summaryStr,
+            items: restoredItems,
             subtotal: order.totalPrice,
             tax: 0,
             total: order.totalPrice,

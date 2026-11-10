@@ -14,6 +14,8 @@ import { fetchStockFromSupabase, updateStockQuantityInSupabase } from '../lib/st
 import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 import {
   addOrderToSupabase,
+  addOrderItemsToSupabase,
+  AddOrderItemInput,
   updateOrderStatusInSupabase,
   DEFAULT_DELIVERY_STATUS,
   DEFAULT_PREPARING_STATUS,
@@ -58,8 +60,8 @@ export const SalesCashier: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [discountPct, setDiscountPct] = useState<number>(0);
 
-  // Customer Selection & Customer Database State
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(customers[0] || null);
+  // Customer Selection & Customer Database State (no forced pre-selection)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [custDatabaseSearch, setCustDatabaseSearch] = useState('');
   const [isAddCustomerModalOpen, setIsAddCustomerModalOpen] = useState(false);
@@ -184,41 +186,60 @@ export const SalesCashier: React.FC = () => {
   const numericPaid = parseFloat(amountPaid) || total;
   const changeDue = Math.max(0, numericPaid - total);
 
-  // Handlers for POS Cart
-  const handleAddToCart = (item: FastItem) => {
-    // Stock Check Validation
-    const existingStaged = cart.find((i) => i.originalFastItemId === item.id || i.name === (isRtl && item.nameAr ? item.nameAr : item.name));
-    const currentQtyInCart = existingStaged ? existingStaged.quantity : 0;
-    const availableStock = item.stockQuantity;
+  // Toggle Customer Selection (Deselects on re-click and clears active invoice)
+  const handleToggleCustomer = (cust: Customer) => {
+    if (selectedCustomer?.id === cust.id) {
+      setSelectedCustomer(null);
+      setCart([]);
+    } else {
+      setSelectedCustomer(cust);
+    }
+  };
 
-    if (currentQtyInCart + 1 > availableStock) {
+  // Handlers for POS Cart - Toggle Product Selection (Deselects on re-click)
+  const handleAddToCart = (item: FastItem) => {
+    // 1. Enforce requirement: Invoice window and product selection are only active AFTER customer is chosen
+    if (!selectedCustomer) {
       alert(
         isRtl
-          ? `عفواً! الكمية المتاحة في المخزون للمنتج (${item.nameAr || item.name}) هي (${availableStock} ${item.unit || 'قطعة'}) فقط. لا يمكن إدخال كمية تتجاوز المخزون.`
-          : `Insufficient stock! Only ${availableStock} ${item.unit || 'unit(s)'} available.`
+          ? '⚠️ يرجى أولاً تحديد العميل الموجه له الطلب من قائمة العملاء لتفعيل نافذة الفاتورة والبدء في اختيار المنتجات.'
+          : '⚠️ Please select a customer first to activate the invoice before picking products.'
       );
       return;
     }
 
-    setCart((prevCart) => {
-      const existing = prevCart.find((i) => i.originalFastItemId === item.id || i.name === (isRtl && item.nameAr ? item.nameAr : item.name));
-      if (existing) {
-        return prevCart.map((i) =>
-          i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      } else {
-        const newItem: StagedItem = {
-          id: `cart-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-          name: isRtl && item.nameAr ? item.nameAr : item.name,
-          category: item.category,
-          unitPrice: item.price,
-          quantity: 1,
-          discountPct: 0,
-          originalFastItemId: item.id,
-        };
-        return [...prevCart, newItem];
-      }
-    });
+    // 2. Toggle Logic: If product is already selected in cart, re-clicking it DESELECTS / removes it
+    const existingStaged = cart.find(
+      (i) => i.originalFastItemId === item.id || i.name === (isRtl && item.nameAr ? item.nameAr : item.name)
+    );
+
+    if (existingStaged) {
+      setCart((prevCart) => prevCart.filter((i) => i.id !== existingStaged.id));
+      return;
+    }
+
+    // 3. Stock Check Validation
+    const availableStock = item.stockQuantity ?? 0;
+    if (availableStock <= 0) {
+      alert(
+        isRtl
+          ? `عفواً! المنتج (${item.nameAr || item.name}) غير متوفر حالياً في المخزون (الرصيد: 0).`
+          : `Out of stock! Only ${availableStock} ${item.unit || 'unit(s)'} available.`
+      );
+      return;
+    }
+
+    // 4. Add new item to invoice with quantity 1
+    const newItem: StagedItem = {
+      id: `cart-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+      name: isRtl && item.nameAr ? item.nameAr : item.name,
+      category: item.category,
+      unitPrice: item.price,
+      quantity: 1,
+      discountPct: 0,
+      originalFastItemId: item.id,
+    };
+    setCart((prevCart) => [...prevCart, newItem]);
   };
 
   const handleUpdateQty = (id: string, delta: number) => {
@@ -429,6 +450,10 @@ export const SalesCashier: React.FC = () => {
 
   // Open Checkout Modal
   const handleOpenCheckout = () => {
+    if (!selectedCustomer) {
+      alert(isRtl ? '⚠️ يرجى تحديد العميل الموجه له الطلب أولاً قبل إتمام البيع.' : 'Please select a customer first before checkout.');
+      return;
+    }
     if (cart.length === 0) return;
     setAmountPaid(total.toFixed(2));
     setShiftNotes('');
@@ -464,7 +489,27 @@ export const SalesCashier: React.FC = () => {
       orderStatus: DEFAULT_ORDER_STATUS,
     });
 
-    const createdOrderId = orderRes.data?.id;
+    const createdOrderId = orderRes.data?.orderPk ?? orderRes.data?.id;
+
+    // --- SYNC WITH SUPABASE: public.order_items (Order Items Breakdown) ---
+    // Rule: Orders = order_pk = order_items = order_fk
+    if (createdOrderId) {
+      const orderItemsPayload: AddOrderItemInput[] = cart.map((c) => {
+        const itemTotal = Number((c.unitPrice * c.quantity).toFixed(2));
+        return {
+          orderFk: createdOrderId,
+          itemName: c.name,
+          unitPrice: c.unitPrice,
+          quantityItems: c.quantity,
+          totalItemPrice: itemTotal,
+        };
+      });
+
+      const itemsRes = await addOrderItemsToSupabase(orderItemsPayload);
+      if (!itemsRes.success) {
+        console.error('❌ Failed to record order items in Supabase public.order_items:', itemsRes.error);
+      }
+    }
 
     const newTx: Omit<Transaction, 'id'> = {
       orderId: createdOrderId,
@@ -544,8 +589,9 @@ export const SalesCashier: React.FC = () => {
     const txCreated: Transaction = { ...newTx, id: `tx-${Date.now()}` };
     setLastConfirmedTx(txCreated);
 
-    // Clear cart and close modal
+    // Clear cart, reset customer selection, and close modal
     setCart([]);
+    setSelectedCustomer(null);
     setDiscountPct(0);
     setIsCheckoutOpen(false);
   };
@@ -566,6 +612,7 @@ export const SalesCashier: React.FC = () => {
     });
 
     setCart([]);
+    setSelectedCustomer(null);
     setDiscountPct(0);
     setIsHoldModalOpen(false);
     setHoldNote('');
@@ -809,7 +856,13 @@ export const SalesCashier: React.FC = () => {
                   />
                 </div>
 
-
+                {/* Notice if customer is not selected yet */}
+                {!selectedCustomer && (
+                  <div className="flex items-center gap-1.5 p-2 bg-amber-50/90 border border-amber-200/90 rounded-xl text-[11px] font-bold text-amber-800">
+                    <span className="material-symbols-outlined text-sm text-amber-600 shrink-0">lock</span>
+                    <span className="truncate">{isRtl ? 'اختر العميل أولاً من القائمة المجاورة لتفعيل الفاتورة' : 'Select client first to activate invoice'}</span>
+                  </div>
+                )}
 
                 {/* VERTICAL Scrollable Product Items directly below Product Search - MAX 3 VISIBLE AT A TIME */}
                 <div className="flex flex-col gap-2 min-h-[220px]">
@@ -828,6 +881,7 @@ export const SalesCashier: React.FC = () => {
                         return matchId || matchName ? acc + c.quantity : acc;
                       }, 0);
 
+                      const isSelectedProduct = stagedQty > 0;
                       const displayStock = Math.max(0, actualStock - stagedQty);
 
                       // Check if item was confirmed/deducted in the last 5 minutes (300,000 ms)
@@ -839,17 +893,21 @@ export const SalesCashier: React.FC = () => {
                           key={item.id}
                           onClick={() => handleAddToCart(item)}
                           className={`w-full p-3 rounded-xl border transition-all flex items-center justify-between gap-3 group cursor-pointer ${
-                            isRecentlyDeducted
-                              ? 'border-rose-400 bg-rose-50/50 shadow-2xs'
-                              : stagedQty > 0
-                              ? 'border-amber-400 bg-amber-50/40 shadow-2xs'
-                              : 'border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-400'
+                            !selectedCustomer
+                              ? 'border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/70 opacity-75'
+                              : isSelectedProduct
+                              ? 'border-2 border-emerald-500 bg-emerald-50/80 shadow-xs ring-2 ring-emerald-500/20'
+                              : isRecentlyDeducted
+                              ? 'border-rose-400 bg-rose-50/50 shadow-2xs hover:bg-rose-50'
+                              : 'border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-400 shadow-2xs'
                           }`}
                         >
                           <div className="flex flex-col flex-1 min-w-0 gap-1">
                             {/* Line 1: Product Name, Category Badge & Product Code */}
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                              <h3 className={`text-xs font-bold truncate transition-colors ${
+                                isSelectedProduct ? 'text-emerald-950 font-extrabold' : 'text-slate-900 group-hover:text-indigo-600'
+                              }`}>
                                 {isRtl && item.nameAr ? item.nameAr : item.name}
                               </h3>
                               <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
@@ -879,11 +937,11 @@ export const SalesCashier: React.FC = () => {
                                   <span>{isRtl ? 'المخزون:' : 'Stock:'}</span>
                                   <span className="font-mono text-xs text-rose-700">{displayStock}</span>
                                 </span>
-                              ) : stagedQty > 0 ? (
-                                <span className="text-[10px] font-extrabold text-amber-700 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                  <span>{isRtl ? 'المخزون:' : 'Stock:'}</span>
-                                  <span className="font-mono text-xs text-amber-800">{displayStock}</span>
-                                  <span className="text-[9px] text-amber-700 font-semibold">(-{stagedQty})</span>
+                              ) : isSelectedProduct ? (
+                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <span>{isRtl ? 'المتبقي:' : 'Rem:'}</span>
+                                  <span className="font-mono text-xs text-emerald-900 font-bold">{displayStock}</span>
+                                  <span className="text-[9px] text-emerald-700 font-semibold">({stagedQty} بالفاتورة)</span>
                                 </span>
                               ) : (
                                 <span className={`text-[10px] font-semibold ${actualStock <= 10 ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
@@ -893,19 +951,40 @@ export const SalesCashier: React.FC = () => {
                             </div>
                           </div>
 
-                          <button
-                            type="button"
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs cursor-pointer ${
-                              isRecentlyDeducted
-                                ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                                : stagedQty > 0
-                                ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                                : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                            }`}
-                          >
-                            <span>+</span>
-                            <span>{isRtl ? 'إضافة' : 'Add'}</span>
-                          </button>
+                          {/* Action Button: Toggle Deselect or Select */}
+                          <div>
+                            {!selectedCustomer ? (
+                              <span className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-slate-200/70 text-slate-500 flex items-center gap-1 whitespace-nowrap">
+                                <span className="material-symbols-outlined text-xs">lock</span>
+                                <span>{isRtl ? 'اختر العميل' : 'Need Client'}</span>
+                              </span>
+                            ) : isSelectedProduct ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddToCart(item);
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs bg-rose-600 hover:bg-rose-700 text-white cursor-pointer whitespace-nowrap"
+                                title={isRtl ? 'انقر لإلغاء هذا المنتج من الفاتورة' : 'Click to deselect from invoice'}
+                              >
+                                <span className="material-symbols-outlined text-xs">remove_circle</span>
+                                <span>{isRtl ? 'إلغاء التحديد' : 'Deselect'}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAddToCart(item);
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer whitespace-nowrap"
+                              >
+                                <span>+</span>
+                                <span>{isRtl ? 'تحديد' : 'Select'}</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })
@@ -973,7 +1052,26 @@ export const SalesCashier: React.FC = () => {
                   />
                 </div>
 
-
+                {/* Active Customer Indicator with Deselect Button */}
+                {selectedCustomer && (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-indigo-50/90 border border-indigo-200 text-xs animate-in fade-in">
+                    <div className="flex items-center gap-1.5 text-indigo-950 font-bold truncate">
+                      <span className="material-symbols-outlined text-indigo-600 text-base">how_to_reg</span>
+                      <span className="truncate">{isRtl ? `العميل المحدد: ${selectedCustomer.name}` : `Selected: ${selectedCustomer.name}`}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCustomer(null);
+                        setCart([]);
+                      }}
+                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-white border border-rose-200 hover:bg-rose-50 px-2 py-0.5 rounded-md cursor-pointer transition-colors shadow-2xs whitespace-nowrap"
+                    >
+                      ✕ {isRtl ? 'إلغاء التحديد' : 'Deselect'}
+                    </button>
+                  </div>
+                )}
 
                 {/* VERTICAL Customer List directly below Customer Search - MAX 3 VISIBLE AT A TIME */}
                 <div className="flex flex-col gap-2 min-h-[220px]">
@@ -987,10 +1085,10 @@ export const SalesCashier: React.FC = () => {
                       return (
                         <div
                           key={cust.id}
-                          onClick={() => setSelectedCustomer(cust)}
+                          onClick={() => handleToggleCustomer(cust)}
                           className={`w-full p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                             isSelected
-                              ? 'border-indigo-600 bg-indigo-50/90 shadow-xs'
+                              ? 'border-2 border-indigo-600 bg-indigo-50/90 shadow-sm ring-2 ring-indigo-500/20'
                               : 'border-slate-200 bg-slate-50/50 hover:bg-white hover:border-slate-300'
                           }`}
                         >
@@ -1013,9 +1111,9 @@ export const SalesCashier: React.FC = () => {
 
                           <div className="flex items-center">
                             {isSelected ? (
-                              <span className="px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs">
-                                <span>✓</span>
-                                <span>{isRtl ? 'محدد' : 'Selected'}</span>
+                              <span className="px-2.5 py-1 bg-indigo-600 hover:bg-rose-600 text-white rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-2xs transition-colors">
+                                <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                <span>{isRtl ? 'محدد (انقر للإلغاء)' : 'Selected (Click to deselect)'}</span>
                               </span>
                             ) : (
                               <span className="px-2.5 py-1 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg text-[10px] font-bold transition-colors">
@@ -1059,158 +1157,267 @@ export const SalesCashier: React.FC = () => {
 
           {/* RIGHT 5 COLS: Active Cart / Invoice Summary (الفاتورة الحالية) */}
           <div className="lg:col-span-5 flex flex-col gap-4 sticky top-20">
-            <div
-              style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-              className="p-5 rounded-2xl border border-slate-200/80 shadow-md flex flex-col gap-4"
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex flex-col">
+            {!selectedCustomer ? (
+              /* INACTIVE / LOCKED STATE - لا تضيء ولا تعمل حتى يختار العميل الموجه له الطلب */
+              <div
+                style={{ backgroundColor: '#f8fafc' }}
+                className="p-5 rounded-2xl border-2 border-dashed border-slate-300 shadow-none flex flex-col gap-4 opacity-80 select-none transition-all"
+              >
+                {/* Header - Locked */}
+                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-indigo-600">receipt</span>
-                    <h2 className="font-bold text-base text-slate-900">
-                      {isRtl ? 'الفاتورة الحالية' : 'Active Invoice'}
+                    <span className="material-symbols-outlined text-slate-400 text-xl">lock</span>
+                    <h2 className="font-bold text-base text-slate-500">
+                      {isRtl ? 'نافذة الفاتورة (غير مفعلة)' : 'Invoice Window (Inactive)'}
                     </h2>
                   </div>
-                  {selectedCustomer && (
-                    <span className="text-[11px] font-bold text-indigo-700 mt-0.5">
-                      {isRtl ? `العميل: ${selectedCustomer.name}` : `Customer: ${selectedCustomer.name}`}
-                    </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                    <span>{isRtl ? 'بانتظار تحديد العميل' : 'Awaiting Client'}</span>
+                  </span>
+                </div>
+
+                {/* Prominent Guidance Box */}
+                <div className="py-12 px-4 flex flex-col items-center justify-center text-center rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mb-3 shadow-2xs">
+                    <span className="material-symbols-outlined text-3xl">person_search</span>
+                  </div>
+                  <h3 className="text-sm font-extrabold text-slate-800 mb-1">
+                    {isRtl ? 'الخطوة الأولى: اختر العميل أولاً' : 'Step 1: Choose Customer First'}
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
+                    {isRtl
+                      ? 'نافذة الفاتورة مغلقة ولن تضيء أو تعمل حتى تقرر أولاً اختيار العميل الموجه له الطلب من القائمة المجاورة، ثم تحديد المنتجات لفاتورته.'
+                      : 'The invoice window is locked and will not activate until you choose the customer to whom the order is directed, and then select products.'}
+                  </p>
+                </div>
+
+                {/* Summary Box (Disabled / Zeroed) */}
+                <div className="border-t border-slate-200 pt-3 flex flex-col gap-2 text-xs text-slate-400">
+                  <div className="flex justify-between">
+                    <span>{isRtl ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
+                    <span className="font-mono">$0.00</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{isRtl ? 'الخصم (%):' : 'Discount (%):'}</span>
+                    <span className="font-mono">0%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>{isRtl ? 'ضريبة القيمة المضافة (8%):' : 'Tax (8% VAT):'}</span>
+                    <span className="font-mono">$0.00</span>
+                  </div>
+                  <div className="flex justify-between text-base font-bold text-slate-400 border-t border-slate-200 pt-2">
+                    <span>{isRtl ? 'الإجمالي النهائي:' : 'Grand Total:'}</span>
+                    <span className="font-mono">$0.00</span>
+                  </div>
+                </div>
+
+                {/* Disabled Action Buttons */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-3.5 rounded-xl text-slate-400 bg-slate-200 font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <span className="material-symbols-outlined text-lg">lock</span>
+                    <span>{isRtl ? 'اختر العميل أولاً لتفعيل الفاتورة' : 'Select Customer to Unlock'}</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ACTIVE / ILLUMINATED STATE - تضيء وتعمل */
+              <div
+                style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
+                className="p-5 rounded-2xl border-2 border-indigo-500 shadow-xl ring-4 ring-indigo-500/10 flex flex-col gap-4 animate-in fade-in duration-300 transition-all"
+              >
+                {/* Header - Active & Illuminated */}
+                <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-indigo-600 text-xl animate-pulse">receipt_long</span>
+                      <h2 className="font-extrabold text-base text-slate-900">
+                        {isRtl ? 'الفاتورة الحالية' : 'Active Invoice'}
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                        <span>{isRtl ? 'مضاءة ومفعلة' : 'Active & Lit'}</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {cart.length > 0 && (
+                    <button
+                      onClick={handleClearCart}
+                      className="text-xs text-rose-600 hover:text-rose-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-xs">delete_sweep</span>
+                      <span>{isRtl ? 'تفريغ المنتجات' : 'Clear Items'}</span>
+                    </button>
                   )}
                 </div>
 
-                {cart.length > 0 && (
-                  <button
-                    onClick={handleClearCart}
-                    className="text-xs text-rose-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-xs">delete_sweep</span>
-                    <span>{isRtl ? 'تفريغ' : 'Clear'}</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Cart List */}
-              <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto pr-1">
-                {cart.length === 0 ? (
-                  <div className="py-12 flex flex-col items-center justify-center text-center text-slate-400">
-                    <span className="material-symbols-outlined text-4xl mb-2 text-slate-300">shopping_bag</span>
-                    <span className="text-xs font-bold text-slate-600">
-                      {isRtl ? 'الفاتورة فارغة حالياً' : 'Current Invoice is Empty'}
-                    </span>
-                    <span className="text-[11px] text-slate-400 mt-1">
-                      {isRtl ? 'اختر من المنتجات المسجلة أو أضف بيعاً يدوياً' : 'Pick items from catalog or enter a manual sale'}
-                    </span>
-                  </div>
-                ) : (
-                  cart.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/60 flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div className="flex flex-col flex-1 min-w-0">
-                        <span className="font-bold text-slate-900 truncate">{item.name}</span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          ${item.unitPrice.toFixed(2)} × {item.quantity} = ${(item.unitPrice * item.quantity).toFixed(2)}
+                {/* Customer Active Bar with Deselect Option */}
+                <div className="flex items-center justify-between bg-indigo-50/90 border border-indigo-200 px-3 py-2.5 rounded-xl">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
+                      {selectedCustomer.name.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-extrabold text-indigo-950 truncate">
+                          {selectedCustomer.name}
+                        </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-200/70 text-indigo-800 shrink-0">
+                          {selectedCustomer.type === 'Company' ? (isRtl ? 'شركة' : 'Company') : (isRtl ? 'فرد' : 'Individual')}
                         </span>
                       </div>
+                      <span className="text-[10px] font-mono text-indigo-700 truncate">
+                        📞 {selectedCustomer.phone || (isRtl ? 'بدون هاتف' : 'No phone')}
+                        {selectedCustomer.address && ` • 📍 ${selectedCustomer.address}`}
+                      </span>
+                    </div>
+                  </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <div className="flex items-center bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQty(item.id, -1)}
-                            className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 cursor-pointer font-bold border-r border-slate-200 text-sm"
-                          >
-                            -
-                          </button>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity === 0 ? '' : item.quantity}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10);
-                              handleDirectQtyChange(item.id, isNaN(val) ? 0 : val);
-                            }}
-                            onFocus={(e) => e.target.select()}
-                            className="w-12 h-7 text-center font-bold text-xs focus:outline-none focus:bg-indigo-50/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            title={isRtl ? 'أدخل الكمية يدوياً' : 'Type quantity manually'}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQty(item.id, 1)}
-                            className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 cursor-pointer font-bold border-l border-slate-200 text-sm"
-                          >
-                            +
-                          </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCustomer(null);
+                      setCart([]);
+                    }}
+                    className="px-2.5 py-1 bg-white hover:bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs shrink-0"
+                    title={isRtl ? 'إلغاء تحديد هذا العميل وإغلاق الفاتورة' : 'Deselect customer and lock invoice'}
+                  >
+                    <span>✕</span>
+                    <span>{isRtl ? 'إلغاء العميل' : 'Deselect'}</span>
+                  </button>
+                </div>
+
+                {/* Cart Items List */}
+                <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+                  {cart.length === 0 ? (
+                    <div className="py-10 flex flex-col items-center justify-center text-center text-slate-400 bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+                      <span className="material-symbols-outlined text-3xl mb-1.5 text-indigo-400 animate-bounce">add_shopping_cart</span>
+                      <span className="text-xs font-bold text-slate-700">
+                        {isRtl ? 'العميل محدد بنجاح!' : 'Customer selected!'}
+                      </span>
+                      <span className="text-[11px] text-slate-500 mt-1 max-w-xs">
+                        {isRtl
+                          ? 'انقر على المنتجات من القائمة المجاورة لتحديدها وإضافتها للفاتورة (أو انقر عليها مجدداً لإلغائها).'
+                          : 'Click items from the list to select/add them (or re-click to deselect).'}
+                      </span>
+                    </div>
+                  ) : (
+                    cart.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-3 bg-slate-50/80 rounded-xl border border-slate-200/60 flex items-center justify-between gap-2 text-xs hover:border-indigo-200 transition-colors"
+                      >
+                        <div className="flex flex-col flex-1 min-w-0">
+                          <span className="font-bold text-slate-900 truncate">{item.name}</span>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            ${item.unitPrice.toFixed(2)} × {item.quantity} = ${(item.unitPrice * item.quantity).toFixed(2)}
+                          </span>
                         </div>
 
-                        <button
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                        >
-                          <span className="material-symbols-outlined text-base">close</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center bg-white rounded-lg border border-slate-200 shadow-2xs overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQty(item.id, -1)}
+                              className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 cursor-pointer font-bold border-r border-slate-200 text-sm"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity === 0 ? '' : item.quantity}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                handleDirectQtyChange(item.id, isNaN(val) ? 0 : val);
+                              }}
+                              onFocus={(e) => e.target.select()}
+                              className="w-12 h-7 text-center font-bold text-xs focus:outline-none focus:bg-indigo-50/80 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              title={isRtl ? 'أدخل الكمية يدوياً' : 'Type quantity manually'}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQty(item.id, 1)}
+                              className="w-6 h-7 flex items-center justify-center text-slate-600 hover:bg-slate-100 cursor-pointer font-bold border-l border-slate-200 text-sm"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer transition-colors"
+                            title={isRtl ? 'إلغاء هذا المنتج' : 'Remove item'}
+                          >
+                            <span className="material-symbols-outlined text-base">close</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
+
+                {/* Calculation Summary Box */}
+                <div className="border-t border-slate-200/80 pt-3 flex flex-col gap-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>{isRtl ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
+                    <span className="font-mono font-semibold">${subtotal.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="flex items-center gap-1">
+                      <span>{isRtl ? 'الخصم (%):' : 'Discount (%):'}</span>
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={discountPct}
+                      onChange={(e) => setDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                      className="w-16 h-7 px-1 text-center bg-slate-50 border border-slate-200 rounded font-mono font-bold text-xs"
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-slate-600">
+                    <span>{isRtl ? 'ضريبة القيمة المضافة (8%):' : 'Tax (8% VAT):'}</span>
+                    <span className="font-mono font-semibold">${tax.toFixed(2)}</span>
+                  </div>
+
+                  <div className="flex justify-between text-base font-extrabold text-slate-900 border-t border-slate-200 pt-2.5 mt-1">
+                    <span>{isRtl ? 'الإجمالي النهائي:' : 'Grand Total:'}</span>
+                    <span className="text-indigo-600 font-mono">${total.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <button
+                    onClick={handleOpenCheckout}
+                    disabled={cart.length === 0}
+                    className="w-full py-3.5 rounded-xl text-white font-bold text-sm shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                    style={{ backgroundColor: customPalette.primaryAccent }}
+                  >
+                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                    <span>{isRtl ? 'إتمام البيع والتأكيد' : 'Complete Sale & Checkout'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsHoldModalOpen(true)}
+                    disabled={cart.length === 0}
+                    className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">pause_circle</span>
+                    <span>{isRtl ? 'تعليق الفاتورة (حفظ مؤقت)' : 'Hold Invoice (Save Pending)'}</span>
+                  </button>
+                </div>
               </div>
-
-              {/* Calculation Summary Box */}
-              <div className="border-t border-slate-200/80 pt-3 flex flex-col gap-2 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>{isRtl ? 'المجموع الفرعي:' : 'Subtotal:'}</span>
-                  <span className="font-mono font-semibold">${subtotal.toFixed(2)}</span>
-                </div>
-
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="flex items-center gap-1">
-                    <span>{isRtl ? 'الخصم (%):' : 'Discount (%):'}</span>
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={discountPct}
-                    onChange={(e) => setDiscountPct(Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
-                    className="w-16 h-7 px-1 text-center bg-slate-50 border border-slate-200 rounded font-mono font-bold text-xs"
-                  />
-                </div>
-
-                <div className="flex justify-between text-slate-600">
-                  <span>{isRtl ? 'ضريبة القيمة المضافة (8%):' : 'Tax (8% VAT):'}</span>
-                  <span className="font-mono font-semibold">${tax.toFixed(2)}</span>
-                </div>
-
-                <div className="flex justify-between text-base font-extrabold text-slate-900 border-t border-slate-200 pt-2.5 mt-1">
-                  <span>{isRtl ? 'الإجمالي النهائي:' : 'Grand Total:'}</span>
-                  <span className="text-indigo-600 font-mono">${total.toFixed(2)}</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-col gap-2 pt-1">
-                <button
-                  onClick={handleOpenCheckout}
-                  disabled={cart.length === 0}
-                  className="w-full py-3.5 rounded-xl text-white font-bold text-sm shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-98"
-                  style={{ backgroundColor: customPalette.primaryAccent }}
-                >
-                  <span className="material-symbols-outlined text-lg">check_circle</span>
-                  <span>{isRtl ? 'إتمام البيع والتأكيد' : 'Complete Sale & Checkout'}</span>
-                </button>
-
-                <button
-                  onClick={() => setIsHoldModalOpen(true)}
-                  disabled={cart.length === 0}
-                  className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl font-bold text-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">pause_circle</span>
-                  <span>{isRtl ? 'تعليق الفاتورة (حفظ مؤقت)' : 'Hold Invoice (Save Pending)'}</span>
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1521,10 +1728,18 @@ export const SalesCashier: React.FC = () => {
 
                         <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
                           {isSelectedForPOS ? (
-                            <span className="w-full py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1">
-                              <span>✓</span>
-                              <span>{isRtl ? 'محدد للكاشير' : 'Selected for POS'}</span>
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCustomer(null);
+                                setCart([]);
+                              }}
+                              className="w-full py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold text-center flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                              title={isRtl ? 'انقر لإلغاء تحديد هذا العميل' : 'Click to deselect'}
+                            >
+                              <span>✕</span>
+                              <span>{isRtl ? 'محدد للكاشير (انقر للإلغاء)' : 'Selected for POS (Click to deselect)'}</span>
+                            </button>
                           ) : (
                             <button
                               onClick={() => {
@@ -2393,14 +2608,26 @@ export const SalesCashier: React.FC = () => {
               </div>
             </div>
 
-            {/* Line items list */}
-            <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
-              {viewingReceipt.items.map((it: StagedItem, idx: number) => (
-                <div key={idx} className="p-2 bg-slate-50 rounded-lg flex justify-between text-xs">
-                  <span>{it.quantity}x {it.name}</span>
-                  <span className="font-mono font-bold">${(it.unitPrice * it.quantity).toFixed(2)}</span>
-                </div>
-              ))}
+            {/* Line items list (order_items: Item_Name, unit_price, quantity_items, total_item_price) */}
+            <div className="border border-slate-200/80 rounded-xl overflow-hidden text-xs">
+              <div className="bg-slate-100/90 px-3 py-1.5 text-[10px] font-bold text-slate-600 flex justify-between items-center border-b border-slate-200">
+                <span className="flex-1">{isRtl ? 'المنتج (Item_Name)' : 'Item Name'}</span>
+                <span className="w-16 text-center">{isRtl ? 'السعر' : 'Unit Price'}</span>
+                <span className="w-14 text-center">{isRtl ? 'الكمية' : 'Qty'}</span>
+                <span className="w-20 text-left font-mono">{isRtl ? 'الإجمالي' : 'Total'}</span>
+              </div>
+              <div className="flex flex-col divide-y divide-slate-100 max-h-48 overflow-y-auto">
+                {viewingReceipt.items.map((it: StagedItem, idx: number) => (
+                  <div key={idx} className="px-3 py-2 bg-white flex items-center justify-between text-xs hover:bg-slate-50 transition-colors">
+                    <span className="flex-1 font-bold text-slate-800 truncate">{it.name}</span>
+                    <span className="w-16 text-center text-slate-600 font-mono text-[11px]">${it.unitPrice.toFixed(2)}</span>
+                    <span className="w-14 text-center text-slate-800 font-mono font-bold text-[11px]">{it.quantity}</span>
+                    <span className="w-20 text-left font-mono font-extrabold text-indigo-700 text-[11px]">
+                      ${(it.unitPrice * it.quantity).toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="border-t border-slate-200 pt-3 flex flex-col gap-1 text-xs">

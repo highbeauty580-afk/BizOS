@@ -29,6 +29,7 @@ export interface AddOrderParams {
 
 export interface OrderRecord {
   id: string | number;
+  orderPk?: string | number;
   customerName: string;
   customerPhone1: string;
   customerPhone2?: string;
@@ -129,9 +130,11 @@ export async function addOrderToSupabase(
       return { success: false, error: 'لم يتم استرجاع معرف الطلب بعد الحفظ' };
     }
 
-    const orderId = row.order_pk || row.orders_pk || row.id || row.order_id || `ord-${Date.now()}`;
+    const orderPkVal = row.order_pk ?? row.orders_pk ?? row.id ?? row.order_id;
+    const orderId = orderPkVal || `ord-${Date.now()}`;
     const createdOrder: OrderRecord = {
       id: orderId,
+      orderPk: orderPkVal,
       customerName: row.Customer_Name || row.customer_name || exactPayload.Customer_Name,
       customerPhone1: row.Customer_Phone1 || row.customer_phone1 || exactPayload.Customer_Phone1,
       customerPhone2: row.Customer_Phone2 || row.customer_phone2 || undefined,
@@ -181,9 +184,11 @@ export async function fetchOrdersFromSupabase(): Promise<{ data: OrderRecord[]; 
 }
 
 function mapOrderRow(row: any): OrderRecord {
-  const orderId = row.order_pk || row.orders_pk || row.id || row.order_id || `ord-${Date.now()}`;
+  const orderPkVal = row.order_pk ?? row.orders_pk ?? row.id ?? row.order_id;
+  const orderId = orderPkVal || `ord-${Date.now()}`;
   return {
     id: orderId,
+    orderPk: orderPkVal,
     customerName: row.Customer_Name || row.customer_name || 'عميل نقدي',
     customerPhone1: row.Customer_Phone1 || row.customer_phone1 || row.customer_phone_1 || '',
     customerPhone2: row.Customer_Phone2 || row.customer_phone2 || row.customer_phone_2 || undefined,
@@ -259,4 +264,156 @@ export async function updateOrderStatusInSupabase(
     console.error('❌ Exception in updateOrderStatusInSupabase:', err);
     return { success: false, error: err?.message };
   }
+}
+
+/**
+ * ------------------------------------------------------------------
+ * DEDICATED SUPABASE ORDER ITEMS SERVICE
+ * Target Table: public.order_items
+ * Schema:
+ * - order_fk: references orders(order_pk)
+ * - Item_Name: string (اسم المنتج المختار)
+ * - unit_price: numeric (سعر القطعة للمستهلك)
+ * - quantity_items: numeric / integer (الكمية المطلوبة)
+ * - total_item_price: numeric (حاصل ضرب الكمية في سعر القطعة)
+ * ------------------------------------------------------------------
+ */
+
+export interface OrderItemRecord {
+  id?: string | number;
+  order_fk: string | number;
+  Item_Name: string;
+  unit_price: number;
+  quantity_items: number;
+  total_item_price: number;
+  raw?: any;
+}
+
+export interface AddOrderItemInput {
+  orderFk: string | number;
+  itemName: string;
+  unitPrice: number;
+  quantityItems: number;
+  totalItemPrice: number;
+}
+
+export async function addOrderItemsToSupabase(
+  items: AddOrderItemInput[]
+): Promise<{ success: boolean; data?: OrderItemRecord[]; error?: string }> {
+  if (!isSupabaseConfigured) {
+    return { success: false, error: 'Supabase Config Error: Not configured' };
+  }
+  if (!items || items.length === 0) {
+    return { success: true, data: [] };
+  }
+
+  // Exact payload as specified by user instructions:
+  // Item_Name, unit_price, quantity_items, total_item_price, order_fk
+  const exactRows = items.map((it) => ({
+    order_fk: it.orderFk,
+    Item_Name: it.itemName.trim(),
+    unit_price: parseFloat(it.unitPrice as any) || 0,
+    quantity_items: parseInt(it.quantityItems as any, 10) || 1,
+    total_item_price: parseFloat(it.totalItemPrice as any) || 0,
+  }));
+
+  try {
+    let { data, error } = await supabase
+      .from('order_items')
+      .insert(exactRows)
+      .select();
+
+    // Fallback 1: lowercase column names if Postgres table created without quotes
+    if (error) {
+      console.warn('⚠️ Supabase order_items exact insert warning, retrying with lowercase columns:', error.message);
+      const lowerRows = items.map((it) => ({
+        order_fk: it.orderFk,
+        item_name: it.itemName.trim(),
+        unit_price: parseFloat(it.unitPrice as any) || 0,
+        quantity_items: parseInt(it.quantityItems as any, 10) || 1,
+        total_item_price: parseFloat(it.totalItemPrice as any) || 0,
+      }));
+
+      const retryRes = await supabase
+        .from('order_items')
+        .insert(lowerRows)
+        .select();
+
+      data = retryRes.data;
+      error = retryRes.error;
+    }
+
+    // Fallback 2: if foreign key column is named order_id
+    if (error && (error.message.includes('order_fk') || error.message.includes('column'))) {
+      console.warn('⚠️ Supabase order_items retrying with order_id column:', error.message);
+      const altRows = items.map((it) => ({
+        order_id: it.orderFk,
+        item_name: it.itemName.trim(),
+        unit_price: parseFloat(it.unitPrice as any) || 0,
+        quantity_items: parseInt(it.quantityItems as any, 10) || 1,
+        total_item_price: parseFloat(it.totalItemPrice as any) || 0,
+      }));
+
+      const retryRes2 = await supabase
+        .from('order_items')
+        .insert(altRows)
+        .select();
+
+      data = retryRes2.data;
+      error = retryRes2.error;
+    }
+
+    if (error) {
+      console.error('❌ Supabase error inserting order_items:', error.message, error.details);
+      return { success: false, error: error.message };
+    }
+
+    const mapped = (data || []).map(mapOrderItemRow);
+    return { success: true, data: mapped };
+  } catch (err: any) {
+    console.error('❌ Exception in addOrderItemsToSupabase:', err);
+    return { success: false, error: err?.message || 'Error inserting order items' };
+  }
+}
+
+export async function fetchOrderItemsFromSupabase(
+  orderFk?: string | number
+): Promise<{ data: OrderItemRecord[]; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return { data: [], error: 'Supabase Config Error' };
+  }
+
+  try {
+    let query = supabase.from('order_items').select('*');
+    if (orderFk !== undefined) {
+      query = query.eq('order_fk', orderFk);
+    }
+    const { data, error } = await query;
+    if (error) {
+      if (orderFk !== undefined) {
+        const retry = await supabase.from('order_items').select('*').eq('order_id', orderFk);
+        if (!retry.error) {
+          return { data: (retry.data || []).map(mapOrderItemRow), error: null };
+        }
+      }
+      console.warn('⚠️ Supabase fetch order_items warning:', error.message);
+      return { data: [], error: error.message };
+    }
+    return { data: (data || []).map(mapOrderItemRow), error: null };
+  } catch (err: any) {
+    console.error('❌ Exception in fetchOrderItemsFromSupabase:', err);
+    return { data: [], error: err?.message || 'Error fetching order items' };
+  }
+}
+
+export function mapOrderItemRow(row: any): OrderItemRecord {
+  return {
+    id: row.id || row.item_id || row.order_item_pk,
+    order_fk: row.order_fk ?? row.order_id ?? row.orderFk,
+    Item_Name: row.Item_Name || row.item_name || row.itemName || 'منتج',
+    unit_price: parseFloat(row.unit_price || row.unitPrice || 0) || 0,
+    quantity_items: parseInt(row.quantity_items || row.quantity || row.quantityItems || 1, 10) || 1,
+    total_item_price: parseFloat(row.total_item_price || row.totalItemPrice || 0) || 0,
+    raw: row,
+  };
 }
