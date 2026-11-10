@@ -199,6 +199,7 @@ export interface ExpenseCategory {
 
 export interface Expense {
   id: string;
+  transaction_pk?: string;
   receiptNo: string;
   amount: number;
   category: string;

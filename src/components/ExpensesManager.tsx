@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Expense, ExpensePaymentMethod } from '../types';
-import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
+import {
+  addFinancialTransactionToSupabase,
+  updateFinancialTransactionInSupabase,
+  deleteFinancialTransactionInSupabase,
+  fetchExpenseTransactionsFromSupabase,
+} from '../lib/transactionsService';
 
 export const ExpensesManager: React.FC = () => {
   const {
@@ -17,7 +22,19 @@ export const ExpensesManager: React.FC = () => {
     addExpenseCategory,
     updateExpenseCategory,
     deleteExpenseCategory,
+    setExpenses,
   } = useApp();
+
+  // Load Initial Expenses from Supabase on mount
+  useEffect(() => {
+    async function loadExpensesFromDb() {
+      const res = await fetchExpenseTransactionsFromSupabase();
+      if (!res.error && res.data.length > 0) {
+        setExpenses(res.data);
+      }
+    }
+    loadExpensesFromDb();
+  }, [setExpenses]);
 
   const isRtl = language === 'ar';
 
@@ -183,6 +200,20 @@ export const ExpensesManager: React.FC = () => {
     }
 
     if (editingExpense) {
+      const txTargetId = editingExpense.transaction_pk || editingExpense.id;
+      const res = await updateFinancialTransactionInSupabase(txTargetId, {
+        amount: parsedAmount,
+        method: paymentMethod,
+        notice: paymentNotice.trim(),
+        type: category,
+        name: getFormattedTxName(category),
+      });
+
+      if (!res.success) {
+        alert(isRtl ? `خطأ في تعديل البيانات بقاعدة البيانات: ${res.error}` : `Failed to update database: ${res.error}`);
+        return;
+      }
+
       updateExpense(editingExpense.id, {
         amount: parsedAmount,
         category,
@@ -191,9 +222,11 @@ export const ExpensesManager: React.FC = () => {
         notes: notes.trim() || undefined,
         paymentNotice: paymentNotice.trim(),
       });
+
+      alert(isRtl ? 'تم تحديث بيانات المصروف في قاعدة البيانات بنجاح!' : 'Expense updated in database successfully!');
     } else {
       // Record Financial Transaction for New Expense
-      await addFinancialTransactionToSupabase({
+      const res = await addFinancialTransactionToSupabase({
         amount: parsedAmount,
         method: paymentMethod,
         notice: paymentNotice.trim(),
@@ -201,7 +234,15 @@ export const ExpensesManager: React.FC = () => {
         name: getFormattedTxName(category)
       });
 
+      if (!res.success) {
+        alert(isRtl ? `خطأ في حفظ المصروف بقاعدة البيانات: ${res.error}` : `Failed to save expense: ${res.error}`);
+        return;
+      }
+
+      const createdPk = res.data?.transactions_pk || res.data?.id;
+
       addExpense({
+        transaction_pk: createdPk,
         amount: parsedAmount,
         category,
         date: expenseDate,
@@ -210,6 +251,8 @@ export const ExpensesManager: React.FC = () => {
         notes: notes.trim() || undefined,
         paymentNotice: paymentNotice.trim(),
       });
+
+      alert(isRtl ? 'تم حفظ المصروف بنجاح في قاعدة البيانات!' : 'Expense saved in database successfully!');
     }
 
     setShowExpenseModal(false);
@@ -589,8 +632,9 @@ export const ExpensesManager: React.FC = () => {
 
                           {/* Delete button */}
                           <button
-                            onClick={() => {
+                            onClick={async () => {
                               if (window.confirm(isRtl ? `حذف مصروف رقم ${exp.receiptNo} بقيمة ${exp.amount} ر.س؟` : `Delete expense ${exp.receiptNo}?`)) {
+                                await deleteFinancialTransactionInSupabase(exp.transaction_pk || exp.id);
                                 deleteExpense(exp.id);
                               }
                             }}
