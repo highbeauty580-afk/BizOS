@@ -11,6 +11,7 @@ import {
 } from '../lib/customersService';
 import { fetchProductsFromSupabase } from '../lib/productsService';
 import { fetchStockFromSupabase, updateStockQuantityInSupabase } from '../lib/stockService';
+import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -475,6 +476,25 @@ export const SalesCashier: React.FC = () => {
       changeDue,
       customerName: finalCustomerName,
     };
+
+    // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
+    const methodMapping: Record<PaymentMethod, string> = {
+      Cash: 'Cash',
+      Card: 'E_Wallet',
+      'Bank Transfer': 'Bank',
+      Invoice: 'Credit'
+    };
+    const dbMethod = methodMapping[paymentMethod] || 'Cash';
+    const txName = `${finalCustomerName} فاتورة مبيعات`;
+
+    addFinancialTransactionToSupabase({
+      amount: total,
+      method: dbMethod,
+      notice: shiftNotes.trim(),
+      type: 'Sales_Trans',
+      name: txName
+    });
+    // ------------------------------------------------------------------
 
     // 1. Add to sales history transactions
     addTransaction(newTx);
@@ -1590,6 +1610,25 @@ export const SalesCashier: React.FC = () => {
                                     returnTransactionItems(tx.items, tx.receiptNo, 'Customer Return');
                                     setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned' } : t));
                                     
+                                    // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
+                                    const methodMapping: Record<PaymentMethod, string> = {
+                                      Cash: 'Cash',
+                                      Card: 'E_Wallet',
+                                      'Bank Transfer': 'Bank',
+                                      Invoice: 'Credit'
+                                    };
+                                    const dbMethod = methodMapping[tx.paymentMethod] || 'Cash';
+                                    const txName = `${tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')} فاتورة مرتجع`;
+
+                                    addFinancialTransactionToSupabase({
+                                      amount: -tx.total, // Returns are negative inflow/deduction
+                                      method: dbMethod,
+                                      notice: `مرتجع للفاتورة رقم ${tx.receiptNo}`,
+                                      type: 'Return_Trans',
+                                      name: txName
+                                    });
+                                    // ------------------------------------------------------------------
+
                                     alert(isRtl ? 'تم إرجاع الفاتورة وتحديث المخزون بنجاح!' : 'Transaction returned and stock updated!');
                                   }
                                 }}
@@ -1775,8 +1814,15 @@ export const SalesCashier: React.FC = () => {
                 type="text"
                 value={shiftNotes}
                 onChange={(e) => setShiftNotes(e.target.value)}
-                placeholder={isRtl ? 'ملاحظات إضافية...' : 'Additional invoice notes...'}
-                className="h-9 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-indigo-500"
+                placeholder={
+                  isRtl 
+                    ? (paymentMethod === 'Cash' ? 'ادخل اسم العميل' : 
+                       paymentMethod === 'Card' ? 'رقم هاتف المحفظة' : 
+                       paymentMethod === 'Bank Transfer' ? 'اطلب الرقم المرجعي للتحويل' : 
+                       'ادخل اسم الشخص الذى طلب الاجل')
+                    : 'Additional notes...'
+                }
+                className="h-9 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-400/70"
               />
             </div>
 
