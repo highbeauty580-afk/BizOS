@@ -20,6 +20,7 @@ import {
   addStockToSupabase,
   updateStockQuantityInSupabase,
 } from '../lib/stockService';
+import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 
 export const InventoryManager: React.FC = () => {
   const {
@@ -42,9 +43,14 @@ export const InventoryManager: React.FC = () => {
     addCustomer,
     updateCustomer,
     deleteCustomer,
+    returnTransactionItems,
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // --- FINANCIAL TRANSACTION STATE FOR INVENTORY ACTIONS ---
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Invoice'>('Cash');
+  const [paymentNotice, setPaymentNotice] = useState('');
 
   // Fetch Products & Stock from Supabase on mount
   useEffect(() => {
@@ -230,6 +236,8 @@ export const InventoryManager: React.FC = () => {
     setFormMaxStock('200');
     setFormUnit(targetType === 'raw_material' ? 'كجم' : 'قطعة');
     setFormError('');
+    setPaymentMethod('Cash');
+    setPaymentNotice('');
     setIsAddEditModalOpen(true);
   };
 
@@ -249,7 +257,26 @@ export const InventoryManager: React.FC = () => {
     setFormMaxStock((item.maxStock ?? 100).toString());
     setFormUnit(item.unit || 'قطعة');
     setFormError('');
+    setPaymentMethod('Cash');
+    setPaymentNotice('');
     setIsAddEditModalOpen(true);
+  };
+
+  // Helper to format transaction name: "[Action] [Item Name] [Day] [H:M:S]"
+  const getFormattedTxName = (actionPrefix: string, itemName: string) => {
+    const now = new Date();
+    const days = [
+      isRtl ? 'الأحد' : 'Sunday',
+      isRtl ? 'الاثنين' : 'Monday',
+      isRtl ? 'الثلاثاء' : 'Tuesday',
+      isRtl ? 'الأربعاء' : 'Wednesday',
+      isRtl ? 'الخميس' : 'Thursday',
+      isRtl ? 'الجمعة' : 'Friday',
+      isRtl ? 'السبت' : 'Saturday'
+    ];
+    const dayName = days[now.getDay()];
+    const timeStr = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    return `${actionPrefix} ${itemName} ${dayName} ${timeStr}`;
   };
 
   // Submit Add / Edit Product Form
@@ -302,6 +329,12 @@ export const InventoryManager: React.FC = () => {
       alert(isRtl ? 'تم تحديث بيانات الصنف بالمخزون بنجاح!' : 'Stock item updated successfully!');
       setIsAddEditModalOpen(false);
     } else {
+      // MANDATORY PAYMENT NOTICE VALIDATION
+      if (!paymentNotice.trim()) {
+        setFormError(isRtl ? 'يرجى إدخال ملحوظة الدفع (حقل إجباري)' : 'Payment notice is required.');
+        return;
+      }
+
       // CHECK IF ITEM ALREADY EXISTS (RE-SUPPLY LOGIC)
       const existingItem = fastItems.find(i => 
         i.name.toLowerCase() === formName.trim().toLowerCase() || 
@@ -309,14 +342,27 @@ export const InventoryManager: React.FC = () => {
       );
 
       if (existingItem) {
-        // Just update stock for existing item
-        const newTotalQty = existingItem.stockQuantity + (isNaN(stockNum) ? 0 : stockNum);
+        const addedQty = isNaN(stockNum) ? 0 : stockNum;
+        const newTotalQty = existingItem.stockQuantity + addedQty;
         const targetCost = isNaN(costNum) ? (existingItem.costPrice || 0) : costNum;
         
         const isProduct = existingItem.inventoryType === 'finished_goods';
         const res = await updateStockQuantityInSupabase(existingItem.id, newTotalQty, targetCost, isProduct);
         
         if (res.success) {
+          // Record Financial Transaction for Re-supply
+          const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
+          const actionPrefix = isProduct ? (isRtl ? 'توريد منتج' : 'Reload stock') : (isRtl ? 'توريد مادة خام' : 'Reload material');
+          const txType = isProduct ? 'Reload_stock_Trans' : 'ReLoad_material_Trans';
+          
+          await addFinancialTransactionToSupabase({
+            amount: targetCost * addedQty,
+            method: methodMapping[paymentMethod],
+            notice: paymentNotice.trim(),
+            type: txType,
+            name: getFormattedTxName(actionPrefix, existingItem.nameAr || existingItem.name)
+          });
+
           if (isProduct && existingItem.product_pk) {
             await updateProductInSupabase(existingItem.product_pk, {
               unit_cost: targetCost,
@@ -330,7 +376,7 @@ export const InventoryManager: React.FC = () => {
             price: modalInventoryTypeTarget === 'finished_goods' ? (isNaN(priceNum) ? existingItem.price : priceNum) : targetCost,
             amount: targetCost * newTotalQty
           });
-          alert(isRtl ? 'تم تحديث الكمية للصنف الموجود مسبقاً بنجاح!' : 'Existing item quantity updated successfully!');
+          alert(isRtl ? 'تم تحديث الكمية للصنف الموجود مسبقاً بنجاح وتسجيل المعاملة المالية!' : 'Existing item updated and financial transaction recorded!');
           setIsAddEditModalOpen(false);
           return;
         } else {
@@ -359,6 +405,16 @@ export const InventoryManager: React.FC = () => {
           setFormError(res.error || (isRtl ? 'فشل حفظ المادة الخام' : 'Failed to save raw material'));
           return;
         }
+
+        // Record Financial Transaction for New Raw Material
+        const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
+        await addFinancialTransactionToSupabase({
+          amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum),
+          method: methodMapping[paymentMethod],
+          notice: paymentNotice.trim(),
+          type: 'New_Material_Trans',
+          name: getFormattedTxName(isRtl ? 'مادة خام جديدة' : 'New Material', formName.trim())
+        });
 
         const createdRawMat: FastItem = {
           id: res.data.stock_pk || res.data.id || `rm-${Date.now()}`,
@@ -414,6 +470,16 @@ export const InventoryManager: React.FC = () => {
         };
         await addStockToSupabase(stockParams);
 
+        // Record Financial Transaction for New Finished Good
+        const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
+        await addFinancialTransactionToSupabase({
+          amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum),
+          method: methodMapping[paymentMethod],
+          notice: paymentNotice.trim(),
+          type: 'New_Stock_Trans',
+          name: getFormattedTxName(isRtl ? 'منتج جديد' : 'New Product', formName.trim())
+        });
+
         // Update local createdProduct with quantities before adding to state
         const enrichedProduct: FastItem = {
           ...createdProduct,
@@ -423,11 +489,12 @@ export const InventoryManager: React.FC = () => {
           amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum)
         };
 
-        alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات!' : 'Product saved successfully!');
+        alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات وتسجيل المعاملة المالية!' : 'Product saved and financial transaction recorded!');
         setFastItems((prev) => [enrichedProduct, ...prev]);
         setIsAddEditModalOpen(false);
       }
     }
+
 
   };
 
@@ -534,6 +601,12 @@ export const InventoryManager: React.FC = () => {
     e.preventDefault();
     if (!restockItemTarget) return;
 
+    // MANDATORY PAYMENT NOTICE VALIDATION
+    if (!paymentNotice.trim()) {
+      alert(isRtl ? 'يرجى إدخال ملحوظة الدفع (حقل إجباري)' : 'Payment notice is required.');
+      return;
+    }
+
     const qty = parseInt(restockQty, 10);
     if (isNaN(qty) || qty <= 0) return;
 
@@ -550,12 +623,27 @@ export const InventoryManager: React.FC = () => {
     const isProduct = restockItemTarget.inventoryType === 'finished_goods';
     await updateStockQuantityInSupabase(restockItemTarget.id, newStockQty, cost, isProduct);
 
-    alert(isRtl ? `تم توريد (${qty}) قطعة للمخزون وحفظ الكمية في قاعدة البيانات!` : `Restocked ${qty} items successfully!`);
+    // Record Financial Transaction for Restock
+    const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
+    const actionPrefix = isProduct ? (isRtl ? 'توريد منتج' : 'Reload stock') : (isRtl ? 'توريد مادة خام' : 'Reload material');
+    const txType = isProduct ? 'Reload_stock_Trans' : 'ReLoad_material_Trans';
+
+    await addFinancialTransactionToSupabase({
+      amount: cost * qty,
+      method: methodMapping[paymentMethod],
+      notice: paymentNotice.trim(),
+      type: txType,
+      name: getFormattedTxName(actionPrefix, restockItemTarget.nameAr || restockItemTarget.name)
+    });
+
+    alert(isRtl ? `تم توريد (${qty}) قطعة للمخزون وحفظ المعاملة المالية بنجاح!` : `Restocked ${qty} items and recorded financial transaction!`);
 
     setRestockItemTarget(null);
     setRestockQty('');
     setRestockReason('');
+    setPaymentNotice('');
   };
+
 
   // Submit Complete WIP Batch
   const handleConfirmCompleteWip = (e: React.FormEvent) => {
@@ -1718,11 +1806,15 @@ export const InventoryManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quantities & Min / Max Thresholds (للمواد الخام دائماً، وللمنتجات الجاهزة عند التعديل) */}
-              {(modalInventoryTypeTarget === 'raw_material' || editingItem) && (
+              {/* Quantities & Min / Max Thresholds (للمواد الخام دائماً، وللمنتجات الجاهزة عند الإضافة أو التعديل) */}
+              {(modalInventoryTypeTarget === 'raw_material' || !editingItem || editingItem) && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-3 rounded-2xl border border-slate-200">
                   <div className="flex flex-col gap-1">
-                    <label className="text-xs font-bold text-slate-800">{isRtl ? 'الكمية المتاحة' : 'Current Stock'}</label>
+                    <label className="text-xs font-bold text-slate-800">
+                      {!editingItem && modalInventoryTypeTarget === 'finished_goods' 
+                        ? (isRtl ? 'الكمية المبدئية' : 'Initial Quantity')
+                        : (isRtl ? 'الكمية المتاحة' : 'Current Stock')}
+                    </label>
                     <input
                       type="number"
                       value={formStockQuantity}
@@ -1752,6 +1844,69 @@ export const InventoryManager: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* FINANCIAL TOTAL & PAYMENT METHOD (Only for NEW ITEMS or RE-SUPPLY if logic allowed it here) */}
+              {!editingItem && (
+                <>
+                  <div className="p-4 bg-indigo-50/80 border border-indigo-100 rounded-2xl flex flex-col items-center justify-center text-center gap-1">
+                    <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">
+                      {isRtl ? 'إجمالي تكلفة الشحنة / الكمية المبدئية' : 'Total Shipment / Initial Cost'}
+                    </span>
+                    <span className="text-2xl font-black text-indigo-900 font-mono">
+                      ${(parseFloat(formCostPrice) * parseFloat(formStockQuantity) || 0).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="text-xs font-bold text-slate-700">{isRtl ? 'طريقة دفع تكلفة الشراء' : 'Payment Method'}</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
+                      {(['Cash', 'Card', 'Bank Transfer', 'Invoice'] as const).map((pm) => {
+                        const labelsAr: Record<string, string> = {
+                          Cash: '💵 نقدي',
+                          Card: '💳 إلكتروني',
+                          'Bank Transfer': '🏦 تحويل',
+                          Invoice: '📄 آجل',
+                        };
+                        const isSelected = paymentMethod === pm;
+                        return (
+                          <button
+                            key={pm}
+                            type="button"
+                            onClick={() => setPaymentMethod(pm)}
+                            className={`p-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                              isSelected
+                                ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-xs'
+                                : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                            }`}
+                          >
+                            {isRtl ? labelsAr[pm] : pm}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-slate-700">{isRtl ? 'ملحوظة الدفع (إجباري) *' : 'Payment Notice (Required) *'}</label>
+                    <input
+                      type="text"
+                      value={paymentNotice}
+                      onChange={(e) => setPaymentNotice(e.target.value)}
+                      required
+                      placeholder={
+                        isRtl 
+                          ? (paymentMethod === 'Cash' ? 'ادخل اسم العميل' : 
+                             paymentMethod === 'Card' ? 'رقم هاتف المحفظة' : 
+                             paymentMethod === 'Bank Transfer' ? 'اطلب الرقم المرجعي للتحويل' : 
+                             'ادخل اسم الشخص الذى طلب الاجل')
+                          : 'Enter payment details...'
+                      }
+                      className="p-2.5 rounded-xl bg-white border border-slate-300 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-400/70"
+                    />
+                  </div>
+                </>
+              )}
+
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
@@ -2148,6 +2303,64 @@ export const InventoryManager: React.FC = () => {
                 />
               </div>
 
+              {/* FINANCIAL TOTAL & PAYMENT METHOD FOR RESTOCK */}
+              <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex flex-col items-center justify-center text-center gap-1">
+                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
+                  {isRtl ? 'إجمالي تكلفة شحنة التوريد' : 'Total Restock Cost'}
+                </span>
+                <span className="text-2xl font-black text-emerald-900 font-mono">
+                  ${((restockItemTarget.costPrice || restockItemTarget.price || 0) * (parseInt(restockQty, 10) || 0)).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-700">{isRtl ? 'طريقة دفع تكلفة التوريد' : 'Payment Method'}</label>
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  {(['Cash', 'Card', 'Bank Transfer', 'Invoice'] as const).map((pm) => {
+                    const labelsAr: Record<string, string> = {
+                      Cash: '💵 نقدي',
+                      Card: '💳 إلكتروني',
+                      'Bank Transfer': '🏦 تحويل',
+                      Invoice: '📄 آجل',
+                    };
+                    const isSelected = paymentMethod === pm;
+                    return (
+                      <button
+                        key={pm}
+                        type="button"
+                        onClick={() => setPaymentMethod(pm)}
+                        className={`p-2 rounded-xl border text-center font-bold transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-xs'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {isRtl ? labelsAr[pm] : pm}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-700">{isRtl ? 'ملحوظة الدفع (إجباري) *' : 'Payment Notice (Required) *'}</label>
+                <input
+                  type="text"
+                  value={paymentNotice}
+                  onChange={(e) => setPaymentNotice(e.target.value)}
+                  required
+                  placeholder={
+                    isRtl 
+                      ? (paymentMethod === 'Cash' ? 'ادخل اسم العميل' : 
+                         paymentMethod === 'Card' ? 'رقم هاتف المحفظة' : 
+                         paymentMethod === 'Bank Transfer' ? 'اطلب الرقم المرجعي للتحويل' : 
+                         'ادخل اسم الشخص الذى طلب الاجل')
+                      : 'Enter payment details...'
+                  }
+                  className="p-2.5 rounded-xl bg-white border border-slate-300 text-xs focus:outline-none focus:border-indigo-500 placeholder:text-slate-400/70"
+                />
+              </div>
+
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-bold text-slate-700">{isRtl ? 'سبب التوريد أو رقم الفاتورة' : 'Reason / Invoice No'}</label>
                 <input
@@ -2176,6 +2389,7 @@ export const InventoryManager: React.FC = () => {
                 </button>
               </div>
             </form>
+
           </div>
         </div>
       )}
