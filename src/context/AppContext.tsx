@@ -265,30 +265,93 @@ interface AppContextType {
   refreshDataFromSupabase: () => Promise<void>;
 }
 
+// Safe localStorage helper utilities
+function loadStorage<T>(key: string, defaultValue: T): T {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : defaultValue;
+  } catch (error) {
+    console.warn(`Error reading localStorage key "${key}":`, error);
+    return defaultValue;
+  }
+}
+
+function saveStorage<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.warn(`Error writing to localStorage key "${key}":`, error);
+  }
+}
+
+function removeStorage(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.warn(`Error removing localStorage key "${key}":`, error);
+  }
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState<PageId>('home');
-  const [language, setLanguage] = useState<Language>('ar');
-  const [theme, setTheme] = useState<ColorTheme>('indigo');
-  const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
-  const [businessName, setBusinessName] = useState<string>('BizOS Enterprise');
+  const [currentPage, setCurrentPage] = useState<PageId>(() => loadStorage('bizos_currentPage', 'home'));
+  const [language, setLanguage] = useState<Language>(() => loadStorage('bizos_language', 'ar'));
+  const [theme, setTheme] = useState<ColorTheme>(() => loadStorage('bizos_theme', 'indigo'));
+  const [customPalette, setCustomPalette] = useState<CustomPalette>(() =>
+    loadStorage('bizos_customPalette', DEFAULT_CUSTOM_PALETTE)
+  );
+  const [businessName, setBusinessName] = useState<string>(() =>
+    loadStorage('bizos_businessName', 'BizOS Enterprise')
+  );
 
-  // Pure React State (No localStorage, No sessionStorage, No mock data)
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [dailySalesTarget, setDailySalesTarget] = useState<number>(5000.0);
-  const [fastItems, setFastItems] = useState<FastItem[]>([]);
-  const [wipBatches, setWipBatches] = useState<WipBatch[]>([]);
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
-  const [operationSteps, setOperationSteps] = useState<OperationStep[]>([]);
-  const [financeItems, setFinanceItems] = useState<FinanceItem[]>([]);
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_EXPENSE_CATEGORIES);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [marketingMix, setMarketingMix] = useState<MarketingMixP[]>(DEFAULT_MARKETING_MIX);
-  const [buyerPersona, setBuyerPersona] = useState<BuyerPersona>(DEFAULT_BUYER_PERSONA);
+  const [customers, setCustomers] = useState<Customer[]>(() => loadStorage('bizos_customers', []));
+  const [dailySalesTarget, setDailySalesTarget] = useState<number>(() =>
+    loadStorage('bizos_dailySalesTarget', 5000.0)
+  );
+  const [fastItems, setFastItems] = useState<FastItem[]>(() => loadStorage('bizos_fastItems', []));
+  const [wipBatches, setWipBatches] = useState<WipBatch[]>(() => loadStorage('bizos_wipBatches', []));
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
+    loadStorage('bizos_stockMovements', [])
+  );
+  const [transactions, setTransactions] = useState<Transaction[]>(() => loadStorage('bizos_transactions', []));
+  const [pendingSales, setPendingSales] = useState<PendingSale[]>(() => loadStorage('bizos_pendingSales', []));
+  const [operationSteps, setOperationSteps] = useState<OperationStep[]>(() =>
+    loadStorage('bizos_operationSteps', [])
+  );
+  const [financeItems, setFinanceItems] = useState<FinanceItem[]>(() => loadStorage('bizos_financeItems', []));
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() =>
+    loadStorage('bizos_expenseCategories', DEFAULT_EXPENSE_CATEGORIES)
+  );
+  const [expenses, setExpenses] = useState<Expense[]>(() => loadStorage('bizos_expenses', []));
+  const [employees, setEmployees] = useState<Employee[]>(() => loadStorage('bizos_employees', []));
+  const [marketingMix, setMarketingMix] = useState<MarketingMixP[]>(() =>
+    loadStorage('bizos_marketingMix', DEFAULT_MARKETING_MIX)
+  );
+  const [buyerPersona, setBuyerPersona] = useState<BuyerPersona>(() =>
+    loadStorage('bizos_buyerPersona', DEFAULT_BUYER_PERSONA)
+  );
+
+  // Sync state changes to localStorage
+  useEffect(() => { saveStorage('bizos_currentPage', currentPage); }, [currentPage]);
+  useEffect(() => { saveStorage('bizos_language', language); }, [language]);
+  useEffect(() => { saveStorage('bizos_theme', theme); }, [theme]);
+  useEffect(() => { saveStorage('bizos_customPalette', customPalette); }, [customPalette]);
+  useEffect(() => { saveStorage('bizos_businessName', businessName); }, [businessName]);
+  useEffect(() => { saveStorage('bizos_customers', customers); }, [customers]);
+  useEffect(() => { saveStorage('bizos_dailySalesTarget', dailySalesTarget); }, [dailySalesTarget]);
+  useEffect(() => { saveStorage('bizos_fastItems', fastItems); }, [fastItems]);
+  useEffect(() => { saveStorage('bizos_wipBatches', wipBatches); }, [wipBatches]);
+  useEffect(() => { saveStorage('bizos_stockMovements', stockMovements); }, [stockMovements]);
+  useEffect(() => { saveStorage('bizos_transactions', transactions); }, [transactions]);
+  useEffect(() => { saveStorage('bizos_pendingSales', pendingSales); }, [pendingSales]);
+  useEffect(() => { saveStorage('bizos_operationSteps', operationSteps); }, [operationSteps]);
+  useEffect(() => { saveStorage('bizos_financeItems', financeItems); }, [financeItems]);
+  useEffect(() => { saveStorage('bizos_expenseCategories', expenseCategories); }, [expenseCategories]);
+  useEffect(() => { saveStorage('bizos_expenses', expenses); }, [expenses]);
+  useEffect(() => { saveStorage('bizos_employees', employees); }, [employees]);
+  useEffect(() => { saveStorage('bizos_marketingMix', marketingMix); }, [marketingMix]);
+  useEffect(() => { saveStorage('bizos_buyerPersona', buyerPersona); }, [buyerPersona]);
 
   // Set HTML dir attribute on language change
   useEffect(() => {
@@ -711,6 +774,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinanceItems([]);
     setExpenses([]);
     setEmployees([]);
+    const keys = [
+      'bizos_currentPage',
+      'bizos_language',
+      'bizos_theme',
+      'bizos_customPalette',
+      'bizos_businessName',
+      'bizos_customers',
+      'bizos_dailySalesTarget',
+      'bizos_fastItems',
+      'bizos_wipBatches',
+      'bizos_stockMovements',
+      'bizos_transactions',
+      'bizos_pendingSales',
+      'bizos_operationSteps',
+      'bizos_financeItems',
+      'bizos_expenseCategories',
+      'bizos_expenses',
+      'bizos_employees',
+      'bizos_marketingMix',
+      'bizos_buyerPersona',
+    ];
+    keys.forEach(removeStorage);
   };
 
   const baseTheme = THEME_CONFIGS[theme] || THEME_CONFIGS.indigo;
