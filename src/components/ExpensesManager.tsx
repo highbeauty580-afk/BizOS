@@ -559,14 +559,27 @@ export const ExpensesManager: React.FC = () => {
 
                       {/* Category */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-block px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold text-[11px] border border-indigo-100">
+                        <span className={`inline-block px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
+                          exp.category === 'بضاعة'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                        }`}>
                           {exp.category}
                         </span>
                       </td>
 
-                      {/* Description / Notes */}
-                      <td className="py-3.5 px-4 text-slate-600 max-w-xs truncate">
-                        {exp.notes || <span className="text-slate-300 italic">{isRtl ? 'بدون ملاحظات' : 'No notes'}</span>}
+                      {/* Description / Notes & Details */}
+                      <td className="py-3.5 px-4 text-slate-600 max-w-sm">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-bold text-slate-800 text-xs">
+                            {exp.notes || <span className="text-slate-300 italic">{isRtl ? 'بدون ملاحظات' : 'No notes'}</span>}
+                          </span>
+                          {exp.paymentNotice && (
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {isRtl ? 'ملاحظة الدفع: ' : 'Notice: '}{exp.paymentNotice}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Amount */}

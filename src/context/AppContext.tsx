@@ -91,6 +91,7 @@ export const DEFAULT_CUSTOM_PALETTE: CustomPalette = {
 
 // Clean default states without any mock data or localStorage
 const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  { id: 'cat-0', nameAr: 'بضاعة', nameEn: 'Merchandise / Stock', isDefault: true },
   { id: 'cat-1', nameAr: 'الإيجار', nameEn: 'Rent', isDefault: true },
   { id: 'cat-2', nameAr: 'الرواتب والأجور', nameEn: 'Salaries & Wages', isDefault: true },
   { id: 'cat-3', nameAr: 'الكهرباء والمياه', nameEn: 'Electricity & Water', isDefault: true },

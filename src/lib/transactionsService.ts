@@ -159,9 +159,13 @@ export async function fetchExpenseTransactionsFromSupabase(): Promise<{ data: an
       return { data: [], error: error.message };
     }
 
+    // Exclude sales & returns, but INCLUDE stock supply transactions under category 'بضاعة'
     const nonExpenseTypes = [
       'Sales_Trans',
       'Return_Trans',
+    ];
+
+    const stockSupplyTypes = [
       'New_Stock_Trans',
       'Reload_stock_Trans',
       'New_Material_Trans',
@@ -177,12 +181,15 @@ export async function fetchExpenseTransactionsFromSupabase(): Promise<{ data: an
       const amount = parseFloat(row.transactions_amount) || 0;
       const createdDate = row.created_at ? new Date(row.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
 
+      const isStockType = stockSupplyTypes.includes(row.transactions_type);
+      const categoryName = isStockType ? 'بضاعة' : (row.transactions_type || 'مصروفات أخرى');
+
       return {
         id: pk,
         transaction_pk: pk,
-        receiptNo: `EXP-${String(pk).slice(-4)}`,
+        receiptNo: isStockType ? `STK-${String(pk).slice(-4)}` : `EXP-${String(pk).slice(-4)}`,
         amount: amount,
-        category: row.transactions_type || 'مصروفات أخرى',
+        category: categoryName,
         date: createdDate,
         paymentMethod: row.transactions_method || 'Cash',
         status: row.transactions_method === 'Credit' ? 'Unpaid' : 'Paid',
