@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { PageId } from '../types';
 
 interface NavItemConfig {
@@ -21,6 +22,7 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
   const { currentPage, setCurrentPage, language, customPalette } = useApp();
+  const { user, signOut } = useAuth();
 
   const navItems: NavItemConfig[] = [
     {

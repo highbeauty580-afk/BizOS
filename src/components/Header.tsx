@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { PaletteModal } from './PaletteModal';
 
 interface HeaderProps {
@@ -16,6 +17,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
     setBusinessName,
     resetToDefault,
   } = useApp();
+  const { user, signOut } = useAuth();
 
   const [isEditingBusinessName, setIsEditingBusinessName] = useState(false);
   const [tempName, setTempName] = useState(businessName);
@@ -100,8 +102,8 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
           </div>
         </div>
 
-        {/* Right Controls: Palette Customizer, Language Toggle, Reset Data */}
-        <div className="flex items-center gap-1.5 sm:gap-3">
+        {/* Right Controls: Palette Customizer, Language Toggle, User & Logout */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Custom Multi-Zone Palette Trigger */}
           <button
             onClick={() => setIsPaletteOpen(true)}
@@ -132,6 +134,30 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
           >
             <span className="material-symbols-outlined text-lg hover-icon-spin">restart_alt</span>
           </button>
+
+          {/* User Profile & Logout */}
+          {user && (
+            <div className="flex items-center gap-1.5 sm:gap-2 pl-1 border-l border-slate-200/80 mr-0.5">
+              <div
+                className="hidden md:flex items-center gap-1.5 px-2.5 py-1 bg-slate-100/90 rounded-xl text-xs font-medium text-slate-700 max-w-[160px]"
+                title={user.email}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+                <span className="truncate">
+                  {user.user_metadata?.full_name || user.email?.split('@')[0]}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-rose-200/90 bg-rose-50/70 hover:bg-rose-100 text-rose-700 text-xs font-semibold transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+                title={isRtl ? 'تسجيل الخروج من الحساب' : 'Sign out'}
+              >
+                <span className="material-symbols-outlined text-sm text-rose-600">logout</span>
+                <span className="hidden sm:inline">{isRtl ? 'خروج' : 'Sign out'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

@@ -1,5 +1,7 @@
 import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LoginPage } from './components/LoginPage';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { HomePage } from './pages/HomePage';
@@ -29,11 +31,37 @@ const hexToRgba = (hex: string, alpha: number): string => {
 };
 
 const AppContent: React.FC = () => {
+  const { user, isLoadingAuth } = useAuth();
   const { currentPage, language, customPalette } = useApp();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const isRtl = language === 'ar';
 
+  // 1. Initial Authentication Loading State
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#fafbfe] text-slate-700">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex flex-col items-center justify-center gap-1 shadow-lg shadow-indigo-500/25 animate-pulse">
+            <span className="w-5 h-0.5 bg-white rounded-full"></span>
+            <span className="w-5 h-0.5 bg-white/90 rounded-full"></span>
+            <span className="w-3.5 h-0.5 bg-white/80 rounded-full self-start ml-3.5"></span>
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+            <span className="w-3.5 h-3.5 border-2 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin"></span>
+            <span>{isRtl ? 'جاري التحقق من جلسة العمل...' : 'Validating session...'}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Unauthenticated Gate: Direct user to clean Login Page
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // 3. Authenticated User View: Full BizOS Workspace
   const primaryHex = customPalette.primaryAccent || '#3525cd';
   const pageBgHex = customPalette.pageBg || '#f0f7ff';
   const sidebarBgHex = customPalette.sidebarBg && customPalette.sidebarBg !== '#ffffff' ? customPalette.sidebarBg : primaryHex;
@@ -93,8 +121,11 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <AuthProvider>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </AuthProvider>
   );
 }
+
