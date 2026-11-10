@@ -21,10 +21,32 @@ import {
   WipStage,
   WipBatch,
 } from '../types';
-import { fetchCustomersFromSupabase } from '../lib/customersService';
-import { fetchProductsFromSupabase } from '../lib/productsService';
-import { fetchStockFromSupabase } from '../lib/stockService';
-import { fetchExpenseTransactionsFromSupabase } from '../lib/transactionsService';
+import {
+  fetchCustomersFromSupabase,
+  addCustomerToSupabase,
+  updateCustomerStatusInSupabase,
+  updateCustomerCreditLimitInSupabase,
+  deleteCustomerFromSupabase,
+} from '../lib/customersService';
+import {
+  fetchProductsFromSupabase,
+  addProductToSupabase,
+  updateProductInSupabase,
+  deleteProductFromSupabase,
+} from '../lib/productsService';
+import {
+  fetchStockFromSupabase,
+  addStockToSupabase,
+  updateStockQuantityInSupabase,
+} from '../lib/stockService';
+import {
+  fetchExpenseTransactionsFromSupabase,
+  fetchSalesTransactionsFromSupabase,
+  addFinancialTransactionToSupabase,
+  updateFinancialTransactionInSupabase,
+  deleteFinancialTransactionInSupabase,
+} from '../lib/transactionsService';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
   indigo: {
@@ -93,7 +115,6 @@ export const DEFAULT_CUSTOM_PALETTE: CustomPalette = {
   surfaceBg: '#ffffff',
 };
 
-// Clean default states without any mock data or localStorage
 const DEFAULT_EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: 'cat-0', nameAr: 'بضاعة', nameEn: 'Merchandise / Stock', isDefault: true },
   { id: 'cat-1', nameAr: 'الإيجار', nameEn: 'Rent', isDefault: true },
@@ -177,6 +198,11 @@ interface AppContextType {
   updateCustomPalette: (palette: Partial<CustomPalette>) => void;
   businessName: string;
   setBusinessName: (name: string) => void;
+
+  // Supabase State & Health
+  isLoading: boolean;
+  fetchError: string | null;
+  isSyncing: boolean;
 
   // Customers
   customers: Customer[];
@@ -265,93 +291,34 @@ interface AppContextType {
   refreshDataFromSupabase: () => Promise<void>;
 }
 
-// Safe localStorage helper utilities
-function loadStorage<T>(key: string, defaultValue: T): T {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch (error) {
-    console.warn(`Error reading localStorage key "${key}":`, error);
-    return defaultValue;
-  }
-}
-
-function saveStorage<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (error) {
-    console.warn(`Error writing to localStorage key "${key}":`, error);
-  }
-}
-
-function removeStorage(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch (error) {
-    console.warn(`Error removing localStorage key "${key}":`, error);
-  }
-}
-
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState<PageId>(() => loadStorage('bizos_currentPage', 'home'));
-  const [language, setLanguage] = useState<Language>(() => loadStorage('bizos_language', 'ar'));
-  const [theme, setTheme] = useState<ColorTheme>(() => loadStorage('bizos_theme', 'indigo'));
-  const [customPalette, setCustomPalette] = useState<CustomPalette>(() =>
-    loadStorage('bizos_customPalette', DEFAULT_CUSTOM_PALETTE)
-  );
-  const [businessName, setBusinessName] = useState<string>(() =>
-    loadStorage('bizos_businessName', 'BizOS Enterprise')
-  );
+  const [currentPage, setCurrentPage] = useState<PageId>('home');
+  const [language, setLanguage] = useState<Language>('ar');
+  const [theme, setTheme] = useState<ColorTheme>('indigo');
+  const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
+  const [businessName, setBusinessName] = useState<string>('BizOS Enterprise');
 
-  const [customers, setCustomers] = useState<Customer[]>(() => loadStorage('bizos_customers', []));
-  const [dailySalesTarget, setDailySalesTarget] = useState<number>(() =>
-    loadStorage('bizos_dailySalesTarget', 5000.0)
-  );
-  const [fastItems, setFastItems] = useState<FastItem[]>(() => loadStorage('bizos_fastItems', []));
-  const [wipBatches, setWipBatches] = useState<WipBatch[]>(() => loadStorage('bizos_wipBatches', []));
-  const [stockMovements, setStockMovements] = useState<StockMovement[]>(() =>
-    loadStorage('bizos_stockMovements', [])
-  );
-  const [transactions, setTransactions] = useState<Transaction[]>(() => loadStorage('bizos_transactions', []));
-  const [pendingSales, setPendingSales] = useState<PendingSale[]>(() => loadStorage('bizos_pendingSales', []));
-  const [operationSteps, setOperationSteps] = useState<OperationStep[]>(() =>
-    loadStorage('bizos_operationSteps', [])
-  );
-  const [financeItems, setFinanceItems] = useState<FinanceItem[]>(() => loadStorage('bizos_financeItems', []));
-  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(() =>
-    loadStorage('bizos_expenseCategories', DEFAULT_EXPENSE_CATEGORIES)
-  );
-  const [expenses, setExpenses] = useState<Expense[]>(() => loadStorage('bizos_expenses', []));
-  const [employees, setEmployees] = useState<Employee[]>(() => loadStorage('bizos_employees', []));
-  const [marketingMix, setMarketingMix] = useState<MarketingMixP[]>(() =>
-    loadStorage('bizos_marketingMix', DEFAULT_MARKETING_MIX)
-  );
-  const [buyerPersona, setBuyerPersona] = useState<BuyerPersona>(() =>
-    loadStorage('bizos_buyerPersona', DEFAULT_BUYER_PERSONA)
-  );
+  // Pure In-Memory React State (Exclusively synchronized with Supabase DB)
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
-  // Sync state changes to localStorage
-  useEffect(() => { saveStorage('bizos_currentPage', currentPage); }, [currentPage]);
-  useEffect(() => { saveStorage('bizos_language', language); }, [language]);
-  useEffect(() => { saveStorage('bizos_theme', theme); }, [theme]);
-  useEffect(() => { saveStorage('bizos_customPalette', customPalette); }, [customPalette]);
-  useEffect(() => { saveStorage('bizos_businessName', businessName); }, [businessName]);
-  useEffect(() => { saveStorage('bizos_customers', customers); }, [customers]);
-  useEffect(() => { saveStorage('bizos_dailySalesTarget', dailySalesTarget); }, [dailySalesTarget]);
-  useEffect(() => { saveStorage('bizos_fastItems', fastItems); }, [fastItems]);
-  useEffect(() => { saveStorage('bizos_wipBatches', wipBatches); }, [wipBatches]);
-  useEffect(() => { saveStorage('bizos_stockMovements', stockMovements); }, [stockMovements]);
-  useEffect(() => { saveStorage('bizos_transactions', transactions); }, [transactions]);
-  useEffect(() => { saveStorage('bizos_pendingSales', pendingSales); }, [pendingSales]);
-  useEffect(() => { saveStorage('bizos_operationSteps', operationSteps); }, [operationSteps]);
-  useEffect(() => { saveStorage('bizos_financeItems', financeItems); }, [financeItems]);
-  useEffect(() => { saveStorage('bizos_expenseCategories', expenseCategories); }, [expenseCategories]);
-  useEffect(() => { saveStorage('bizos_expenses', expenses); }, [expenses]);
-  useEffect(() => { saveStorage('bizos_employees', employees); }, [employees]);
-  useEffect(() => { saveStorage('bizos_marketingMix', marketingMix); }, [marketingMix]);
-  useEffect(() => { saveStorage('bizos_buyerPersona', buyerPersona); }, [buyerPersona]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [dailySalesTarget, setDailySalesTarget] = useState<number>(5000.0);
+  const [fastItems, setFastItems] = useState<FastItem[]>([]);
+  const [wipBatches, setWipBatches] = useState<WipBatch[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [pendingSales, setPendingSales] = useState<PendingSale[]>([]);
+  const [operationSteps, setOperationSteps] = useState<OperationStep[]>([]);
+  const [financeItems, setFinanceItems] = useState<FinanceItem[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(DEFAULT_EXPENSE_CATEGORIES);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [marketingMix, setMarketingMix] = useState<MarketingMixP[]>(DEFAULT_MARKETING_MIX);
+  const [buyerPersona, setBuyerPersona] = useState<BuyerPersona>(DEFAULT_BUYER_PERSONA);
 
   // Set HTML dir attribute on language change
   useEffect(() => {
@@ -359,18 +326,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.lang = language;
   }, [language]);
 
-  // Central Supabase Data Loading on App Mount / Refresh
+  // Central Supabase Data Fetching on Mount / Manual Refresh
   const refreshDataFromSupabase = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+
+    if (!isSupabaseConfigured) {
+      setFetchError('لم يتم تكوين متغيرات بيئة Supabase في التطبيق.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       // 1. Fetch Customers
       const custRes = await fetchCustomersFromSupabase();
-      if (!custRes.error && custRes.data && custRes.data.length > 0) {
+      if (custRes.error) {
+        console.warn('Supabase fetch customers warning:', custRes.error);
+      } else if (custRes.data) {
         setCustomers(custRes.data);
       }
 
       // 2. Fetch Products & Stock
       const prodRes = await fetchProductsFromSupabase();
       const stockRes = await fetchStockFromSupabase();
+
+      if (prodRes.error || stockRes.error) {
+        const err = prodRes.error || stockRes.error;
+        console.warn('Supabase fetch products/stock warning:', err);
+      }
 
       const products = prodRes.data || [];
       const stocks = stockRes.data || [];
@@ -403,17 +386,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       });
 
-      if (combined.length > 0) {
-        setFastItems(combined);
-      }
+      setFastItems(combined);
 
-      // 3. Fetch Expenses & Stock Transactions
+      // 3. Fetch Expense Transactions
       const expRes = await fetchExpenseTransactionsFromSupabase();
-      if (!expRes.error && expRes.data && expRes.data.length > 0) {
+      if (expRes.data) {
         setExpenses(expRes.data);
       }
-    } catch (err) {
+
+      // 4. Fetch Sales Transactions
+      const salesRes = await fetchSalesTransactionsFromSupabase();
+      if (salesRes.data) {
+        setTransactions(salesRes.data);
+      }
+
+      setFetchError(null);
+    } catch (err: any) {
       console.error('❌ Error refreshing Supabase data in AppContext:', err);
+      setFetchError(err?.message || 'حدث خطأ أثناء الاتصال بقاعدة بيانات Supabase');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -425,10 +417,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCustomPalette((prev) => ({ ...prev, ...data }));
   };
 
-  // Customer Handlers
+  // Customer Handlers (Supabase Primary Source of Truth)
   const addCustomer = (custData: Omit<Customer, 'id'>): Customer => {
-    const newCust: Customer = { ...custData, id: `cust-${Date.now()}` };
+    const tempId = `cust-${Date.now()}`;
+    const newCust: Customer = { ...custData, id: tempId };
     setCustomers((prev) => [newCust, ...prev]);
+
+    setIsSyncing(true);
+    addCustomerToSupabase({
+      name: custData.name,
+      phone1: custData.phone,
+      phone2: custData.phone2,
+      address: custData.address || '',
+      email: custData.email,
+      type: custData.type || 'Individual',
+      status: custData.status || 'Active',
+      creditLimit: custData.creditLimit,
+    })
+      .then((res) => {
+        if (res.success && res.data) {
+          setCustomers((prev) => prev.map((c) => (c.id === tempId ? res.data! : c)));
+        } else if (res.error) {
+          console.error('Error saving customer to Supabase:', res.error);
+        }
+      })
+      .finally(() => setIsSyncing(false));
+
     return newCust;
   };
 
@@ -436,32 +450,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCustomers((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...data } : c))
     );
+
+    setIsSyncing(true);
+    const promises: Promise<any>[] = [];
+    if (data.status) {
+      promises.push(updateCustomerStatusInSupabase(id, data.status));
+    }
+    if (data.creditLimit !== undefined) {
+      promises.push(updateCustomerCreditLimitInSupabase(id, data.creditLimit));
+    }
+    Promise.all(promises).finally(() => setIsSyncing(false));
   };
 
   const deleteCustomer = (id: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== id));
+    setIsSyncing(true);
+    deleteCustomerFromSupabase(id).finally(() => setIsSyncing(false));
   };
 
-  // Sales Handlers
+  // Sales Target & Inventory Stock Handlers (Supabase Synchronized)
   const updateDailyTarget = (val: number) => setDailySalesTarget(val);
 
   const addFastItem = (itemData: Omit<FastItem, 'id'>) => {
-    const newId = `fi-${Date.now()}`;
+    const tempId = `fi-${Date.now()}`;
     const newItem: FastItem = {
       ...itemData,
-      id: newId,
+      id: tempId,
       minStock: itemData.minStock ?? 10,
       maxStock: itemData.maxStock ?? 100,
       stockQuantity: itemData.stockQuantity ?? 0,
       unit: itemData.unit || 'قطعة',
     };
     setFastItems((prev) => [...prev, newItem]);
+
+    setIsSyncing(true);
+    if (itemData.inventoryType === 'raw_material') {
+      addStockToSupabase({
+        stock_name: itemData.name,
+        stock_type: 'Raw material',
+        minimum_limit: itemData.minStock ?? 10,
+        maximum_limit: itemData.maxStock ?? 100,
+        quantity: itemData.stockQuantity ?? 0,
+        stock_cost: itemData.costPrice || itemData.price || 0,
+        measure_stype: itemData.unit || 'قطعة',
+        stock_code: itemData.code,
+      }).then(() => refreshDataFromSupabase()).finally(() => setIsSyncing(false));
+    } else {
+      addProductToSupabase({
+        product_name: itemData.name,
+        product_type: itemData.category || 'Retail',
+        product_description: itemData.description,
+        unit_cost: itemData.costPrice || 0,
+        unit_price: itemData.price || 0,
+        product_code: itemData.code,
+        measure_ptype: itemData.unit || 'قطعة',
+      }).then(() => refreshDataFromSupabase()).finally(() => setIsSyncing(false));
+    }
   };
 
   const updateFastItem = (id: string, data: Partial<FastItem>) => {
     setFastItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, ...data } : item))
     );
+
+    const target = fastItems.find((i) => i.id === id);
+    if (!target) return;
+
+    setIsSyncing(true);
+    const syncPromises: Promise<any>[] = [];
+
+    if (target.product_pk) {
+      syncPromises.push(
+        updateProductInSupabase(target.product_pk, {
+          product_name: data.name,
+          product_type: data.category,
+          unit_cost: data.costPrice,
+          unit_price: data.price,
+          product_code: data.code,
+          measure_ptype: data.unit,
+        })
+      );
+    }
+
+    if (data.stockQuantity !== undefined || data.costPrice !== undefined) {
+      const cost = data.costPrice ?? target.costPrice ?? target.price ?? 0;
+      const qty = data.stockQuantity ?? target.stockQuantity ?? 0;
+      if (target.stock_pk) {
+        syncPromises.push(updateStockQuantityInSupabase(target.stock_pk, qty, cost, false));
+      } else if (target.product_pk) {
+        syncPromises.push(updateStockQuantityInSupabase(target.product_pk, qty, cost, true));
+      }
+    }
+
+    Promise.all(syncPromises).finally(() => setIsSyncing(false));
   };
 
   const updateFastItemStock = (id: string, newStock: number) => {
@@ -470,21 +551,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const restockItem = (itemId: string, qtyToAdd: number, reason: string) => {
     if (qtyToAdd <= 0) return;
-    setFastItems((prev) =>
-      prev.map((item) => {
-        if (item.id === itemId) {
-          const newQty = item.stockQuantity + qtyToAdd;
-          const cost = item.costPrice || item.price || 0;
-          return { ...item, stockQuantity: newQty, amount: newQty * cost };
-        }
-        return item;
-      })
-    );
+    const target = fastItems.find((item) => item.id === itemId);
+    if (!target) return;
+
+    const newQty = target.stockQuantity + qtyToAdd;
+    const cost = target.costPrice || target.price || 0;
+
+    updateFastItem(itemId, { stockQuantity: newQty, amount: newQty * cost });
   };
 
-
   const deleteFastItem = (id: string) => {
+    const target = fastItems.find((i) => i.id === id);
     setFastItems((prev) => prev.filter((i) => i.id !== id));
+
+    if (target?.product_pk) {
+      setIsSyncing(true);
+      deleteProductFromSupabase(target.product_pk).finally(() => setIsSyncing(false));
+    }
   };
 
   // WIP Handlers
@@ -503,18 +586,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setWipBatches((prev) => [newBatch, ...prev]);
 
-    // Deduct Raw Materials from local stock
-    setFastItems((prevItems) =>
-      prevItems.map((item) => {
-        const usage = batchData.rawMaterialsUsed.find((m) => m.rawMaterialId === item.id);
-        if (usage) {
-          const newQty = Math.max(0, item.stockQuantity - usage.quantityUsed);
-          const cost = item.costPrice || item.price || 0;
-          return { ...item, stockQuantity: newQty, amount: newQty * cost };
-        }
-        return item;
-      })
-    );
+    // Deduct Raw Materials from stock
+    batchData.rawMaterialsUsed.forEach((usage) => {
+      const mat = fastItems.find((i) => i.id === usage.rawMaterialId);
+      if (mat) {
+        const newQty = Math.max(0, mat.stockQuantity - usage.quantityUsed);
+        updateFastItem(mat.id, { stockQuantity: newQty });
+      }
+    });
   };
 
   const updateWipBatchStage = (id: string, stage: WipStage, notes?: string) => {
@@ -547,18 +626,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     );
 
-    // Add Finished Good to local stock
     if (finishedGoodId) {
-      setFastItems((prevItems) =>
-        prevItems.map((item) => {
-          if (item.id === finishedGoodId) {
-            const newQty = item.stockQuantity + completedQty;
-            const cost = item.costPrice || item.price || 0;
-            return { ...item, stockQuantity: newQty, amount: newQty * cost };
-          }
-          return item;
-        })
-      );
+      const fg = fastItems.find((i) => i.id === finishedGoodId);
+      if (fg) {
+        const newQty = fg.stockQuantity + completedQty;
+        updateFastItem(fg.id, { stockQuantity: newQty });
+      }
     }
   };
 
@@ -569,6 +642,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addTransaction = (tx: Omit<Transaction, 'id'>) => {
     const newTx: Transaction = { ...tx, id: `tx-${Date.now()}` };
     setTransactions((prev) => [newTx, ...prev]);
+
+    setIsSyncing(true);
+    addFinancialTransactionToSupabase({
+      amount: tx.total,
+      method: tx.paymentMethod,
+      notice: JSON.stringify(tx.items),
+      type: 'Sales_Trans',
+      name: `${tx.customerName || 'عميل نقدي'} - ${tx.itemsSummary}`,
+    }).finally(() => setIsSyncing(false));
   };
 
   const updateTransactionNote = (id: string, note: string) => {
@@ -602,37 +684,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deductStockForTransaction = (items: StagedItem[]) => {
-    setFastItems((prevItems) =>
-      prevItems.map((catalogItem) => {
-        const matched = items.filter(
-          (staged) => staged.originalFastItemId === catalogItem.id || staged.name === catalogItem.name
-        );
-        if (matched.length > 0) {
-          const totalQtyDeducted = matched.reduce((sum, item) => sum + item.quantity, 0);
-          const newQty = Math.max(0, catalogItem.stockQuantity - totalQtyDeducted);
-          const cost = catalogItem.costPrice || catalogItem.price || 0;
-          return { ...catalogItem, stockQuantity: newQty, amount: newQty * cost };
-        }
-        return catalogItem;
-      })
-    );
+    items.forEach((staged) => {
+      const catalogItem = fastItems.find(
+        (ci) => ci.id === staged.originalFastItemId || ci.name === staged.name
+      );
+      if (catalogItem) {
+        const newQty = Math.max(0, catalogItem.stockQuantity - staged.quantity);
+        updateFastItem(catalogItem.id, { stockQuantity: newQty });
+      }
+    });
   };
 
   const returnTransactionItems = (items: StagedItem[], referenceNo: string, reason: string) => {
-    setFastItems((prevItems) =>
-      prevItems.map((catalogItem) => {
-        const matched = items.filter(
-          (staged) => staged.originalFastItemId === catalogItem.id || staged.name === catalogItem.name
-        );
-        if (matched.length > 0) {
-          const totalQtyReturned = matched.reduce((sum, item) => sum + item.quantity, 0);
-          const newQty = catalogItem.stockQuantity + totalQtyReturned;
-          const cost = catalogItem.costPrice || catalogItem.price || 0;
-          return { ...catalogItem, stockQuantity: newQty, amount: newQty * cost };
-        }
-        return catalogItem;
-      })
-    );
+    items.forEach((staged) => {
+      const catalogItem = fastItems.find(
+        (ci) => ci.id === staged.originalFastItemId || ci.name === staged.name
+      );
+      if (catalogItem) {
+        const newQty = catalogItem.stockQuantity + staged.quantity;
+        updateFastItem(catalogItem.id, { stockQuantity: newQty });
+      }
+    });
   };
 
   // Operations Handlers
@@ -685,7 +757,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinanceItems((prev) => prev.filter((f) => f.id !== id));
   };
 
-  // Expenses Handlers
+  // Expenses Handlers (Supabase Synchronized)
   const addExpense = (expenseData: Omit<Expense, 'id' | 'receiptNo' | 'createdAt'>) => {
     const now = new Date();
     const receiptNo = `EXP-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -697,23 +769,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: expenseData.paymentMethod === 'Credit' ? 'Unpaid' : 'Paid',
     };
     setExpenses((prev) => [newExpense, ...prev]);
+
+    setIsSyncing(true);
+    addFinancialTransactionToSupabase({
+      amount: expenseData.amount,
+      method: expenseData.paymentMethod,
+      notice: expenseData.paymentNotice || expenseData.notes || '',
+      type: expenseData.category,
+      name: expenseData.notes || expenseData.category,
+    })
+      .then(() => refreshDataFromSupabase())
+      .finally(() => setIsSyncing(false));
   };
 
   const updateExpense = (id: string, data: Partial<Expense>) => {
     setExpenses((prev) =>
       prev.map((e) => (e.id === id ? { ...e, ...data } : e))
     );
+
+    const target = expenses.find((e) => e.id === id);
+    if (!target) return;
+
+    const targetPk = target.transaction_pk || id;
+    setIsSyncing(true);
+    updateFinancialTransactionInSupabase(targetPk, {
+      amount: data.amount ?? target.amount,
+      method: data.paymentMethod ?? target.paymentMethod,
+      notice: data.paymentNotice ?? target.paymentNotice,
+      type: data.category ?? target.category,
+      name: data.notes ?? target.notes ?? 'Expense',
+    }).finally(() => setIsSyncing(false));
   };
 
   const deleteExpense = (id: string) => {
+    const target = expenses.find((e) => e.id === id);
     setExpenses((prev) => prev.filter((e) => e.id !== id));
+
+    if (target) {
+      const targetPk = target.transaction_pk || id;
+      setIsSyncing(true);
+      deleteFinancialTransactionInSupabase(targetPk).finally(() => setIsSyncing(false));
+    }
   };
 
   const settleExpense = (id: string, paymentMethod: 'Cash' | 'E_Wallet' | 'Bank') => {
     const today = new Date().toISOString().split('T')[0];
-    setExpenses((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: 'Paid', settledDate: today, settledPaymentMethod: paymentMethod } : e))
-    );
+    updateExpense(id, {
+      status: 'Paid',
+      settledDate: today,
+      settledPaymentMethod: paymentMethod,
+      paymentMethod: paymentMethod,
+    });
   };
 
   const addExpenseCategory = (nameAr: string, nameEn?: string) => {
@@ -774,28 +880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFinanceItems([]);
     setExpenses([]);
     setEmployees([]);
-    const keys = [
-      'bizos_currentPage',
-      'bizos_language',
-      'bizos_theme',
-      'bizos_customPalette',
-      'bizos_businessName',
-      'bizos_customers',
-      'bizos_dailySalesTarget',
-      'bizos_fastItems',
-      'bizos_wipBatches',
-      'bizos_stockMovements',
-      'bizos_transactions',
-      'bizos_pendingSales',
-      'bizos_operationSteps',
-      'bizos_financeItems',
-      'bizos_expenseCategories',
-      'bizos_expenses',
-      'bizos_employees',
-      'bizos_marketingMix',
-      'bizos_buyerPersona',
-    ];
-    keys.forEach(removeStorage);
+    refreshDataFromSupabase();
   };
 
   const baseTheme = THEME_CONFIGS[theme] || THEME_CONFIGS.indigo;
@@ -818,6 +903,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateCustomPalette,
         businessName,
         setBusinessName,
+
+        isLoading,
+        fetchError,
+        isSyncing,
 
         customers,
         setCustomers,
@@ -895,6 +984,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshDataFromSupabase,
       }}
     >
+      {fetchError && (
+        <div className="bg-red-500 text-white p-3 text-sm flex items-center justify-between px-4 z-50">
+          <div>
+            <strong>خطأ الاتصال بقاعدة البيانات (Supabase):</strong> {fetchError}
+          </div>
+          <button
+            onClick={() => refreshDataFromSupabase()}
+            className="bg-white text-red-600 hover:bg-red-100 font-bold px-3 py-1 rounded text-xs transition"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
+      )}
       {children}
     </AppContext.Provider>
   );

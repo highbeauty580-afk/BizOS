@@ -1052,33 +1052,10 @@ export const AutoIntegrationSales: React.FC = () => {
 
   const isRtl = language === 'ar';
 
-  // Local Persistent state for connectors, mappings, and integrated orders
-  const [connectors, setConnectors] = useState<IntegrationConnector[]>(() => {
-    try {
-      const saved = localStorage.getItem('bizos_connectors_v1');
-      return saved ? JSON.parse(saved) : INITIAL_CONNECTORS;
-    } catch {
-      return INITIAL_CONNECTORS;
-    }
-  });
-
-  const [mappings, setMappings] = useState<FieldMapping[]>(() => {
-    try {
-      const saved = localStorage.getItem('bizos_mappings_v1');
-      return saved ? JSON.parse(saved) : INITIAL_MAPPINGS;
-    } catch {
-      return INITIAL_MAPPINGS;
-    }
-  });
-
-  const [integratedOrders, setIntegratedOrders] = useState<IntegratedOrder[]>(() => {
-    try {
-      const saved = localStorage.getItem('bizos_integrated_orders_v1');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  // In-memory state for connectors, mappings, and integrated orders (server-side single source of truth)
+  const [connectors, setConnectors] = useState<IntegrationConnector[]>(INITIAL_CONNECTORS);
+  const [mappings, setMappings] = useState<FieldMapping[]>(INITIAL_MAPPINGS);
+  const [integratedOrders, setIntegratedOrders] = useState<IntegratedOrder[]>([]);
 
   // Selected Active Connector ID
   const [activeConnectorId, setActiveConnectorId] = useState<string>(
@@ -1327,12 +1304,6 @@ export const AutoIntegrationSales: React.FC = () => {
       return [...filtered, ...defaultMappings];
     });
 
-    try {
-      localStorage.setItem('bizos_connectors_v1', JSON.stringify(updatedConnectors));
-    } catch (e) {
-      console.error(e);
-    }
-
     setIsEcomWizardOpen(false);
   };
 
@@ -1503,12 +1474,6 @@ export const AutoIntegrationSales: React.FC = () => {
     setConnectors(updatedConnectors);
     setActiveConnectorId(newConn.id);
 
-    try {
-      localStorage.setItem('bizos_connectors_v1', JSON.stringify(updatedConnectors));
-    } catch (e) {
-      console.error(e);
-    }
-
     setIsSocialWizardOpen(false);
   };
 
@@ -1666,12 +1631,6 @@ export const AutoIntegrationSales: React.FC = () => {
     setConnectors(updatedConnectors);
     setActiveConnectorId(newConn.id);
 
-    try {
-      localStorage.setItem('bizos_connectors_v1', JSON.stringify(updatedConnectors));
-    } catch (e) {
-      console.error(e);
-    }
-
     setIsDbWizardOpen(false);
   };
 
@@ -1813,12 +1772,6 @@ export const AutoIntegrationSales: React.FC = () => {
     setConnectors(updatedConnectors);
     setActiveConnectorId(newConn.id);
 
-    try {
-      localStorage.setItem('bizos_connectors_v1', JSON.stringify(updatedConnectors));
-    } catch (e) {
-      console.error(e);
-    }
-
     setIsLocalWizardOpen(false);
   };
 
@@ -1930,19 +1883,6 @@ export const AutoIntegrationSales: React.FC = () => {
     );
     alert(isRtl ? 'تمت إعادة الاتصال والمزامنة الفورية بنجاح!' : 'Reconnected & synced successfully!');
   };
-
-  // Save to localStorage when state changes
-  useEffect(() => {
-    localStorage.setItem('bizos_connectors_v1', JSON.stringify(connectors));
-  }, [connectors]);
-
-  useEffect(() => {
-    localStorage.setItem('bizos_mappings_v1', JSON.stringify(mappings));
-  }, [mappings]);
-
-  useEffect(() => {
-    localStorage.setItem('bizos_integrated_orders_v1', JSON.stringify(integratedOrders));
-  }, [integratedOrders]);
 
   const activeConnector = connectors.find((c) => c.id === activeConnectorId) || connectors[0];
 
@@ -2069,14 +2009,6 @@ export const AutoIntegrationSales: React.FC = () => {
     // 3. Immediately update activeConnectorId if deleted connector was active
     if (activeConnectorId === id) {
       setActiveConnectorId(nextConnectors[0]?.id || '');
-    }
-
-    // 4. Persist directly to localStorage
-    try {
-      localStorage.setItem('bizos_connectors_v1', JSON.stringify(nextConnectors));
-      localStorage.setItem('bizos_mappings_v1', JSON.stringify(nextMappings));
-    } catch (e) {
-      console.error('Failed to sync deleted connector to localStorage:', e);
     }
 
     setDeletingConnectorTarget(null);

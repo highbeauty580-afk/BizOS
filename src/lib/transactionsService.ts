@@ -205,3 +205,54 @@ export async function fetchExpenseTransactionsFromSupabase(): Promise<{ data: an
   }
 }
 
+export async function fetchSalesTransactionsFromSupabase(): Promise<{ data: any[]; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return { data: [], error: 'Supabase Config Error' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .in('transactions_type', ['Sales_Trans', 'Return_Trans'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { data: [], error: error.message };
+    }
+
+    const mappedSales = (data || []).map((row: any) => {
+      const pk = row.transactions_pk || row.id || `tx-${Date.now()}`;
+      let parsedItems: any[] = [];
+      try {
+        if (row.Trans_Notice && row.Trans_Notice.startsWith('[')) {
+          parsedItems = JSON.parse(row.Trans_Notice);
+        }
+      } catch (e) {
+        parsedItems = [];
+      }
+
+      return {
+        id: pk,
+        receiptNo: `REC-${String(pk).slice(-4)}`,
+        time: row.created_at ? new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        date: row.created_at ? new Date(row.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        itemsSummary: row.transactions_name || 'عملية بيع',
+        items: parsedItems,
+        subtotal: parseFloat(row.transactions_amount) || 0,
+        tax: 0,
+        total: parseFloat(row.transactions_amount) || 0,
+        paymentMethod: row.transactions_method || 'Cash',
+        status: row.transactions_type === 'Return_Trans' ? 'Refunded' : 'Completed',
+        shiftNotes: '',
+        cashier: 'الكاشير الرئيسية',
+        customerName: row.transactions_name?.split(' - ')[0] || undefined,
+      };
+    });
+
+    return { data: mappedSales, error: null };
+  } catch (err: any) {
+    return { data: [], error: err?.message || 'Error fetching sales transactions' };
+  }
+}
+
