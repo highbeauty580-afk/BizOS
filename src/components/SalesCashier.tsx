@@ -158,6 +158,29 @@ export const SalesCashier: React.FC = () => {
   // Categories for catalog filter
   const categories = ['all', 'Retail', 'Service', 'Wholesale'];
 
+  // Helper to format transaction name: "[Action] ([Item Name]) [DayOfMonth] [Month] [DayOfWeek] [H:M:S]"
+  const getFormattedTxName = (actionSuffix: string, actorName: string) => {
+    const now = new Date();
+    const days = [
+      isRtl ? 'الأحد' : 'Sunday',
+      isRtl ? 'الاثنين' : 'Monday',
+      isRtl ? 'الثلاثاء' : 'Tuesday',
+      isRtl ? 'الأربعاء' : 'Wednesday',
+      isRtl ? 'الخميس' : 'Thursday',
+      isRtl ? 'الجمعة' : 'Friday',
+      isRtl ? 'السبت' : 'Saturday'
+    ];
+    const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    const monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const dayName = days[now.getDay()];
+    const monthName = isRtl ? monthsAr[now.getMonth()] : monthsEn[now.getMonth()];
+    const dayOfMonth = now.getDate();
+    const timeStr = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    return `${actorName} ${actionSuffix} ${dayOfMonth} ${monthName} ${dayName} ${timeStr}`;
+  };
+
   // Filtered Catalog Items
   const filteredCatalog = fastItems.filter((item) => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
@@ -490,9 +513,9 @@ export const SalesCashier: React.FC = () => {
     const finRes = await addFinancialTransactionToSupabase({
       amount: total,
       method: dbMethod,
-      notice: shiftNotes.trim(),
+      notice: shiftNotes.trim() || (isRtl ? 'فاتورة مبيعات' : 'Sales Invoice'),
       type: 'Sales_Trans',
-      name: txName
+      name: getFormattedTxName(isRtl ? 'فاتورة مبيعات' : 'Sales Invoice', finalCustomerName)
     });
     if (!finRes.success) {
       console.error('❌ Failed to record financial transaction (Sales):', finRes.error);
@@ -1615,7 +1638,7 @@ export const SalesCashier: React.FC = () => {
                                       method: dbMethod,
                                       notice: `مرتجع للفاتورة رقم ${tx.receiptNo}`,
                                       type: 'Return_Trans',
-                                      name: txName
+                                      name: getFormattedTxName(isRtl ? 'فاتورة مرتجع' : 'Return Invoice', tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash'))
                                     });
                                     
                                     if (!finRes.success) {

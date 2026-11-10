@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { Expense, ExpensePaymentMethod } from '../types';
+import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 
 export const ExpensesManager: React.FC = () => {
   const {
@@ -37,6 +38,7 @@ export const ExpensesManager: React.FC = () => {
   const [expenseDate, setExpenseDate] = useState(todayStr);
   const [paymentMethod, setPaymentMethod] = useState<ExpensePaymentMethod>('Cash');
   const [notes, setNotes] = useState('');
+  const [paymentNotice, setPaymentNotice] = useState('');
 
   // New Category Inline Form
   const [newCatNameAr, setNewCatNameAr] = useState('');
@@ -45,7 +47,7 @@ export const ExpensesManager: React.FC = () => {
   const [editingCatNameAr, setEditingCatNameAr] = useState('');
 
   // Settlement Form
-  const [settleMethod, setSettleMethod] = useState<'Cash' | 'Electronic'>('Cash');
+  const [settleMethod, setSettleMethod] = useState<'Cash' | 'E_Wallet' | 'Bank'>('Cash');
 
   // Table Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +77,7 @@ export const ExpensesManager: React.FC = () => {
     .reduce((sum, e) => sum + e.amount, 0);
 
   const electronicPaidTotal = expenses
-    .filter((e) => (e.status === 'Paid' && (e.paymentMethod === 'Electronic' || e.settledPaymentMethod === 'Electronic')))
+    .filter((e) => (e.status === 'Paid' && (['E_Wallet', 'Bank'].includes(e.paymentMethod) || ['E_Wallet', 'Bank'].includes(e.settledPaymentMethod as any))))
     .reduce((sum, e) => sum + e.amount, 0);
 
   // Filtered Expenses for table
@@ -116,6 +118,7 @@ export const ExpensesManager: React.FC = () => {
     setExpenseDate(todayStr);
     setPaymentMethod('Cash');
     setNotes('');
+    setPaymentNotice('');
     setShowExpenseModal(true);
   };
 
@@ -126,6 +129,7 @@ export const ExpensesManager: React.FC = () => {
     setExpenseDate(exp.date);
     setPaymentMethod(exp.paymentMethod);
     setNotes(exp.notes || '');
+    setPaymentNotice(exp.paymentNotice || '');
     setShowExpenseModal(true);
   };
 
@@ -140,12 +144,41 @@ export const ExpensesManager: React.FC = () => {
     setShowDetailModal(true);
   };
 
+  // Helper to format transaction name: "[Category] [Date] [Month] [DayOfWeek] [Time]"
+  const getFormattedTxName = (cat: string) => {
+    const now = new Date();
+    const days = [
+      isRtl ? 'الأحد' : 'Sunday',
+      isRtl ? 'الاثنين' : 'Monday',
+      isRtl ? 'الثلاثاء' : 'Tuesday',
+      isRtl ? 'الأربعاء' : 'Wednesday',
+      isRtl ? 'الخميس' : 'Thursday',
+      isRtl ? 'الجمعة' : 'Friday',
+      isRtl ? 'السبت' : 'Saturday'
+    ];
+    const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    const monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    const dayName = days[now.getDay()];
+    const monthName = isRtl ? monthsAr[now.getMonth()] : monthsEn[now.getMonth()];
+    const dayOfMonth = now.getDate();
+    const timeStr = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    return `${cat} ${dayOfMonth} ${monthName} ${dayName} ${timeStr}`;
+  };
+
   // Submit Expense Form
-  const handleExpenseSubmit = (e: React.FormEvent) => {
+  const handleExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
       alert(isRtl ? 'يرجى إدخال مبلغ صحيح أكبر من الصفر' : 'Please enter a valid amount greater than zero');
+      return;
+    }
+
+    // MANDATORY PAYMENT NOTICE VALIDATION
+    if (!paymentNotice.trim()) {
+      alert(isRtl ? 'يرجى إدخال ملحوظة الدفع (حقل إجباري)' : 'Payment notice is required.');
       return;
     }
 
@@ -156,8 +189,18 @@ export const ExpensesManager: React.FC = () => {
         date: expenseDate,
         paymentMethod,
         notes: notes.trim() || undefined,
+        paymentNotice: paymentNotice.trim(),
       });
     } else {
+      // Record Financial Transaction for New Expense
+      await addFinancialTransactionToSupabase({
+        amount: parsedAmount,
+        method: paymentMethod,
+        notice: paymentNotice.trim(),
+        type: 'Expense_Trans',
+        name: getFormattedTxName(category)
+      });
+
       addExpense({
         amount: parsedAmount,
         category,
@@ -165,6 +208,7 @@ export const ExpensesManager: React.FC = () => {
         paymentMethod,
         status: paymentMethod === 'Credit' ? 'Unpaid' : 'Paid',
         notes: notes.trim() || undefined,
+        paymentNotice: paymentNotice.trim(),
       });
     }
 
@@ -404,7 +448,8 @@ export const ExpensesManager: React.FC = () => {
             >
               <option value="all">{isRtl ? 'كل طرق الدفع' : 'All Methods'}</option>
               <option value="Cash">{isRtl ? 'نقدي' : 'Cash'}</option>
-              <option value="Electronic">{isRtl ? 'إلكتروني' : 'Electronic'}</option>
+              <option value="E_Wallet">{isRtl ? 'إلكتروني' : 'Electronic'}</option>
+              <option value="Bank">{isRtl ? 'تحويل بنكي' : 'Bank Transfer'}</option>
               <option value="Credit">{isRtl ? 'آجل' : 'Credit / Deferred'}</option>
             </select>
 
@@ -499,8 +544,10 @@ export const ExpensesManager: React.FC = () => {
                             <span>
                               {exp.paymentMethod === 'Cash' || exp.settledPaymentMethod === 'Cash'
                                 ? isRtl ? 'نقدي — مدفوع' : 'Cash — Paid'
-                                : exp.paymentMethod === 'Electronic' || exp.settledPaymentMethod === 'Electronic'
+                                : exp.paymentMethod === 'E_Wallet' || exp.settledPaymentMethod === 'E_Wallet'
                                 ? isRtl ? 'إلكتروني — مدفوع' : 'Electronic — Paid'
+                                : exp.paymentMethod === 'Bank' || exp.settledPaymentMethod === 'Bank'
+                                ? isRtl ? 'تحويل بنكي — مدفوع' : 'Bank Transfer — Paid'
                                 : isRtl ? 'آجل — تم السداد' : 'Credit — Settled'}
                             </span>
                           </span>
@@ -705,18 +752,32 @@ export const ExpensesManager: React.FC = () => {
                     <span>{isRtl ? 'نقدي' : 'Cash'}</span>
                   </button>
 
-                  {/* Electronic */}
+                  {/* Electronic (E-Wallet) */}
                   <button
                     type="button"
-                    onClick={() => setPaymentMethod('Electronic')}
+                    onClick={() => setPaymentMethod('E_Wallet')}
                     className={`py-2.5 px-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                      paymentMethod === 'Electronic'
+                      paymentMethod === 'E_Wallet'
                         ? 'bg-indigo-600 text-white border-indigo-600 font-extrabold shadow-sm'
                         : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-semibold'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-lg">credit_card</span>
-                    <span>{isRtl ? 'إلكتروني' : 'Electronic'}</span>
+                    <span className="material-symbols-outlined text-lg">account_balance_wallet</span>
+                    <span>{isRtl ? 'إلكتروني' : 'E-Wallet'}</span>
+                  </button>
+
+                  {/* Bank Transfer */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('Bank')}
+                    className={`py-2.5 px-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-1 ${
+                      paymentMethod === 'Bank'
+                        ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-sm'
+                        : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-semibold'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg">account_balance</span>
+                    <span>{isRtl ? 'تحويل بنكي' : 'Bank'}</span>
                   </button>
 
                   {/* Credit (Deferred) */}
@@ -733,6 +794,26 @@ export const ExpensesManager: React.FC = () => {
                     <span>{isRtl ? 'آجل' : 'Credit / Due'}</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Payment Notice (Mandatory) */}
+              <div className="flex flex-col gap-1.5">
+                <label className="font-bold text-slate-800">
+                  {isRtl ? 'ملاحظة الدفع *' : 'Payment Notice *'}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={paymentNotice}
+                  onChange={(e) => setPaymentNotice(e.target.value)}
+                  placeholder={
+                    paymentMethod === 'Cash' ? (isRtl ? 'ادخل اسم المستلم' : 'Enter recipient name') :
+                    paymentMethod === 'E_Wallet' ? (isRtl ? 'رقم هاتف المحفظة' : 'Wallet phone number') :
+                    paymentMethod === 'Bank' ? (isRtl ? 'الرقم المرجعي للتحويل' : 'Transfer reference number') :
+                    (isRtl ? 'ملاحظة للسداد الآجل' : 'Credit payment note')
+                  }
+                  className="w-full h-10 px-3.5 rounded-xl bg-slate-50 border border-slate-300 text-xs text-slate-800 focus:outline-none focus:border-indigo-600 transition-all"
+                />
               </div>
 
               {/* Description or Notes */}
@@ -948,15 +1029,28 @@ export const ExpensesManager: React.FC = () => {
 
                   <button
                     type="button"
-                    onClick={() => setSettleMethod('Electronic')}
+                    onClick={() => setSettleMethod('E_Wallet')}
                     className={`py-3 px-3 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 font-bold ${
-                      settleMethod === 'Electronic'
+                      settleMethod === 'E_Wallet'
                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
                         : 'bg-slate-50 text-slate-700 border-slate-200'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-lg">credit_card</span>
-                    <span>{isRtl ? 'إلكتروني (البنك)' : 'Electronic'}</span>
+                    <span className="material-symbols-outlined text-lg">account_balance_wallet</span>
+                    <span>{isRtl ? 'إلكتروني' : 'E-Wallet'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSettleMethod('Bank')}
+                    className={`py-3 px-3 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 font-bold ${
+                      settleMethod === 'Bank'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-700 border-slate-200'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-lg">account_balance</span>
+                    <span>{isRtl ? 'بنكي' : 'Bank'}</span>
                   </button>
                 </div>
               </div>
@@ -1027,10 +1121,12 @@ export const ExpensesManager: React.FC = () => {
                 <span className="text-slate-500 font-bold">{isRtl ? 'طريقة الدفع:' : 'Payment Method:'}</span>
                 <span className="font-bold text-slate-800">
                   {selectedExpense.paymentMethod === 'Cash'
-                    ? isRtl ? 'نقدي' : 'Cash'
-                    : selectedExpense.paymentMethod === 'Electronic'
-                    ? isRtl ? 'إلكتروني' : 'Electronic'
-                    : isRtl ? 'آجل' : 'Credit'}
+                    ? (isRtl ? 'نقدي' : 'Cash')
+                    : selectedExpense.paymentMethod === 'E_Wallet'
+                    ? (isRtl ? 'إلكتروني' : 'Electronic')
+                    : selectedExpense.paymentMethod === 'Bank'
+                    ? (isRtl ? 'تحويل بنكي' : 'Bank Transfer')
+                    : (isRtl ? 'آجل' : 'Credit')}
                 </span>
               </div>
 

@@ -187,7 +187,7 @@ export interface FinanceItem {
   isNegative?: boolean; // Subtracts from total if true
 }
 
-export type ExpensePaymentMethod = 'Cash' | 'Electronic' | 'Credit';
+export type ExpensePaymentMethod = 'Cash' | 'E_Wallet' | 'Bank' | 'Credit';
 export type ExpensePaymentStatus = 'Paid' | 'Unpaid';
 
 export interface ExpenseCategory {
@@ -206,8 +206,9 @@ export interface Expense {
   paymentMethod: ExpensePaymentMethod; // Cash | Electronic | Credit
   status: ExpensePaymentStatus; // Paid | Unpaid
   settledDate?: string;
-  settledPaymentMethod?: 'Cash' | 'Electronic';
+  settledPaymentMethod?: 'Cash' | 'E_Wallet' | 'Bank';
   notes?: string;
+  paymentNotice?: string;
   createdAt: string;
   updatedAt?: string;
 }

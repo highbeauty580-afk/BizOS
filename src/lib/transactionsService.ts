@@ -17,6 +17,7 @@ export interface AddFinancialTransactionParams {
   notice?: string;
   type: 'Sales_Trans' | 'Return_Trans' | string;
   name: string;
+  stock_fk?: string;
 }
 
 export async function addFinancialTransactionToSupabase(
@@ -27,13 +28,17 @@ export async function addFinancialTransactionToSupabase(
   }
 
   try {
-    const cleanPayload = {
+    const cleanPayload: any = {
       transactions_amount: parseFloat(params.amount as any) || 0,
       transactions_method: params.method,
       Trans_Notice: params.notice || null,
       transactions_type: params.type,
       transactions_name: params.name,
     };
+
+    if (params.stock_fk) {
+      cleanPayload.Stock_fk = params.stock_fk;
+    }
 
     const { data, error } = await supabase
       .from('transactions')
@@ -50,3 +55,4 @@ export async function addFinancialTransactionToSupabase(
     return { success: false, error: err?.message };
   }
 }
+

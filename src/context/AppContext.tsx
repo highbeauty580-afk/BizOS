@@ -236,7 +236,7 @@ interface AppContextType {
   addExpense: (expense: Omit<Expense, 'id' | 'receiptNo' | 'createdAt'>) => void;
   updateExpense: (id: string, data: Partial<Expense>) => void;
   deleteExpense: (id: string) => void;
-  settleExpense: (id: string, paymentMethod: 'Cash' | 'Electronic') => void;
+  settleExpense: (id: string, paymentMethod: 'Cash' | 'E_Wallet' | 'Bank') => void;
   addExpenseCategory: (nameAr: string, nameEn?: string) => void;
   updateExpenseCategory: (id: string, nameAr: string, nameEn?: string) => void;
   deleteExpenseCategory: (id: string) => void;
@@ -578,7 +578,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setExpenses((prev) => prev.filter((e) => e.id !== id));
   };
 
-  const settleExpense = (id: string, paymentMethod: 'Cash' | 'Electronic') => {
+  const settleExpense = (id: string, paymentMethod: 'Cash' | 'E_Wallet' | 'Bank') => {
     const today = new Date().toISOString().split('T')[0];
     setExpenses((prev) =>
       prev.map((e) => (e.id === id ? { ...e, status: 'Paid', settledDate: today, settledPaymentMethod: paymentMethod } : e))

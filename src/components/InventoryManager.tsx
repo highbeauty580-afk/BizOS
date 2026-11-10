@@ -262,7 +262,7 @@ export const InventoryManager: React.FC = () => {
     setIsAddEditModalOpen(true);
   };
 
-  // Helper to format transaction name: "[Action] [Item Name] [Day] [H:M:S]"
+  // Helper to format transaction name: "[Action] [Item Name] [DayOfMonth] [Month] [DayOfWeek] [H:M:S]"
   const getFormattedTxName = (actionPrefix: string, itemName: string) => {
     const now = new Date();
     const days = [
@@ -274,10 +274,17 @@ export const InventoryManager: React.FC = () => {
       isRtl ? 'الجمعة' : 'Friday',
       isRtl ? 'السبت' : 'Saturday'
     ];
+    const monthsAr = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+    const monthsEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
     const dayName = days[now.getDay()];
+    const monthName = isRtl ? monthsAr[now.getMonth()] : monthsEn[now.getMonth()];
+    const dayOfMonth = now.getDate();
     const timeStr = now.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    return `${actionPrefix} ${itemName} ${dayName} ${timeStr}`;
+    
+    return `${actionPrefix} (${itemName}) ${dayOfMonth} ${monthName} ${dayName} ${timeStr}`;
   };
+
 
   // Submit Add / Edit Product Form
   const handleSubmitProductForm = async (e: React.FormEvent) => {
@@ -360,7 +367,8 @@ export const InventoryManager: React.FC = () => {
             method: methodMapping[paymentMethod],
             notice: paymentNotice.trim(),
             type: txType,
-            name: getFormattedTxName(actionPrefix, existingItem.nameAr || existingItem.name)
+            name: getFormattedTxName(isProduct ? (isRtl ? 'بضاعة توريد منتج' : 'Reload stock') : (isRtl ? 'بضاعة توريد ماده خام' : 'Reload material'), existingItem.nameAr || existingItem.name),
+            stock_fk: existingItem.stock_pk || existingItem.id
           });
 
           if (isProduct && existingItem.product_pk) {
@@ -413,7 +421,8 @@ export const InventoryManager: React.FC = () => {
           method: methodMapping[paymentMethod],
           notice: paymentNotice.trim(),
           type: 'New_Material_Trans',
-          name: getFormattedTxName(isRtl ? 'مادة خام جديدة' : 'New Material', formName.trim())
+          name: getFormattedTxName(isRtl ? 'بضاعة ماده خام جديدة' : 'New Material', formName.trim()),
+          stock_fk: res.data.stock_pk || res.data.id
         });
 
         const createdRawMat: FastItem = {
@@ -477,7 +486,8 @@ export const InventoryManager: React.FC = () => {
           method: methodMapping[paymentMethod],
           notice: paymentNotice.trim(),
           type: 'New_Stock_Trans',
-          name: getFormattedTxName(isRtl ? 'منتج جديد' : 'New Product', formName.trim())
+          name: getFormattedTxName(isRtl ? 'بضاعة منتج جديد' : 'New Product', formName.trim()),
+          stock_fk: res.data.stock_pk || res.data.id
         });
 
         // Update local createdProduct with quantities before adding to state
@@ -633,7 +643,8 @@ export const InventoryManager: React.FC = () => {
       method: methodMapping[paymentMethod],
       notice: paymentNotice.trim(),
       type: txType,
-      name: getFormattedTxName(actionPrefix, restockItemTarget.nameAr || restockItemTarget.name)
+      name: getFormattedTxName(isProduct ? (isRtl ? 'بضاعة توريد منتج' : 'Reload stock') : (isRtl ? 'بضاعة توريد ماده خام' : 'Reload material'), restockItemTarget.nameAr || restockItemTarget.name),
+      stock_fk: restockItemTarget.stock_pk || restockItemTarget.id
     });
 
     alert(isRtl ? `تم توريد (${qty}) قطعة للمخزون وحفظ المعاملة المالية بنجاح!` : `Restocked ${qty} items and recorded financial transaction!`);
