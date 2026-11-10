@@ -65,6 +65,10 @@ export const InventoryManager: React.FC = () => {
   ]);
   const [isAddCategoryModalOpen, setIsAddCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategoryOldName, setEditingCategoryOldName] = useState<string | null>(null);
+  const [editingCategoryNewName, setEditingCategoryNewName] = useState<string>('');
+  const [managingCategoryTarget, setManagingCategoryTarget] = useState<string | null>(null);
+  const [categorySearchTerm, setCategorySearchTerm] = useState<string>('');
 
   // Main View Mode: 'inventory' | 'customers'
   const [mainTab, setMainTab] = useState<'inventory' | 'customers'>('inventory');
@@ -460,7 +464,16 @@ export const InventoryManager: React.FC = () => {
 
   };
 
-  // Add Category Handler ("إنشاء صنف")
+  // Automatically include any categories present in fastItems
+  useEffect(() => {
+    const itemCats = fastItems.map((i) => i.category).filter(Boolean);
+    const unique = Array.from(new Set([...categories, ...itemCats]));
+    if (unique.length !== categories.length) {
+      setCategories(unique);
+    }
+  }, [fastItems]);
+
+  // Category Handlers ("إدارة وتعديل الأصناف")
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     const catName = newCategoryName.trim();
@@ -471,8 +484,70 @@ export const InventoryManager: React.FC = () => {
     }
     setFormCategory(catName);
     setNewCategoryName('');
-    setIsAddCategoryModalOpen(false);
     alert(isRtl ? `تم إضافة صنف جديد: (${catName}) بنجاح!` : `New category (${catName}) added!`);
+  };
+
+  const handleStartRenameCategory = (catName: string) => {
+    setEditingCategoryOldName(catName);
+    setEditingCategoryNewName(catName);
+  };
+
+  const handleSaveRenameCategory = (oldCatName: string) => {
+    const trimmed = editingCategoryNewName.trim();
+    if (!trimmed || trimmed === oldCatName) {
+      setEditingCategoryOldName(null);
+      return;
+    }
+
+    // 1. Update categories list
+    setCategories((prev) => prev.map((c) => (c === oldCatName ? trimmed : c)));
+
+    // 2. Update all items belonging to oldCatName
+    const itemsInCat = fastItems.filter((i) => i.category === oldCatName);
+    itemsInCat.forEach((item) => {
+      updateFastItem(item.id, { category: trimmed });
+    });
+
+    if (formCategory === oldCatName) {
+      setFormCategory(trimmed);
+    }
+
+    setEditingCategoryOldName(null);
+    alert(
+      isRtl
+        ? `تم تعديل مسمى الصنف من (${oldCatName}) إلى (${trimmed}) وتحديث ${itemsInCat.length} عنصر بنجاح!`
+        : `Category renamed to (${trimmed}) and ${itemsInCat.length} items updated!`
+    );
+  };
+
+  const handleDeleteCategory = (catToDelete: string) => {
+    const itemsInCat = fastItems.filter((i) => i.category === catToDelete);
+    const confirmMsg =
+      itemsInCat.length > 0
+        ? isRtl
+          ? `الصنف (${catToDelete}) يحتوي على ${itemsInCat.length} عنصر. عند الحذف سيتم تحويل هذه العناصر إلى صنف (أخرى). هل تريد الحذف؟`
+          : `Category (${catToDelete}) contains ${itemsInCat.length} items. They will be moved to 'Other'. Continue?`
+        : isRtl
+        ? `هل أنت متأكد من حذف الصنف (${catToDelete})؟`
+        : `Delete category (${catToDelete})?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    // Move items to 'أخرى'
+    itemsInCat.forEach((item) => {
+      updateFastItem(item.id, { category: 'أخرى' });
+    });
+
+    // Remove category from array
+    setCategories((prev) => prev.filter((c) => c !== catToDelete));
+
+    if (formCategory === catToDelete) {
+      setFormCategory('أخرى');
+    }
+  };
+
+  const handleMoveItemToCategory = (itemId: string, newCatName: string) => {
+    updateFastItem(itemId, { category: newCatName });
   };
 
   // Open Start WIP Manufacturing Modal
@@ -954,7 +1029,7 @@ export const InventoryManager: React.FC = () => {
               className="p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between cursor-pointer"
             >
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-purple-700">{isRtl ? 'تشجيلات جاري تصنيعها' : 'Active WIP Batches'}</span>
+                <span className="text-xs font-semibold text-purple-700">{isRtl ? 'تشغيلات جاري تصنيعها' : 'Active WIP Batches'}</span>
                 <span className="text-2xl font-extrabold text-purple-900 font-mono mt-1">{activeWipBatches.length}</span>
                 <span className="text-[10px] text-purple-600 font-medium mt-0.5">{isRtl ? 'دفعة قيد الإنتاج' : 'Active production lines'}</span>
               </div>
@@ -1886,53 +1961,260 @@ export const InventoryManager: React.FC = () => {
         </div>
       )}
 
-      {/* --- MODAL FOR CREATE CATEGORY (إنشاء صنف) --- */}
+      {/* --- MODAL FOR CREATE & MANAGE CATEGORIES (إدارة وإنشاء أصناف المنتجات والمواد الخام) --- */}
       {isAddCategoryModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 flex flex-col gap-4 border border-slate-200">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 flex flex-col gap-5 border border-slate-200 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-indigo-600">category</span>
-                <h3 className="text-base font-bold text-slate-900">
-                  {isRtl ? 'إنشاء صنف جديد' : 'Create New Category'}
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                  <span className="material-symbols-outlined">category</span>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {isRtl ? 'إدارة وأصناف المنتجات والمواد الخام' : 'Manage Product & Material Categories'}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {isRtl ? 'إنشاء أصناف جديدة، تعديل مسماها، وحذفها أو تعديل المنتجات المنتمية لها' : 'Create, edit names, delete, or manage items in categories'}
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setIsAddCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+              <button
+                onClick={() => setIsAddCategoryModalOpen(false)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 flex items-center justify-center cursor-pointer"
+              >
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <form onSubmit={handleCreateCategory} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-bold text-slate-800">{isRtl ? 'ادخل اسم الصنف *' : 'Enter Category Name *'}</label>
+            {/* 1. Add New Category Form */}
+            <form onSubmit={handleCreateCategory} className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 flex flex-col gap-3">
+              <label className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-indigo-600 text-sm">add_circle</span>
+                {isRtl ? 'إنشاء صنف جديد' : 'Create New Category'}
+              </label>
+              <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder={isRtl ? 'مثال: إلكترونيات، مستلزمات مكتبية...' : 'e.g. Electronics, Office Supplies...'}
+                  placeholder={isRtl ? 'أدخل اسم الصنف الجديد (مثال: مستلزمات طبية، زيوت، كرتون...)' : 'Enter category name...'}
                   required
-                  autoFocus
-                  className="p-3 rounded-xl border border-slate-300 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                  className="flex-1 p-2.5 rounded-xl bg-white border border-slate-300 text-xs font-bold focus:outline-none focus:border-indigo-500"
                 />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCategoryModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600"
-                >
-                  {isRtl ? 'إلغاء' : 'Cancel'}
-                </button>
                 <button
                   type="submit"
                   style={{ backgroundColor: customPalette.primaryAccent }}
-                  className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 cursor-pointer flex items-center gap-1 shrink-0"
                 >
-                  {isRtl ? 'حفظ الصنف' : 'Save Category'}
+                  <span className="material-symbols-outlined text-sm">add</span>
+                  {isRtl ? 'إضافة الصنف' : 'Add Category'}
                 </button>
               </div>
             </form>
+
+            {/* 2. Search & Filter Available Categories */}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-slate-500 text-sm">list</span>
+                  {isRtl ? 'جميع الأصناف المتاحة بالمخزون' : 'All Available Categories'}
+                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                    {categories.length}
+                  </span>
+                </h4>
+                <div className="relative w-48">
+                  <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">search</span>
+                  <input
+                    type="text"
+                    value={categorySearchTerm}
+                    onChange={(e) => setCategorySearchTerm(e.target.value)}
+                    placeholder={isRtl ? 'بحث في الأصناف...' : 'Filter categories...'}
+                    className="w-full pr-8 pl-2 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Categories List */}
+              <div className="flex flex-col gap-2.5 max-h-80 overflow-y-auto pr-1">
+                {categories
+                  .filter((cat) => !categorySearchTerm.trim() || cat.toLowerCase().includes(categorySearchTerm.trim().toLowerCase()))
+                  .map((cat) => {
+                    const itemsInCat = fastItems.filter((i) => i.category === cat);
+                    const isEditing = editingCategoryOldName === cat;
+                    const isManagingItems = managingCategoryTarget === cat;
+
+                    return (
+                      <div key={cat} className="flex flex-col gap-2 p-3 bg-slate-50/80 border border-slate-200/80 rounded-2xl">
+                        <div className="flex items-center justify-between gap-3">
+                          {/* Category Name & Count */}
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="material-symbols-outlined text-slate-400 text-base">folder</span>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2 flex-1">
+                                <input
+                                  type="text"
+                                  value={editingCategoryNewName}
+                                  onChange={(e) => setEditingCategoryNewName(e.target.value)}
+                                  className="p-1.5 bg-white border border-indigo-500 rounded-lg text-xs font-bold flex-1 focus:outline-none"
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveRenameCategory(cat)}
+                                  className="px-2.5 py-1 bg-emerald-600 text-white text-[11px] font-bold rounded-lg hover:bg-emerald-700 cursor-pointer"
+                                >
+                                  {isRtl ? 'حفظ' : 'Save'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingCategoryOldName(null)}
+                                  className="px-2.5 py-1 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg hover:bg-slate-300 cursor-pointer"
+                                >
+                                  {isRtl ? 'إلغاء' : 'Cancel'}
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900 truncate">{cat}</span>
+                                <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-100">
+                                  {itemsInCat.length} {isRtl ? 'منتج/مادة خام' : 'items'}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Buttons */}
+                          {!isEditing && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {/* Manage Items in Category */}
+                              <button
+                                type="button"
+                                onClick={() => setManagingCategoryTarget(isManagingItems ? null : cat)}
+                                className={`px-2.5 py-1.5 rounded-xl text-[11px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                                  isManagingItems
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                }`}
+                                title={isRtl ? 'عرض وتعديل المنتجات المنتمية لهذا الصنف' : 'Manage Included Items'}
+                              >
+                                <span className="material-symbols-outlined text-xs">format_list_bulleted</span>
+                                {isRtl ? 'المنتجات' : 'Items'}
+                              </button>
+
+                              {/* Rename Category Name */}
+                              <button
+                                type="button"
+                                onClick={() => handleStartRenameCategory(cat)}
+                                className="p-1.5 rounded-xl bg-white text-slate-600 border border-slate-200 hover:bg-slate-100 cursor-pointer"
+                                title={isRtl ? 'تعديل مسمى الصنف' : 'Rename Category'}
+                              >
+                                <span className="material-symbols-outlined text-xs">edit</span>
+                              </button>
+
+                              {/* Delete Category */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCategory(cat)}
+                                className="p-1.5 rounded-xl bg-white text-red-600 border border-slate-200 hover:bg-red-50 cursor-pointer"
+                                title={isRtl ? 'حذف الصنف' : 'Delete Category'}
+                              >
+                                <span className="material-symbols-outlined text-xs">delete</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Expandable Items List inside Category */}
+                        {isManagingItems && (
+                          <div className="mt-2 pt-2 border-t border-slate-200 flex flex-col gap-2 bg-white p-3 rounded-xl">
+                            <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                              <span>{isRtl ? `العناصر المنتمية لصنف (${cat}):` : `Items in (${cat}):`}</span>
+                              <span className="text-[10px] text-slate-400">
+                                {isRtl ? 'يمكنك نقل أي عنصر لصنف آخر هنا' : 'Reassign item category'}
+                              </span>
+                            </div>
+
+                            {itemsInCat.length === 0 ? (
+                              <div className="text-[11px] text-slate-400 italic py-2 text-center">
+                                {isRtl ? 'لا توجد منتجات أو مواد خام تحت هذا الصنف حالياً' : 'No items under this category'}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                                {itemsInCat.map((item) => (
+                                  <div key={item.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-lg border border-slate-100 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="material-symbols-outlined text-slate-400 text-sm">
+                                        {item.inventoryType === 'raw_material' ? 'raw_material' : 'inventory_2'}
+                                      </span>
+                                      <span className="font-bold text-slate-800">{item.nameAr || item.name}</span>
+                                      <span className="text-[10px] text-slate-400 font-mono">({item.code || item.id.slice(-4)})</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-slate-500">{isRtl ? 'تحويل إلى:' : 'Move to:'}</span>
+                                      <select
+                                        value={item.category}
+                                        onChange={(e) => handleMoveItemToCategory(item.id, e.target.value)}
+                                        className="text-[11px] font-bold p-1 bg-white border border-slate-300 rounded-md focus:outline-none"
+                                      >
+                                        {categories.map((targetCat) => (
+                                          <option key={targetCat} value={targetCat}>
+                                            {targetCat}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Add existing item from other categories to this category */}
+                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-indigo-700 shrink-0">
+                                {isRtl ? 'إضافة عنصر لهذا الصنف:' : 'Add item to this category:'}
+                              </span>
+                              <select
+                                defaultValue=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleMoveItemToCategory(e.target.value, cat);
+                                    e.target.value = '';
+                                  }
+                                }}
+                                className="text-[11px] font-bold p-1.5 bg-slate-50 border border-indigo-200 text-indigo-900 rounded-lg flex-1 focus:outline-none"
+                              >
+                                <option value="" disabled>
+                                  {isRtl ? 'اختر عنصراً لنقله لهذا الصنف...' : 'Select item to move here...'}
+                                </option>
+                                {fastItems
+                                  .filter((i) => i.category !== cat)
+                                  .map((otherItem) => (
+                                    <option key={otherItem.id} value={otherItem.id}>
+                                      {otherItem.nameAr || otherItem.name} ({otherItem.category})
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsAddCategoryModalOpen(false)}
+                className="px-5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}

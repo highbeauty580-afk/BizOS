@@ -12,6 +12,13 @@ import {
 import { fetchProductsFromSupabase } from '../lib/productsService';
 import { fetchStockFromSupabase, updateStockQuantityInSupabase } from '../lib/stockService';
 import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
+import {
+  addOrderToSupabase,
+  updateOrderStatusInSupabase,
+  DEFAULT_DELIVERY_STATUS,
+  DEFAULT_PREPARING_STATUS,
+  DEFAULT_ORDER_STATUS,
+} from '../lib/ordersService';
 
 export const SalesCashier: React.FC = () => {
   const {
@@ -33,6 +40,7 @@ export const SalesCashier: React.FC = () => {
     deductStockForTransaction,
     returnTransactionItems,
     setTransactions,
+    updateTransactionOrderStatus,
   } = useApp();
 
   const isRtl = language === 'ar';
@@ -132,10 +140,17 @@ export const SalesCashier: React.FC = () => {
     return `${actorName} ${actionSuffix} ${dayOfMonth} ${monthName} ${dayName} ${timeStr}`;
   };
 
-  // Filtered Catalog Items
+  // Filtered Catalog Items (Only Products - Exclude Raw Materials)
   const filteredCatalog = fastItems.filter((item) => {
+    const isRawMaterial =
+      item.inventoryType === 'raw_material' ||
+      item.category === 'Raw Materials' ||
+      item.category === 'مواد خام';
+    if (isRawMaterial) return false;
+
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
-    const nameMatch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const nameMatch =
+      item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.nameAr && item.nameAr.includes(searchTerm)) ||
       (item.code && item.code.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && nameMatch;
@@ -432,8 +447,27 @@ export const SalesCashier: React.FC = () => {
     const itemsSummaryStr = cart.map((i) => `${i.quantity}x ${i.name}`).join(', ');
 
     const finalCustomerName = selectedCustomer ? selectedCustomer.name : (isRtl ? 'عميل نقدي' : 'Cash Customer');
+    const finalCustomerPhone1 = selectedCustomer ? (selectedCustomer.phone || '') : '';
+    const finalCustomerPhone2 = selectedCustomer ? (selectedCustomer.phone2 || '') : '';
+    const finalCustomerAddress = selectedCustomer ? (selectedCustomer.address || '') : '';
+
+    // --- SYNC WITH SUPABASE: public.orders (Order & Delivery Management) ---
+    const orderRes = await addOrderToSupabase({
+      customerName: finalCustomerName,
+      customerPhone1: finalCustomerPhone1,
+      customerPhone2: finalCustomerPhone2,
+      customerAddress: finalCustomerAddress,
+      totalPrice: total,
+      paymentMethod,
+      deliveryStatus: DEFAULT_DELIVERY_STATUS,
+      preparingStatus: DEFAULT_PREPARING_STATUS,
+      orderStatus: DEFAULT_ORDER_STATUS,
+    });
+
+    const createdOrderId = orderRes.data?.id;
 
     const newTx: Omit<Transaction, 'id'> = {
+      orderId: createdOrderId,
       receiptNo,
       time: timeStr,
       date: dateStr,
@@ -449,6 +483,12 @@ export const SalesCashier: React.FC = () => {
       amountPaid: numericPaid,
       changeDue,
       customerName: finalCustomerName,
+      customerPhone1: finalCustomerPhone1,
+      customerPhone2: finalCustomerPhone2,
+      customerAddress: finalCustomerAddress,
+      deliveryStatus: DEFAULT_DELIVERY_STATUS,
+      preparingStatus: DEFAULT_PREPARING_STATUS,
+      orderStatus: DEFAULT_ORDER_STATUS,
     };
 
     // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
@@ -1537,10 +1577,13 @@ export const SalesCashier: React.FC = () => {
                   <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-600 font-bold">
                     <th className="p-3">{isRtl ? 'رقم الفاتورة' : 'Receipt No'}</th>
                     <th className="p-3">{isRtl ? 'التاريخ والوقت' : 'Date & Time'}</th>
-                    <th className="p-3">{isRtl ? 'العميل' : 'Customer'}</th>
+                    <th className="p-3">{isRtl ? 'العميل وبياناته' : 'Customer & Contact'}</th>
                     <th className="p-3">{isRtl ? 'الملخص' : 'Items'}</th>
                     <th className="p-3">{isRtl ? 'طريقة الدفع' : 'Payment'}</th>
                     <th className="p-3">{isRtl ? 'الإجمالي' : 'Total'}</th>
+                    <th className="p-3 text-center">{isRtl ? 'حالة التحضير' : 'Prep Status'}</th>
+                    <th className="p-3 text-center">{isRtl ? 'حالة التوصيل' : 'Delivery Status'}</th>
+                    <th className="p-3 text-center">{isRtl ? 'حالة الطلب' : 'Order Status'}</th>
                     <th className="p-3 text-center">{isRtl ? 'إجراء' : 'Action'}</th>
                   </tr>
                 </thead>
@@ -1551,7 +1594,17 @@ export const SalesCashier: React.FC = () => {
                       <tr key={tx.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="p-3 font-mono font-bold text-indigo-600">{tx.receiptNo}</td>
                         <td className="p-3 text-slate-600 font-mono">{tx.date} • {tx.time}</td>
-                        <td className="p-3 font-medium text-slate-900">{tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')}</td>
+                        <td className="p-3 font-medium text-slate-900">
+                          <div className="flex flex-col">
+                            <span className="font-bold">{tx.customerName || (isRtl ? 'عميل نقدي' : 'Cash')}</span>
+                            {(tx.customerPhone1 || tx.customerAddress) && (
+                              <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1 mt-0.5">
+                                {tx.customerPhone1 && <span>{tx.customerPhone1}</span>}
+                                {tx.customerAddress && <span className="truncate max-w-[130px]">• {tx.customerAddress}</span>}
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3 text-slate-600 max-w-xs truncate">{tx.itemsSummary}</td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded-full font-semibold text-[11px] ${isReturned ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'}`}>
@@ -1559,6 +1612,77 @@ export const SalesCashier: React.FC = () => {
                           </span>
                         </td>
                         <td className="p-3 font-extrabold text-slate-900 font-mono">${tx.total.toFixed(2)}</td>
+
+                        {/* حالة التحضير (Preparing_Status) */}
+                        <td className="p-2.5 text-center">
+                          <select
+                            value={tx.preparingStatus || 'تم البدء فيه'}
+                            disabled={isReturned}
+                            onChange={async (e) => {
+                              const val = e.target.value;
+                              await updateTransactionOrderStatus(tx.id, tx.orderId, { preparingStatus: val });
+                            }}
+                            className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                              (tx.preparingStatus || 'تم البدء فيه') === 'تم الانتهاء من تحضيره'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : (tx.preparingStatus || 'تم البدء فيه') === 'جاري العمل عليه'
+                                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                                : 'bg-blue-50 text-blue-800 border-blue-300'
+                            }`}
+                          >
+                            <option value="تم البدء فيه">تم البدء فيه</option>
+                            <option value="جاري العمل عليه">جاري العمل عليه</option>
+                            <option value="تم الانتهاء من تحضيره">تم الانتهاء من تحضيره</option>
+                          </select>
+                        </td>
+
+                        {/* حالة التوصيل (delivery_status) */}
+                        <td className="p-2.5 text-center">
+                          <select
+                            value={tx.deliveryStatus || 'فى انتظار انتهاء التحضير'}
+                            disabled={isReturned}
+                            onChange={async (e) => {
+                              const val = e.target.value;
+                              await updateTransactionOrderStatus(tx.id, tx.orderId, { deliveryStatus: val });
+                            }}
+                            className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                              (tx.deliveryStatus || 'فى انتظار انتهاء التحضير') === 'تم التوصيل'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : (tx.deliveryStatus || 'فى انتظار انتهاء التحضير') === 'فى الشحن'
+                                ? 'bg-indigo-50 text-indigo-800 border-indigo-300'
+                                : 'bg-slate-100 text-slate-800 border-slate-300'
+                            }`}
+                          >
+                            <option value="فى انتظار انتهاء التحضير">فى انتظار انتهاء التحضير</option>
+                            <option value="فى الشحن">فى الشحن</option>
+                            <option value="تم التوصيل">تم التوصيل</option>
+                          </select>
+                        </td>
+
+                        {/* حالة الطلب (order_status) */}
+                        <td className="p-2.5 text-center">
+                          <select
+                            value={tx.orderStatus || (isReturned ? 'مرتجع' : 'يتم تحضيره')}
+                            onChange={async (e) => {
+                              const val = e.target.value;
+                              await updateTransactionOrderStatus(tx.id, tx.orderId, { orderStatus: val });
+                            }}
+                            className={`text-[11px] font-bold px-2 py-1 rounded-lg border focus:outline-none transition-colors cursor-pointer ${
+                              (tx.orderStatus || (isReturned ? 'مرتجع' : 'يتم تحضيره')) === 'تم توصيله'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : (tx.orderStatus || (isReturned ? 'مرتجع' : 'يتم تحضيره')) === 'يتم توصيله'
+                                ? 'bg-purple-50 text-purple-800 border-purple-300'
+                                : (tx.orderStatus || (isReturned ? 'مرتجع' : 'يتم تحضيره')) === 'مرتجع'
+                                ? 'bg-rose-50 text-rose-800 border-rose-300'
+                                : 'bg-amber-50 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            <option value="يتم تحضيره">يتم تحضيره</option>
+                            <option value="يتم توصيله">يتم توصيله</option>
+                            <option value="تم توصيله">تم توصيله</option>
+                            <option value="مرتجع">مرتجع</option>
+                          </select>
+                        </td>
                         <td className="p-3 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
@@ -1610,9 +1734,14 @@ export const SalesCashier: React.FC = () => {
                                       }
                                     }
                                     
-                                    // 3. Update Local State
+                                    // 3. Update Supabase Orders Status to 'مرتجع'
+                                    if (tx.orderId) {
+                                      await updateOrderStatusInSupabase(tx.orderId, { orderStatus: 'مرتجع' });
+                                    }
+
+                                    // 4. Update Local State
                                     returnTransactionItems(tx.items, tx.receiptNo, 'Customer Return');
-                                    setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned' } : t));
+                                    setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned', orderStatus: 'مرتجع' } : t));
                                     
                                     alert(isRtl ? 'تم إرجاع الفاتورة وتحديث المخزون بنجاح!' : 'Transaction returned and stock updated!');
                                   }
@@ -2228,9 +2357,39 @@ export const SalesCashier: React.FC = () => {
                 <span>{isRtl ? 'العميل:' : 'Customer:'}</span>
                 <span className="font-bold text-slate-800">{viewingReceipt.customerName || 'عميل نقدي'}</span>
               </div>
+              {(viewingReceipt.customerPhone1 || viewingReceipt.customerPhone2) && (
+                <div className="flex justify-between text-slate-600">
+                  <span>{isRtl ? 'أرقام الهاتف:' : 'Phone Numbers:'}</span>
+                  <span className="font-mono font-bold text-slate-700">
+                    {viewingReceipt.customerPhone1} {viewingReceipt.customerPhone2 ? `• ${viewingReceipt.customerPhone2}` : ''}
+                  </span>
+                </div>
+              )}
+              {viewingReceipt.customerAddress && (
+                <div className="flex justify-between text-slate-600">
+                  <span>{isRtl ? 'العنوان:' : 'Address:'}</span>
+                  <span className="font-medium text-slate-700">{viewingReceipt.customerAddress}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-600">
                 <span>{isRtl ? 'طريقة الدفع:' : 'Payment:'}</span>
                 <span className="font-semibold">{viewingReceipt.paymentMethod}</span>
+              </div>
+              
+              {/* Order Statuses from public.orders */}
+              <div className="grid grid-cols-3 gap-1.5 pt-2 mt-1 border-t border-slate-100 text-[10px]">
+                <div className="flex flex-col items-center bg-blue-50/80 p-1.5 rounded-lg border border-blue-100">
+                  <span className="text-slate-500">{isRtl ? 'التحضير' : 'Prep'}</span>
+                  <span className="font-bold text-blue-800">{viewingReceipt.preparingStatus || 'تم البدء فيه'}</span>
+                </div>
+                <div className="flex flex-col items-center bg-indigo-50/80 p-1.5 rounded-lg border border-indigo-100">
+                  <span className="text-slate-500">{isRtl ? 'التوصيل' : 'Delivery'}</span>
+                  <span className="font-bold text-indigo-800">{viewingReceipt.deliveryStatus || 'فى انتظار انتهاء التحضير'}</span>
+                </div>
+                <div className="flex flex-col items-center bg-purple-50/80 p-1.5 rounded-lg border border-purple-100">
+                  <span className="text-slate-500">{isRtl ? 'حالة الطلب' : 'Status'}</span>
+                  <span className="font-bold text-purple-800">{viewingReceipt.orderStatus || 'يتم تحضيره'}</span>
+                </div>
               </div>
             </div>
 

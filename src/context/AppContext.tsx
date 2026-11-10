@@ -46,6 +46,14 @@ import {
   updateFinancialTransactionInSupabase,
   deleteFinancialTransactionInSupabase,
 } from '../lib/transactionsService';
+import {
+  fetchOrdersFromSupabase,
+  addOrderToSupabase,
+  updateOrderStatusInSupabase,
+  DEFAULT_DELIVERY_STATUS,
+  DEFAULT_PREPARING_STATUS,
+  DEFAULT_ORDER_STATUS,
+} from '../lib/ordersService';
 import { isSupabaseConfigured } from '../lib/supabase';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
@@ -228,6 +236,11 @@ interface AppContextType {
   setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
   updateTransactionNote: (id: string, note: string) => void;
+  updateTransactionOrderStatus: (
+    txId: string,
+    orderId: string | number | undefined,
+    updates: { deliveryStatus?: string; preparingStatus?: string; orderStatus?: string }
+  ) => Promise<void>;
 
   // Work in Progress (WIP / Manufacturing) State
   wipBatches: WipBatch[];
@@ -394,11 +407,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setExpenses(expRes.data);
       }
 
-      // 4. Fetch Sales Transactions
+      // 4. Fetch Sales Transactions & Orders from Supabase
       const salesRes = await fetchSalesTransactionsFromSupabase();
-      if (salesRes.data) {
-        setTransactions(salesRes.data);
-      }
+      const ordersRes = await fetchOrdersFromSupabase();
+
+      const ordersList = ordersRes.data || [];
+      let txList: Transaction[] = (salesRes.data || []) as Transaction[];
+
+      // Link orders with transactions
+      txList = txList.map((tx) => {
+        const matchedOrder = ordersList.find(
+          (o) => o.id === tx.orderId || (o.customerName === tx.customerName && Math.abs(o.totalPrice - tx.total) < 0.01)
+        );
+        if (matchedOrder) {
+          return {
+            ...tx,
+            orderId: matchedOrder.id,
+            customerPhone1: matchedOrder.customerPhone1 || tx.customerPhone1,
+            customerPhone2: matchedOrder.customerPhone2 || tx.customerPhone2,
+            customerAddress: matchedOrder.customerAddress || tx.customerAddress,
+            deliveryStatus: matchedOrder.deliveryStatus || tx.deliveryStatus || DEFAULT_DELIVERY_STATUS,
+            preparingStatus: matchedOrder.preparingStatus || tx.preparingStatus || DEFAULT_PREPARING_STATUS,
+            orderStatus: matchedOrder.orderStatus || tx.orderStatus || (tx.status === 'Returned' ? 'مرتجع' : DEFAULT_ORDER_STATUS),
+          };
+        }
+        return {
+          ...tx,
+          deliveryStatus: tx.deliveryStatus || DEFAULT_DELIVERY_STATUS,
+          preparingStatus: tx.preparingStatus || DEFAULT_PREPARING_STATUS,
+          orderStatus: tx.orderStatus || (tx.status === 'Returned' ? 'مرتجع' : DEFAULT_ORDER_STATUS),
+        };
+      });
+
+      // Any order not in transactions yet, add as transaction
+      ordersList.forEach((order) => {
+        const alreadyInTx = txList.some(
+          (t) => t.orderId === order.id || (t.customerName === order.customerName && Math.abs(t.total - order.totalPrice) < 0.01)
+        );
+        if (!alreadyInTx) {
+          txList.push({
+            id: `ord-tx-${order.id}`,
+            orderId: order.id,
+            receiptNo: `ORD-${String(order.id).slice(-4)}`,
+            time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+            itemsSummary: `طلب من ${order.customerName}`,
+            items: [],
+            subtotal: order.totalPrice,
+            tax: 0,
+            total: order.totalPrice,
+            paymentMethod: (order.paymentMethod as any) || 'Cash',
+            status: order.orderStatus === 'مرتجع' ? 'Returned' : 'Completed',
+            shiftNotes: '',
+            cashier: 'الكاشير الرئيسية',
+            customerName: order.customerName,
+            customerPhone1: order.customerPhone1,
+            customerPhone2: order.customerPhone2,
+            customerAddress: order.customerAddress,
+            deliveryStatus: order.deliveryStatus,
+            preparingStatus: order.preparingStatus,
+            orderStatus: order.orderStatus,
+          });
+        }
+      });
+
+      setTransactions(txList);
 
       setFetchError(null);
     } catch (err: any) {
@@ -657,6 +730,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransactions((prev) =>
       prev.map((t) => (t.id === id ? { ...t, shiftNotes: note } : t))
     );
+  };
+
+  const updateTransactionOrderStatus = async (
+    txId: string,
+    orderId: string | number | undefined,
+    updates: { deliveryStatus?: string; preparingStatus?: string; orderStatus?: string }
+  ) => {
+    setTransactions((prev) =>
+      prev.map((t) => {
+        if (t.id === txId) {
+          return {
+            ...t,
+            deliveryStatus: updates.deliveryStatus !== undefined ? updates.deliveryStatus : t.deliveryStatus,
+            preparingStatus: updates.preparingStatus !== undefined ? updates.preparingStatus : t.preparingStatus,
+            orderStatus: updates.orderStatus !== undefined ? updates.orderStatus : t.orderStatus,
+            status: updates.orderStatus === 'مرتجع' ? 'Returned' : t.status,
+          };
+        }
+        return t;
+      })
+    );
+
+    if (orderId) {
+      setIsSyncing(true);
+      await updateOrderStatusInSupabase(orderId, updates);
+      setIsSyncing(false);
+    }
   };
 
   // Pending Sales Handlers
@@ -937,6 +1037,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setTransactions,
         addTransaction,
         updateTransactionNote,
+        updateTransactionOrderStatus,
 
         pendingSales,
         holdSale,

@@ -127,6 +127,7 @@ export interface StagedItem {
 
 export interface Transaction {
   id: string;
+  orderId?: string | number;
   receiptNo: string;
   time: string;
   date: string;
@@ -142,6 +143,12 @@ export interface Transaction {
   amountPaid?: number;
   changeDue?: number;
   customerName?: string;
+  customerPhone1?: string;
+  customerPhone2?: string;
+  customerAddress?: string;
+  deliveryStatus?: string;
+  preparingStatus?: string;
+  orderStatus?: string;
 }
 
 export interface PendingSale {
