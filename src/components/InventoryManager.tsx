@@ -336,12 +336,6 @@ export const InventoryManager: React.FC = () => {
       alert(isRtl ? 'تم تحديث بيانات الصنف بالمخزون بنجاح!' : 'Stock item updated successfully!');
       setIsAddEditModalOpen(false);
     } else {
-      // MANDATORY PAYMENT NOTICE VALIDATION
-      if (!paymentNotice.trim()) {
-        setFormError(isRtl ? 'يرجى إدخال ملحوظة الدفع (حقل إجباري)' : 'Payment notice is required.');
-        return;
-      }
-
       // CHECK IF ITEM ALREADY EXISTS (RE-SUPPLY LOGIC)
       const existingItem = fastItems.find(i => 
         i.name.toLowerCase() === formName.trim().toLowerCase() || 
@@ -364,8 +358,8 @@ export const InventoryManager: React.FC = () => {
           
           await addFinancialTransactionToSupabase({
             amount: targetCost * addedQty,
-            method: methodMapping[paymentMethod],
-            notice: paymentNotice.trim(),
+            method: methodMapping[paymentMethod] || 'Cash',
+            notice: paymentNotice.trim() || (isRtl ? 'تجديد توريد للمخزون' : 'Stock supply reload'),
             type: txType,
             name: getFormattedTxName(isProduct ? (isRtl ? 'بضاعة توريد منتج' : 'Reload stock') : (isRtl ? 'بضاعة توريد ماده خام' : 'Reload material'), existingItem.nameAr || existingItem.name),
             stock_fk: existingItem.stock_pk || existingItem.id
@@ -418,11 +412,11 @@ export const InventoryManager: React.FC = () => {
         const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
         await addFinancialTransactionToSupabase({
           amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum),
-          method: methodMapping[paymentMethod],
-          notice: paymentNotice.trim(),
+          method: methodMapping[paymentMethod] || 'Cash',
+          notice: paymentNotice.trim() || (isRtl ? 'مادة خام جديدة' : 'New Raw Material'),
           type: 'New_Material_Trans',
           name: getFormattedTxName(isRtl ? 'بضاعة ماده خام جديدة' : 'New Material', formName.trim()),
-          stock_fk: res.data.stock_pk || res.data.id
+          stock_fk: res.data?.stock_pk || res.data?.id
         });
 
         const createdRawMat: FastItem = {
@@ -477,17 +471,17 @@ export const InventoryManager: React.FC = () => {
           stock_code: formCode.trim() || undefined,
           measure_stype: formUnit.trim() || 'قطعة',
         };
-        await addStockToSupabase(stockParams);
+        const stockRes = await addStockToSupabase(stockParams);
 
         // Record Financial Transaction for New Finished Good
         const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
         await addFinancialTransactionToSupabase({
           amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum),
-          method: methodMapping[paymentMethod],
-          notice: paymentNotice.trim(),
+          method: methodMapping[paymentMethod] || 'Cash',
+          notice: paymentNotice.trim() || (isRtl ? 'منتج جديد للمخزون' : 'New Product Stock'),
           type: 'New_Stock_Trans',
           name: getFormattedTxName(isRtl ? 'بضاعة منتج جديد' : 'New Product', formName.trim()),
-          stock_fk: res.data.stock_pk || res.data.id
+          stock_fk: stockRes.data?.stock_pk || stockRes.data?.id || createdProduct.id
         });
 
         // Update local createdProduct with quantities before adding to state
@@ -611,12 +605,6 @@ export const InventoryManager: React.FC = () => {
     e.preventDefault();
     if (!restockItemTarget) return;
 
-    // MANDATORY PAYMENT NOTICE VALIDATION
-    if (!paymentNotice.trim()) {
-      alert(isRtl ? 'يرجى إدخال ملحوظة الدفع (حقل إجباري)' : 'Payment notice is required.');
-      return;
-    }
-
     const qty = parseInt(restockQty, 10);
     if (isNaN(qty) || qty <= 0) return;
 
@@ -635,13 +623,12 @@ export const InventoryManager: React.FC = () => {
 
     // Record Financial Transaction for Restock
     const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
-    const actionPrefix = isProduct ? (isRtl ? 'توريد منتج' : 'Reload stock') : (isRtl ? 'توريد مادة خام' : 'Reload material');
     const txType = isProduct ? 'Reload_stock_Trans' : 'ReLoad_material_Trans';
 
     await addFinancialTransactionToSupabase({
       amount: cost * qty,
-      method: methodMapping[paymentMethod],
-      notice: paymentNotice.trim(),
+      method: methodMapping[paymentMethod] || 'Cash',
+      notice: paymentNotice.trim() || (isRtl ? 'توريد كمية للمخزون' : 'Stock Replenishment'),
       type: txType,
       name: getFormattedTxName(isProduct ? (isRtl ? 'بضاعة توريد منتج' : 'Reload stock') : (isRtl ? 'بضاعة توريد ماده خام' : 'Reload material'), restockItemTarget.nameAr || restockItemTarget.name),
       stock_fk: restockItemTarget.stock_pk || restockItemTarget.id

@@ -40,10 +40,21 @@ export async function addFinancialTransactionToSupabase(
       cleanPayload.Stock_fk = params.stock_fk;
     }
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('transactions')
       .insert([cleanPayload])
       .select();
+
+    if (error && params.stock_fk) {
+      console.warn(`⚠️ Retrying financial transaction without Stock_fk due to schema/constraint error:`, error.message);
+      delete cleanPayload.Stock_fk;
+      const retryRes = await supabase
+        .from('transactions')
+        .insert([cleanPayload])
+        .select();
+      data = retryRes.data;
+      error = retryRes.error;
+    }
 
     if (error) {
       console.error(`❌ Supabase Error in financial transactions:`, error.message, error.details);
