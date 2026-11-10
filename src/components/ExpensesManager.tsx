@@ -197,7 +197,7 @@ export const ExpensesManager: React.FC = () => {
         amount: parsedAmount,
         method: paymentMethod,
         notice: paymentNotice.trim(),
-        type: 'Expense_Trans',
+        type: category,
         name: getFormattedTxName(category)
       });
 
