@@ -140,12 +140,13 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#fafbfe] text-slate-900 font-sans"
+      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#f8f9fd] text-slate-900 font-sans"
       style={{
         backgroundImage: `
-          radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.12) 0%, transparent 50%),
-          radial-gradient(circle at 50% 100%, rgba(139, 92, 246, 0.08) 0%, transparent 45%),
-          linear-gradient(180deg, #fafbfe 0%, #ffffff 100%)
+          radial-gradient(circle at 50% 15%, rgba(124, 58, 237, 0.15) 0%, transparent 48%),
+          radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
+          radial-gradient(circle at 15% 75%, rgba(168, 85, 247, 0.10) 0%, transparent 45%),
+          linear-gradient(180deg, #f8f9fd 0%, #ffffff 100%)
         `,
       }}
     >
@@ -208,8 +209,8 @@ export const LoginPage: React.FC = () => {
               : 'Enter your email address and we will send you a reset link.')}
         </p>
 
-        {/* Clean Center Card */}
-        <div className="w-full max-w-[420px] bg-white rounded-3xl border border-slate-200/80 p-7 sm:p-8 shadow-[0_20px_50px_-12px_rgba(79,70,229,0.08)] transition-all">
+        {/* Clean Center Card with Glassmorphism depth */}
+        <div className="w-full max-w-[420px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/90 p-7 sm:p-8 shadow-[0_25px_60px_-15px_rgba(124,58,237,0.14),0_10px_25px_-5px_rgba(0,0,0,0.05)] transition-all">
           {/* Error Banner */}
           {displayError && (
             <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2 animate-in fade-in duration-200">
@@ -347,7 +348,7 @@ export const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-[#4f46e5] to-[#4338ca] hover:from-[#4338ca] hover:to-[#3730a3] text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/35 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-700 hover:via-indigo-700 hover:to-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_15px_30px_-5px_rgba(124,58,237,0.45)] hover:shadow-[0_20px_35px_-5px_rgba(124,58,237,0.6)] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center gap-2 border border-white/20"
               >
                 {isSubmitting ? (
                   <>

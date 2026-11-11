@@ -56,6 +56,7 @@ import {
   DEFAULT_ORDER_STATUS,
 } from '../lib/ordersService';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
   indigo: {
@@ -526,9 +527,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const { user } = useAuth();
+
   useEffect(() => {
-    refreshDataFromSupabase();
-  }, []);
+    if (user) {
+      refreshDataFromSupabase();
+    } else {
+      // Clear data if user logs out
+      setCustomers([]);
+      setFastItems([]);
+      setTransactions([]);
+      setExpenses([]);
+    }
+  }, [user]);
 
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
