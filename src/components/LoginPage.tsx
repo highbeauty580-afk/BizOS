@@ -140,21 +140,46 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#f8f9fd] text-slate-900 font-sans"
-      style={{
-        backgroundImage: `
-          radial-gradient(circle at 50% 15%, rgba(124, 58, 237, 0.15) 0%, transparent 48%),
-          radial-gradient(circle at 85% 85%, rgba(99, 102, 241, 0.12) 0%, transparent 45%),
-          radial-gradient(circle at 15% 75%, rgba(168, 85, 247, 0.10) 0%, transparent 45%),
-          linear-gradient(180deg, #f8f9fd 0%, #ffffff 100%)
-        `,
-      }}
+      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#faf8ff] text-slate-900 font-sans selection:bg-purple-100 selection:text-purple-900"
     >
+      {/* Ambient Purple Mesh Gradient Orbs */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Top/Center soft glowing purple orb */}
+        <div 
+          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[520px] rounded-full blur-[130px] opacity-75"
+          style={{
+            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.28) 0%, rgba(124, 58, 237, 0.18) 45%, rgba(99, 102, 241, 0.08) 70%, transparent 100%)',
+          }}
+        />
+        {/* Bottom Left ambient glow */}
+        <div 
+          className="absolute -bottom-40 -left-24 w-[500px] h-[500px] rounded-full blur-[140px] opacity-60"
+          style={{
+            background: 'radial-gradient(circle, rgba(147, 51, 234, 0.22) 0%, rgba(192, 132, 252, 0.12) 50%, transparent 100%)',
+          }}
+        />
+        {/* Bottom Right ambient glow */}
+        <div 
+          className="absolute -bottom-36 -right-20 w-[550px] h-[550px] rounded-full blur-[150px] opacity-60"
+          style={{
+            background: 'radial-gradient(circle, rgba(124, 58, 237, 0.20) 0%, rgba(99, 102, 241, 0.12) 50%, transparent 100%)',
+          }}
+        />
+        {/* Subtle grid pattern overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.025]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 50% 50%, #7c3aed 1px, transparent 1px)`,
+            backgroundSize: '32px 32px',
+          }}
+        />
+      </div>
+
       {/* Top Bar with Brand Logo and Language Toggle */}
-      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between z-10">
+      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between z-10 relative">
         {/* Brand Logo matching the screenshot */}
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-500 flex flex-col items-center justify-center gap-1 shadow-md shadow-indigo-500/20">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-500 flex flex-col items-center justify-center gap-1 shadow-md shadow-purple-600/25">
             <span className="w-4 h-0.5 bg-white rounded-full"></span>
             <span className="w-4 h-0.5 bg-white/90 rounded-full"></span>
             <span className="w-2.5 h-0.5 bg-white/80 rounded-full self-start ml-2.5"></span>
@@ -166,19 +191,19 @@ export const LoginPage: React.FC = () => {
         <button
           type="button"
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-slate-200 bg-white/90 hover:bg-white text-slate-700 text-xs font-semibold shadow-xs hover:border-slate-300 transition-all cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-purple-200/70 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold shadow-xs hover:border-purple-300 transition-all cursor-pointer backdrop-blur-md"
           title="Switch Language / تغيير اللغة"
         >
-          <span className="material-symbols-outlined text-sm text-indigo-600">translate</span>
+          <span className="material-symbols-outlined text-sm text-purple-600">translate</span>
           <span className="uppercase text-[11px] font-bold">{language === 'en' ? 'العربية' : 'English'}</span>
         </button>
       </header>
 
       {/* Main Form Centerpiece */}
-      <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 z-10">
+      <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 z-10 relative">
         {/* Pill Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-100/90 border border-slate-200/60 shadow-xs mb-3 text-slate-600 text-[11px] font-bold tracking-widest uppercase">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 border border-purple-200/80 shadow-[0_2px_10px_-2px_rgba(124,58,237,0.15)] mb-3.5 text-purple-900 text-[11px] font-bold tracking-widest uppercase backdrop-blur-md">
+          <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)]"></span>
           <span>
             {mode === 'signin' && (isRtl ? 'مرحباً بك مجدداً' : 'WELCOME BACK')}
             {mode === 'signup' && (isRtl ? 'حساب جديد' : 'CREATE ACCOUNT')}
@@ -194,7 +219,7 @@ export const LoginPage: React.FC = () => {
         </h1>
 
         {/* Subtitle */}
-        <p className="text-slate-500 text-sm sm:text-base max-w-sm text-center mb-7 font-normal">
+        <p className="text-slate-500 text-sm sm:text-base max-w-sm text-center mb-8 font-normal leading-relaxed">
           {mode === 'signin' &&
             (isRtl
               ? 'تابع عملك من حيث توقفت في مساحة العمل الخاصة بك.'
@@ -209,8 +234,18 @@ export const LoginPage: React.FC = () => {
               : 'Enter your email address and we will send you a reset link.')}
         </p>
 
-        {/* Clean Center Card with Glassmorphism depth */}
-        <div className="w-full max-w-[420px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/90 p-7 sm:p-8 shadow-[0_25px_60px_-15px_rgba(124,58,237,0.14),0_10px_25px_-5px_rgba(0,0,0,0.05)] transition-all">
+        {/* Floating Card with Deep Diffused Soft Shadows & Glassmorphism Depth */}
+        <div 
+          className="w-full max-w-[420px] bg-white/90 backdrop-blur-2xl rounded-3xl border border-white/80 p-7 sm:p-9 transition-all relative"
+          style={{
+            boxShadow: `
+              0 30px 70px -15px rgba(124, 58, 237, 0.16),
+              0 15px 35px -10px rgba(99, 102, 241, 0.12),
+              0 4px 12px rgba(0, 0, 0, 0.03),
+              inset 0 1px 1px 0 rgba(255, 255, 255, 0.9)
+            `,
+          }}
+        >
           {/* Error Banner */}
           {displayError && (
             <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2 animate-in fade-in duration-200">
@@ -343,12 +378,20 @@ export const LoginPage: React.FC = () => {
               </div>
             )}
 
-            {/* Submit Primary Button */}
-            <div className="pt-2">
+            {/* Submit Primary Action Button with Vibrant Purple Gradient & 3D Layered Glow */}
+            <div className="pt-2 relative group">
+              {/* Colored Glow Shadow Underneath */}
+              <div 
+                className="absolute inset-0 rounded-2xl opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(135deg, #9333ea 0%, #7c3aed 50%, #6366f1 100%)',
+                  transform: 'translateY(6px) scale(0.95)',
+                }}
+              />
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 hover:from-purple-700 hover:via-indigo-700 hover:to-indigo-800 text-white font-bold text-sm rounded-2xl shadow-[0_15px_30px_-5px_rgba(124,58,237,0.45)] hover:shadow-[0_20px_35px_-5px_rgba(124,58,237,0.6)] active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed transition-all cursor-pointer flex items-center justify-center gap-2 border border-white/20"
+                className="relative w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:via-indigo-700 hover:to-purple-800 text-white font-bold text-sm rounded-2xl shadow-[0_12px_28px_-6px_rgba(124,58,237,0.55),0_4px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-white/25"
               >
                 {isSubmitting ? (
                   <>
@@ -356,7 +399,7 @@ export const LoginPage: React.FC = () => {
                     <span>{isRtl ? 'جاري المعالجة...' : 'Processing...'}</span>
                   </>
                 ) : (
-                  <span>
+                  <span className="tracking-wide">
                     {mode === 'signin' && (isRtl ? 'تسجيل الدخول' : 'Sign in')}
                     {mode === 'signup' && (isRtl ? 'إنشاء حساب جديد' : 'Create account')}
                     {mode === 'forgot' && (isRtl ? 'إرسال رابط الاستعادة' : 'Send reset link')}
@@ -369,44 +412,49 @@ export const LoginPage: React.FC = () => {
           {/* Social Divider & Google Button (Only in Signin / Signup) */}
           {mode !== 'forgot' && (
             <>
-              <div className="relative my-5">
+              {/* Modern SaaS Divider with Sleek Pill */}
+              <div className="relative my-6 flex items-center justify-center">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200/80"></div>
+                  <div className="w-full h-px bg-gradient-to-r from-transparent via-purple-200/80 to-transparent"></div>
                 </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-3 text-slate-400 font-medium uppercase tracking-wider text-[11px]">
+                <div className="relative flex justify-center">
+                  <span className="px-3.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md border border-purple-100/80 text-[10px] font-bold text-slate-400 uppercase tracking-widest shadow-[0_2px_8px_-2px_rgba(124,58,237,0.08)]">
                     {isRtl ? 'أو' : 'OR'}
                   </span>
                 </div>
               </div>
 
-              {/* Continue with Google */}
+              {/* Continue with Google - Refined High-End SaaS Button */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isSubmitting}
-                className="w-full py-2.5 sm:py-3 px-4 bg-white hover:bg-slate-50/80 border border-slate-200 text-slate-700 font-medium text-sm rounded-xl transition-all shadow-xs flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60"
+                className="w-full py-3 px-4 bg-white/80 hover:bg-white border border-slate-200/80 hover:border-purple-200 text-slate-700 font-semibold text-xs rounded-2xl transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_-4px_rgba(124,58,237,0.12)] flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60 backdrop-blur-sm group"
               >
                 {/* Official Google Icon */}
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path
-                    fill="#4285F4"
-                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                  />
-                </svg>
-                <span>{isRtl ? 'متابعة باستخدام Google' : 'Continue with Google'}</span>
+                <div className="w-5 h-5 flex items-center justify-center transition-transform group-hover:scale-105">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                </div>
+                <span className="tracking-tight text-slate-700 group-hover:text-slate-900 transition-colors">
+                  {isRtl ? 'متابعة باستخدام Google' : 'Continue with Google'}
+                </span>
               </button>
             </>
           )}
