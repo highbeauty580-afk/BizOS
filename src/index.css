@@ -101,6 +101,25 @@
   background: #94a3b8;
 }
 
+/* Custom prominent scrollbar for Product List window */
+.product-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.product-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+}
+.product-scrollbar::-webkit-scrollbar-thumb {
+  background: #477ed8;
+  border-radius: 8px;
+  border: 2px solid #f1f5f9;
+}
+.product-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #2559af;
+}
+
 /* Base Material Symbols Icon Styling */
 .material-symbols-outlined {
   display: inline-block;

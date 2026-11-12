@@ -658,7 +658,7 @@ export const SalesCashier: React.FC = () => {
               }`}
             >
               <span className="material-symbols-outlined text-base">touch_app</span>
-              <span>{isRtl ? 'الربط اليدوي' : 'Manual Linking'}</span>
+              <span>{isRtl ? 'التسجيل اليدوي' : 'Manual Entry'}</span>
             </button>
 
             <button
@@ -706,11 +706,6 @@ export const SalesCashier: React.FC = () => {
                 {isRtl ? 'مستمر' : 'Active'}
               </span>
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              {isRtl
-                ? 'تسجيل المبيعات المباشرة واليدوية، حسم المخزون التلقائي، وتحديد العميل.'
-                : 'Direct cashier checkout, manual item entry, automated inventory sync, and customer selection.'}
-            </p>
           </div>
         </div>
 
@@ -830,201 +825,9 @@ export const SalesCashier: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* LEFT 7 COLS: Dual Search Rows (Product Item Search & Customer Search + Single Row Catalog) */}
           <div className="lg:col-span-7 flex flex-col gap-5">
-            {/* DUAL SIDE-BY-SIDE COLUMNS: PRODUCTS COLUMN & CUSTOMERS COLUMN */}
+            {/* DUAL SIDE-BY-SIDE COLUMNS: CUSTOMERS COLUMN FIRST, PRODUCTS COLUMN SECOND */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* COLUMN 1: PRODUCTS COLUMN (صف/عمود المنتجات والخدمات مع محرك البحث والصف العمودي) */}
-              <div
-                style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
-                className="p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col gap-3"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-100 pb-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-indigo-600 text-base">inventory_2</span>
-                    <span>{isRtl ? '( حدد منتجات الفاتورة )' : '( Select Invoice Products )'}</span>
-                  </div>
-                  <span className="text-[10px] text-indigo-600 bg-indigo-50 font-bold px-2 py-0.5 rounded-md">
-                    {filteredCatalog.length} {isRtl ? 'عنصر' : 'items'}
-                  </span>
-                </div>
-
-                {/* Products Search Engine (محرك بحث المنتجات) */}
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setProductPage(1);
-                    }}
-                    placeholder={isRtl ? 'ابحث باسم المنتج أو الكود...' : 'Search product by name or code...'}
-                    className="w-full pr-8 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                {/* Notice if customer is not selected yet */}
-                {!selectedCustomer && (
-                  <div className="flex items-center gap-1.5 p-2 bg-amber-50/90 border border-amber-200/90 rounded-xl text-[11px] font-bold text-amber-800">
-                    <span className="material-symbols-outlined text-sm text-amber-600 shrink-0">lock</span>
-                    <span className="truncate">{isRtl ? 'اختر العميل أولاً من القائمة المجاورة لتفعيل الفاتورة' : 'Select client first to activate invoice'}</span>
-                  </div>
-                )}
-
-                {/* VERTICAL Scrollable Product Items directly below Product Search - MAX 3 VISIBLE AT A TIME */}
-                <div className="flex flex-col gap-2 min-h-[220px]">
-                  {visibleCatalog.length === 0 ? (
-                    <div className="w-full py-12 text-center text-slate-400 text-xs">
-                      {isRtl ? 'لا توجد منتجات مطابقة للبحث' : 'No matching products'}
-                    </div>
-                  ) : (
-                    visibleCatalog.map((item) => {
-                      const actualStock = item.stockQuantity ?? 50;
-
-                      // Staged quantity in active cart/invoice
-                      const stagedQty = cart.reduce((acc, c) => {
-                        const matchId = c.originalFastItemId === item.id;
-                        const matchName = c.name === item.name || (item.nameAr && c.name === item.nameAr);
-                        return matchId || matchName ? acc + c.quantity : acc;
-                      }, 0);
-
-                      const isSelectedProduct = stagedQty > 0;
-                      const displayStock = Math.max(0, actualStock - stagedQty);
-
-                      // Check if item was confirmed/deducted in the last 5 minutes (300,000 ms)
-                      const lastDeductedTime = recentlyDeducted[item.id];
-                      const isRecentlyDeducted = Boolean(lastDeductedTime && (Date.now() - lastDeductedTime < 300000));
-
-                      return (
-                        <div
-                          key={item.id}
-                          onClick={() => handleAddToCart(item)}
-                          className={`w-full p-3 rounded-xl border transition-all flex items-center justify-between gap-3 group cursor-pointer ${
-                            !selectedCustomer
-                              ? 'border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/70 opacity-75'
-                              : isSelectedProduct
-                              ? 'border-2 border-emerald-500 bg-emerald-50/80 shadow-xs ring-2 ring-emerald-500/20'
-                              : isRecentlyDeducted
-                              ? 'border-rose-400 bg-rose-50/50 shadow-2xs hover:bg-rose-50'
-                              : 'border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-400 shadow-2xs'
-                          }`}
-                        >
-                          <div className="flex flex-col flex-1 min-w-0 gap-1">
-                            {/* Line 1: Product Name, Category Badge & Product Code */}
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <h3 className={`text-xs font-bold truncate transition-colors ${
-                                isSelectedProduct ? 'text-emerald-950 font-extrabold' : 'text-slate-900 group-hover:text-indigo-600'
-                              }`}>
-                                {isRtl && item.nameAr ? item.nameAr : item.name}
-                              </h3>
-                              <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
-                                {item.category}
-                              </span>
-                              <span className="text-[9px] font-mono text-slate-400 font-bold bg-slate-200/60 px-1.5 py-0.2 rounded">
-                                {item.code || `ID-${item.id}`}
-                              </span>
-                            </div>
-
-                            {/* Line 2: Product Description (if available) */}
-                            {item.description && (
-                              <p className="text-[10px] text-slate-500 line-clamp-1 truncate">
-                                {item.description}
-                              </p>
-                            )}
-
-                            {/* Line 3: Retail Price & Stock Status */}
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-xs font-extrabold text-emerald-700 font-mono">
-                                ${item.price.toFixed(2)}
-                              </span>
-
-                              {/* STOCK BADGE */}
-                              {isRecentlyDeducted ? (
-                                <span className="text-[10px] font-extrabold text-rose-600 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse flex items-center gap-1">
-                                  <span>{isRtl ? 'المخزون:' : 'Stock:'}</span>
-                                  <span className="font-mono text-xs text-rose-700">{displayStock}</span>
-                                </span>
-                              ) : isSelectedProduct ? (
-                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                  <span>{isRtl ? 'المتبقي:' : 'Rem:'}</span>
-                                  <span className="font-mono text-xs text-emerald-900 font-bold">{displayStock}</span>
-                                  <span className="text-[9px] text-emerald-700 font-semibold">({stagedQty} بالفاتورة)</span>
-                                </span>
-                              ) : (
-                                <span className={`text-[10px] font-semibold ${actualStock <= 10 ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
-                                  {isRtl ? `المخزون: ${actualStock}` : `Stock: ${actualStock}`}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Action Button: Toggle Deselect or Select */}
-                          <div>
-                            {!selectedCustomer ? (
-                              <span className="px-2.5 py-1.5 rounded-lg text-[10px] font-bold bg-slate-200/70 text-slate-500 flex items-center gap-1 whitespace-nowrap">
-                                <span className="material-symbols-outlined text-xs">lock</span>
-                                <span>{isRtl ? 'اختر العميل' : 'Need Client'}</span>
-                              </span>
-                            ) : isSelectedProduct ? (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddToCart(item);
-                                }}
-                                className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs bg-rose-600 hover:bg-rose-700 text-white cursor-pointer whitespace-nowrap"
-                                title={isRtl ? 'انقر لإلغاء هذا المنتج من الفاتورة' : 'Click to deselect from invoice'}
-                              >
-                                <span className="material-symbols-outlined text-xs">remove_circle</span>
-                                <span>{isRtl ? 'إلغاء التحديد' : 'Deselect'}</span>
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleAddToCart(item);
-                                }}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer whitespace-nowrap"
-                              >
-                                <span>+</span>
-                                <span>{isRtl ? 'تحديد' : 'Select'}</span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Product Pagination Bar (تنقل 3 عناصر كحد أقصى) */}
-                {totalProductPages > 1 && (
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-[11px] font-semibold text-slate-600">
-                    <button
-                      type="button"
-                      disabled={currentProductPage <= 1}
-                      onClick={() => setProductPage((p) => Math.max(1, p - 1))}
-                      className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {isRtl ? '← السابق' : '← Prev'}
-                    </button>
-                    <span className="text-[10px] font-bold text-indigo-700 font-mono">
-                      {isRtl ? `صفحة ${currentProductPage} من ${totalProductPages}` : `Page ${currentProductPage} of ${totalProductPages}`}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={currentProductPage >= totalProductPages}
-                      onClick={() => setProductPage((p) => Math.min(totalProductPages, p + 1))}
-                      className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {isRtl ? 'التالي →' : 'Next →'}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* COLUMN 2: CUSTOMERS COLUMN (صف/عمود العملاء مع محرك البحث والصف العمودي - MAX 3 VISIBLE AT A TIME) */}
+              {/* COLUMN 1: CUSTOMERS COLUMN (صف/عمود العملاء مع محرك البحث والصف العمودي - MAX 3 VISIBLE AT A TIME) */}
               <div
                 style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
                 className="p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col gap-3"
@@ -1058,27 +861,6 @@ export const SalesCashier: React.FC = () => {
                     className="w-full pr-8 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-
-                {/* Active Customer Indicator with Deselect Button */}
-                {selectedCustomer && (
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-indigo-50/90 border border-indigo-200 text-xs animate-in fade-in">
-                    <div className="flex items-center gap-1.5 text-indigo-950 font-bold truncate">
-                      <span className="material-symbols-outlined text-indigo-600 text-base">how_to_reg</span>
-                      <span className="truncate">{isRtl ? `العميل المحدد: ${selectedCustomer.name}` : `Selected: ${selectedCustomer.name}`}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCustomer(null);
-                        setCart([]);
-                      }}
-                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-white border border-rose-200 hover:bg-rose-50 px-2 py-0.5 rounded-md cursor-pointer transition-colors shadow-2xs whitespace-nowrap"
-                    >
-                      ✕ {isRtl ? 'إلغاء التحديد' : 'Deselect'}
-                    </button>
-                  </div>
-                )}
 
                 {/* VERTICAL Customer List directly below Customer Search - MAX 3 VISIBLE AT A TIME */}
                 <div className="flex flex-col gap-2 min-h-[220px]">
@@ -1159,6 +941,188 @@ export const SalesCashier: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* COLUMN 2: PRODUCTS COLUMN (صف/عمود المنتجات والخدمات مع محرك البحث والصف العمودي) */}
+              <div
+                style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
+                className="p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col gap-3"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800 border-b border-slate-100 pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-indigo-600 text-base">inventory_2</span>
+                    <span>{isRtl ? '( حدد منتجات الفاتورة )' : '( Select Invoice Products )'}</span>
+                  </div>
+                  <span className="text-[10px] text-indigo-600 bg-indigo-50 font-bold px-2 py-0.5 rounded-md">
+                    {filteredCatalog.length} {isRtl ? 'عنصر' : 'items'}
+                  </span>
+                </div>
+
+                {/* Products Search Engine (محرك بحث المنتجات) */}
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      setProductPage(1);
+                    }}
+                    placeholder={isRtl ? 'ابحث باسم المنتج أو الكود...' : 'Search product by name or code...'}
+                    className="w-full pr-8 pl-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Notice if customer is not selected yet */}
+                {!selectedCustomer && (
+                  <div className="flex items-center gap-1.5 p-2 bg-amber-50/90 border border-amber-200/90 rounded-xl text-[11px] font-bold text-amber-800">
+                    <span className="truncate">{isRtl ? 'اختر العميل أولاً' : 'Select customer first'}</span>
+                  </div>
+                )}
+
+                {/* VERTICAL Scrollable Product Items with prominent custom scrollbar */}
+                <div className="flex flex-col gap-2 max-h-[360px] sm:max-h-[420px] overflow-y-auto pl-1 pr-2.5 product-scrollbar min-h-[220px]">
+                  {filteredCatalog.length === 0 ? (
+                    <div className="w-full py-12 text-center text-slate-400 text-xs">
+                      {isRtl ? 'لا توجد منتجات مطابقة للبحث' : 'No matching products'}
+                    </div>
+                  ) : (
+                    filteredCatalog.map((item) => {
+                      const actualStock = item.stockQuantity ?? 50;
+
+                      // Staged quantity in active cart/invoice
+                      const stagedQty = cart.reduce((acc, c) => {
+                        const matchId = c.originalFastItemId === item.id;
+                        const matchName = c.name === item.name || (item.nameAr && c.name === item.nameAr);
+                        return matchId || matchName ? acc + c.quantity : acc;
+                      }, 0);
+
+                      const isSelectedProduct = stagedQty > 0;
+                      const displayStock = Math.max(0, actualStock - stagedQty);
+
+                      // Check if item was confirmed/deducted in the last 5 minutes (300,000 ms)
+                      const lastDeductedTime = recentlyDeducted[item.id];
+                      const isRecentlyDeducted = Boolean(lastDeductedTime && (Date.now() - lastDeductedTime < 300000));
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => handleAddToCart(item)}
+                          className={`w-full p-2.5 sm:p-3 rounded-xl border transition-all flex items-start gap-3 group cursor-pointer ${
+                            !selectedCustomer
+                              ? 'border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/70 opacity-75'
+                              : isSelectedProduct
+                              ? 'border-2 border-emerald-500 bg-emerald-50/80 shadow-xs ring-2 ring-emerald-500/20'
+                              : isRecentlyDeducted
+                              ? 'border-rose-400 bg-rose-50/50 shadow-2xs hover:bg-rose-50'
+                              : 'border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-indigo-400 shadow-2xs'
+                          }`}
+                        >
+                          {/* PRODUCT IMAGE BOX (مربع صورة المنتج) */}
+                          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl border border-slate-200/90 bg-gradient-to-br from-slate-100 to-indigo-50/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs group-hover:scale-105 transition-transform">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center text-indigo-500">
+                                <span className="material-symbols-outlined text-xl select-none">package_2</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* PRODUCT DETAILS (تفاصيل المنتج بجوار الصورة) */}
+                          <div className="flex flex-col flex-1 min-w-0 gap-1">
+                            {/* Top Row: Product Title, Category, Code + Cancel Button at TOP of Card if selected */}
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                                <h3 className={`text-xs font-bold truncate transition-colors ${
+                                  isSelectedProduct ? 'text-emerald-950 font-extrabold' : 'text-slate-900 group-hover:text-indigo-600'
+                                }`}>
+                                  {isRtl && item.nameAr ? item.nameAr : item.name}
+                                </h3>
+                                <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100 shrink-0">
+                                  {item.category}
+                                </span>
+                                <span className="text-[9px] font-mono text-slate-400 font-bold bg-slate-200/60 px-1.5 py-0.2 rounded shrink-0">
+                                  {item.code || `ID-${item.id}`}
+                                </span>
+                              </div>
+
+                              {/* Top Cancel Button with Basket/Trash Icon when item is selected */}
+                              {selectedCustomer && isSelectedProduct && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddToCart(item);
+                                  }}
+                                  className="px-2 py-0.5 rounded-md text-[10px] font-extrabold transition-all active:scale-95 flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/90 cursor-pointer whitespace-nowrap shrink-0 shadow-2xs"
+                                  title={isRtl ? 'انقر لإلغاء هذا المنتج من الفاتورة' : 'Click to remove from invoice'}
+                                >
+                                  <span className="material-symbols-outlined text-[13px] text-rose-600">delete</span>
+                                  <span>{isRtl ? 'إلغاء' : 'Remove'}</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Line 2: Product Description (if available) */}
+                            {item.description && (
+                              <p className="text-[10px] text-slate-500 line-clamp-1 truncate">
+                                {item.description}
+                              </p>
+                            )}
+
+                            {/* Line 3: Retail Price, Stock Status & Bottom Action Button */}
+                            <div className="flex items-center justify-between w-full gap-2 mt-0.5">
+                              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                <span className="text-xs font-extrabold text-emerald-700 font-mono">
+                                  ${item.price.toFixed(2)}
+                                </span>
+
+                                {/* STOCK BADGE */}
+                                {isRecentlyDeducted ? (
+                                  <span className="text-[10px] font-extrabold text-rose-600 bg-rose-100/80 border border-rose-300 px-2 py-0.5 rounded-md animate-pulse flex items-center gap-1">
+                                    <span>{isRtl ? 'المخزون:' : 'Stock:'}</span>
+                                    <span className="font-mono text-xs text-rose-700">{displayStock}</span>
+                                  </span>
+                                ) : isSelectedProduct ? (
+                                  <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                    <span>{isRtl ? 'المتبقي:' : 'Rem:'}</span>
+                                    <span className="font-mono text-xs text-emerald-900 font-bold">{displayStock}</span>
+                                    <span className="text-[9px] text-emerald-700 font-semibold">({stagedQty} بالفاتورة)</span>
+                                  </span>
+                                ) : (
+                                  <span className={`text-[10px] font-semibold ${actualStock <= 10 ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>
+                                    {isRtl ? `المخزون: ${actualStock}` : `Stock: ${actualStock}`}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Bottom Action Button when not selected or customer not selected */}
+                              {!selectedCustomer ? (
+                                <span className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 border border-slate-200 text-slate-500 flex items-center gap-1 whitespace-nowrap shrink-0">
+                                  <span>{isRtl ? 'اختر العميل أولاً' : 'Select Customer First'}</span>
+                                </span>
+                              ) : !isSelectedProduct ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAddToCart(item);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all active:scale-95 flex items-center gap-1 shadow-2xs bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer whitespace-nowrap shrink-0"
+                                >
+                                  <span>+</span>
+                                  <span>{isRtl ? 'تحديد' : 'Select'}</span>
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1170,33 +1134,21 @@ export const SalesCashier: React.FC = () => {
                 style={{ backgroundColor: '#f8fafc' }}
                 className="p-5 rounded-2xl border-2 border-dashed border-slate-300 shadow-none flex flex-col gap-4 opacity-80 select-none transition-all"
               >
-                {/* Header - Locked */}
-                <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-slate-400 text-xl">lock</span>
-                    <h2 className="font-bold text-base text-slate-500">
-                      {isRtl ? 'نافذة الفاتورة (غير مفعلة)' : 'Invoice Window (Inactive)'}
-                    </h2>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
-                    <span>{isRtl ? 'بانتظار تحديد العميل' : 'Awaiting Client'}</span>
-                  </span>
-                </div>
-
                 {/* Prominent Guidance Box */}
-                <div className="py-12 px-4 flex flex-col items-center justify-center text-center rounded-xl bg-white border border-slate-200/80 shadow-2xs">
-                  <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center mb-3 shadow-2xs">
-                    <span className="material-symbols-outlined text-3xl">person_search</span>
+                <div className="py-10 px-4 flex flex-col items-center justify-center text-center rounded-2xl bg-white border border-slate-200 shadow-2xs">
+                  <div className="flex flex-col gap-3.5 items-center justify-center max-w-sm">
+                    {/* Line 1: Select Customer First */}
+                    <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-indigo-50/80 border border-indigo-100 text-indigo-900 font-bold text-xs sm:text-sm">
+                      <span className="material-symbols-outlined text-indigo-600 text-lg shrink-0">person_search</span>
+                      <span>{isRtl ? 'حدد العميل أولاً' : 'Select Customer First'}</span>
+                    </div>
+
+                    {/* Line 2: Then Products to Show Invoice */}
+                    <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm">
+                      <span className="material-symbols-outlined text-slate-600 text-lg shrink-0">inventory_2</span>
+                      <span>{isRtl ? 'ثم المنتجات لتظهر الفاتورة' : 'Then Products to Show Invoice'}</span>
+                    </div>
                   </div>
-                  <h3 className="text-sm font-extrabold text-slate-800 mb-1">
-                    {isRtl ? 'الخطوة الأولى: اختر العميل أولاً' : 'Step 1: Choose Customer First'}
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-                    {isRtl
-                      ? 'نافذة الفاتورة مغلقة ولن تضيء أو تعمل حتى تقرر أولاً اختيار العميل الموجه له الطلب من القائمة المجاورة، ثم تحديد المنتجات لفاتورته.'
-                      : 'The invoice window is locked and will not activate until you choose the customer to whom the order is directed, and then select products.'}
-                  </p>
                 </div>
 
                 {/* Summary Box (Disabled / Zeroed) */}
@@ -1218,26 +1170,14 @@ export const SalesCashier: React.FC = () => {
                     <span className="font-mono">$0.00</span>
                   </div>
                 </div>
-
-                {/* Disabled Action Buttons */}
-                <div className="flex flex-col gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full py-3.5 rounded-xl text-slate-400 bg-slate-200 font-bold text-sm cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-lg">lock</span>
-                    <span>{isRtl ? 'اختر العميل أولاً لتفعيل الفاتورة' : 'Select Customer to Unlock'}</span>
-                  </button>
-                </div>
               </div>
             ) : (
-              /* ACTIVE / ILLUMINATED STATE - تضيء وتعمل */
+              /* ACTIVE STATE */
               <div
                 style={{ backgroundColor: customPalette.surfaceBg || '#ffffff' }}
                 className="p-5 rounded-2xl border-2 border-indigo-500 shadow-xl ring-4 ring-indigo-500/10 flex flex-col gap-4 animate-in fade-in duration-300 transition-all"
               >
-                {/* Header - Active & Illuminated */}
+                {/* Header */}
                 <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
@@ -1245,10 +1185,6 @@ export const SalesCashier: React.FC = () => {
                       <h2 className="font-extrabold text-base text-slate-900">
                         {isRtl ? 'الفاتورة الحالية' : 'Active Invoice'}
                       </h2>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                        <span>{isRtl ? 'مضاءة ومفعلة' : 'Active & Lit'}</span>
-                      </span>
                     </div>
                   </div>
 

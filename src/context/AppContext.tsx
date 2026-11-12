@@ -313,7 +313,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [language, setLanguage] = useState<Language>('ar');
   const [theme, setTheme] = useState<ColorTheme>('indigo');
   const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
-  const [businessName, setBusinessName] = useState<string>('BizOS Enterprise');
+  const [businessName, setBusinessName] = useState<string>('Profness Enterprise');
 
   // Pure In-Memory React State (Exclusively synchronized with Supabase DB)
   const [isLoading, setIsLoading] = useState<boolean>(true);

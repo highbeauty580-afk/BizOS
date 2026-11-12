@@ -49,6 +49,7 @@ export async function fetchProductsFromSupabase(): Promise<{ data: FastItem[]; e
       costPrice: parseFloat(row.unit_cost) || 0,
       code: row.product_code || row.code || undefined,
       description: row.product_description || undefined,
+      imageUrl: row.image_url || row.image || row.imageUrl || undefined,
       unit: row.Measure_PType || row.unit || 'قطعة',
       product_pk: row.product_pk,
       stockQuantity: 0, // Stock qty comes from stock table, this is just a placeholder or list view

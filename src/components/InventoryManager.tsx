@@ -109,6 +109,7 @@ export const InventoryManager: React.FC = () => {
   const [formMinStock, setFormMinStock] = useState<string>('10');
   const [formMaxStock, setFormMaxStock] = useState<string>('100');
   const [formUnit, setFormUnit] = useState('قطعة');
+  const [formImageUrl, setFormImageUrl] = useState('');
   const [formError, setFormError] = useState('');
 
   // Quick Restock Modal State
@@ -156,6 +157,24 @@ export const InventoryManager: React.FC = () => {
     return i.stockQuantity > min && i.stockQuantity <= max;
   });
 
+  // Helper for image file upload from device
+  const handleImageFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(isRtl ? 'حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 5 ميجابايت' : 'File is too large, please select an image under 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setFormImageUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Filtered Catalog Items based on Tab & Status & Search
   const displayableItems = fastItems.filter((item) => {
     // 1. Internal Tab Filter
@@ -197,6 +216,7 @@ export const InventoryManager: React.FC = () => {
     setFormMinStock('10');
     setFormMaxStock('200');
     setFormUnit(targetType === 'raw_material' ? 'كجم' : 'قطعة');
+    setFormImageUrl('');
     setFormError('');
     setPaymentMethod('Cash');
     setPaymentNotice('');
@@ -218,6 +238,7 @@ export const InventoryManager: React.FC = () => {
     setFormMinStock((item.minStock ?? 10).toString());
     setFormMaxStock((item.maxStock ?? 100).toString());
     setFormUnit(item.unit || 'قطعة');
+    setFormImageUrl(item.imageUrl || '');
     setFormError('');
     setPaymentMethod('Cash');
     setPaymentNotice('');
@@ -274,6 +295,7 @@ export const InventoryManager: React.FC = () => {
         price: isNaN(priceNum) ? 0 : priceNum,
         costPrice: isNaN(costNum) ? 0 : costNum,
         description: formDescription.trim() || undefined,
+        imageUrl: formImageUrl.trim() || undefined,
         stockQuantity: isNaN(stockNum) ? 0 : stockNum,
         minStock: isNaN(minNum) ? 10 : minNum,
         maxStock: isNaN(maxNum) ? 100 : maxNum,
@@ -449,6 +471,7 @@ export const InventoryManager: React.FC = () => {
         // Update local createdProduct with quantities before adding to state
         const enrichedProduct: FastItem = {
           ...createdProduct,
+          imageUrl: formImageUrl.trim() || undefined,
           stockQuantity: isNaN(stockNum) ? 0 : stockNum,
           minStock: isNaN(minNum) ? 10 : minNum,
           maxStock: isNaN(maxNum) ? 200 : maxNum,
@@ -1310,7 +1333,7 @@ export const InventoryManager: React.FC = () => {
                     <table className="w-full text-xs text-right border-collapse">
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-700 font-bold">
-                          <th className="p-3.5">{isRtl ? 'اسم الصنف والكود' : 'Item & Code'}</th>
+                          <th className="p-3.5">{isRtl ? 'الصورة والصنف والكود' : 'Image, Item & Code'}</th>
                           <th className="p-3.5">{isRtl ? 'نوع التصنيف' : 'Classification'}</th>
                           <th className="p-3.5">{isRtl ? 'سعر التكلفة / البيع' : 'Cost / Price'}</th>
                           <th className="p-3.5">{isRtl ? 'الكمية الحالية' : 'Current Stock'}</th>
@@ -1339,11 +1362,24 @@ export const InventoryManager: React.FC = () => {
 
                           return (
                             <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                              {/* Name & Code */}
+                              {/* Name & Code with Image Thumbnail */}
                               <td className="p-3.5">
-                                <div className="flex flex-col">
-                                  <span className="font-bold text-slate-900">{isRtl && item.nameAr ? item.nameAr : item.name}</span>
-                                  <span className="text-[10px] font-mono text-slate-400 font-semibold">{item.code || `ID-${item.id}`}</span>
+                                <div className="flex items-center gap-3">
+                                  {/* Item Image Thumbnail Box */}
+                                  <div className="w-10 h-10 rounded-xl border border-slate-200 overflow-hidden bg-slate-100 flex items-center justify-center shrink-0 shadow-2xs">
+                                    {item.imageUrl ? (
+                                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="material-symbols-outlined text-indigo-500 text-lg select-none">
+                                        {isRaw ? 'view_in_ar' : 'package_2'}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="font-bold text-slate-900 truncate">{isRtl && item.nameAr ? item.nameAr : item.name}</span>
+                                    <span className="text-[10px] font-mono text-slate-400 font-semibold">{item.code || `ID-${item.id}`}</span>
+                                  </div>
                                 </div>
                               </td>
 
@@ -1835,6 +1871,66 @@ export const InventoryManager: React.FC = () => {
                     className="p-2.5 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              {/* 7. صورة المنتج / المادة الخام (رفع من الجهاز أو إدخال رابط) */}
+              <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-indigo-600 text-sm">image</span>
+                    <span>
+                      {modalInventoryTypeTarget === 'raw_material'
+                        ? (isRtl ? 'صورة المادة الخام (اختياري)' : 'Raw Material Image (Optional)')
+                        : (isRtl ? 'صورة المنتج (اختياري)' : 'Product Image (Optional)')}
+                    </span>
+                  </label>
+                  {formImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormImageUrl('')}
+                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded-md border border-rose-200 transition-colors cursor-pointer"
+                    >
+                      ✕ {isRtl ? 'إزالة الصورة' : 'Remove Image'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Option A: Upload file from device */}
+                  <label className="flex-1 min-w-[130px] px-3 py-2 bg-white hover:bg-indigo-50/80 border border-slate-300 hover:border-indigo-400 rounded-xl text-xs font-bold text-indigo-700 transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs">
+                    <span className="material-symbols-outlined text-base">upload_file</span>
+                    <span>{isRtl ? 'رفع من الجهاز' : 'Upload File'}</span>
+                    <input type="file" accept="image/*" onChange={handleImageFileUpload} className="hidden" />
+                  </label>
+
+                  {/* Option B: Direct URL Input */}
+                  <input
+                    type="url"
+                    value={formImageUrl}
+                    onChange={(e) => setFormImageUrl(e.target.value)}
+                    placeholder={isRtl ? 'أو ضع رابط الصورة هنا...' : 'Or paste image URL...'}
+                    className="flex-[2] min-w-[170px] p-2 rounded-xl bg-white border border-slate-300 text-xs font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                {/* Preview Thumbnail Box */}
+                {formImageUrl && (
+                  <div className="flex items-center gap-2.5 mt-1 pt-2 border-t border-slate-200/80">
+                    <div className="w-12 h-12 rounded-xl border border-slate-300 overflow-hidden shrink-0 bg-white flex items-center justify-center shadow-xs">
+                      <img
+                        src={formImageUrl}
+                        alt="معاينة"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      {isRtl ? 'معاينة صورة الصنف المحددة بنجاح' : 'Image preview selected successfully'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Quantities & Min / Max Thresholds (للمواد الخام دائماً، وللمنتجات الجاهزة عند الإضافة أو التعديل) */}

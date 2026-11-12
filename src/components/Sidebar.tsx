@@ -156,7 +156,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
         <div className="px-4 flex flex-col gap-3">
           <div className="p-3.5 rounded-2xl bg-white/70 border border-white/90 shadow-xs flex flex-col gap-1">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
-              <span>BizOS Engine</span>
+              <span>Profness Engine</span>
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
             </div>
             <div className="text-[11px] text-slate-500 font-mono">

@@ -66,6 +66,7 @@ export interface FastItem {
   code?: string;     // Maps to product_code and Stock_code
   unit?: string;     // Maps to Measure_PType and Measure_SType
   description?: string; // وصف المنتج
+  imageUrl?: string;    // رابط أو مسار صورة المنتج
   amount?: number;      // القيمة الإجمالية المسجلة في المخزون (Stock_Cost * Quantity)
   product_pk?: string;  // Primary Key from products table
   stock_pk?: string;    // Primary Key from stock table

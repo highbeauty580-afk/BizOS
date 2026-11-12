@@ -726,7 +726,7 @@ export const PaletteModal: React.FC<PaletteModalProps> = ({ isOpen, onClose }) =
             >
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 rounded bg-indigo-600 text-white text-[10px] flex items-center justify-center font-bold">B</div>
-                <span>BizOS Top Bar Header</span>
+                <span>Profness Top Bar Header</span>
               </div>
               <button
                 className="px-2.5 py-1 rounded-lg text-[11px] text-white font-bold shadow-xs"

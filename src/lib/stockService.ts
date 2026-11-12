@@ -64,6 +64,7 @@ export async function fetchStockFromSupabase(): Promise<{ data: FastItem[]; erro
         maxStock: parseFloat(row.maximum_limit) || 100,
         unit: row.Measure_SType || 'قطعة',
         code: row.Stock_code || undefined,
+        imageUrl: row.image_url || row.image || row.imageUrl || undefined,
         product_pk: row.product_fk,
         stock_pk: row.stock_pk,
         amount: amount,

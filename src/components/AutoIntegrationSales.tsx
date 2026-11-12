@@ -169,7 +169,7 @@ export const ECOM_PLATFORMS: EcomPlatformConfig[] = [
     badge: 'REST API Admin Key',
     fields: [
       { key: 'storeUrl', labelAr: 'رابط المتجر (OpenCart URL)', placeholder: 'https://opencart-store.com/index.php?route=api' },
-      { key: 'username', labelAr: 'اسم مستخدم API (API Username)', placeholder: 'bizos_api_user' },
+      { key: 'username', labelAr: 'اسم مستخدم API (API Username)', placeholder: 'profness_api_user' },
       { key: 'apiKey', labelAr: 'مفتاح API', placeholder: 'api_key_xxxxxxxx', type: 'password' }
     ],
     authTypeLabel: 'OpenCart Admin API'
@@ -367,7 +367,7 @@ export const WEBSITE_DB_ENGINES: WebsiteDbEngine[] = [
       { key: 'host', labelAr: 'عنوان الخادم (Host / IP)', placeholder: 'db.example.com أو 192.168.1.50', type: 'text', required: true, helpAr: 'عنوان الخادم الخاص بقاعدة البيانات' },
       { key: 'port', labelAr: 'منفذ الاتصال (Port)', placeholder: '5432', type: 'number', required: true, helpAr: 'المنفذ الافتراضي لـ PostgreSQL هو 5432' },
       { key: 'dbName', labelAr: 'اسم قاعدة البيانات (Database Name)', placeholder: 'my_store_db', type: 'text', required: true },
-      { key: 'username', labelAr: 'اسم المستخدم (Username)', placeholder: 'bizos_user', type: 'text', required: true },
+      { key: 'username', labelAr: 'اسم المستخدم (Username)', placeholder: 'profness_user', type: 'text', required: true },
       { key: 'password', labelAr: 'كلمة المرور (Password)', placeholder: '••••••••', type: 'password', required: true, helpAr: 'يتم تشفير كلمات المرور وعدم عرضها كـ Plain Text' },
       {
         key: 'sslMode',
@@ -487,7 +487,7 @@ export const WEBSITE_DB_ENGINES: WebsiteDbEngine[] = [
     defaultPort: 'Agent 8085',
     supported: true,
     badge: 'Agent محلي',
-    descriptionAr: 'ملف قاعدة بيانات محلي على سيرفر موقعك، يتم الربط به عبر BizOS Local Gateway Agent.',
+    descriptionAr: 'ملف قاعدة بيانات محلي على سيرفر موقعك، يتم الربط به عبر Profness Local Gateway Agent.',
     fields: [
       { key: 'filePath', labelAr: 'مسار ملف قاعدة البيانات (Database File Path)', placeholder: '/var/www/mywebsite/db.sqlite3 أو C:\\data\\site.db', type: 'text', required: true, helpAr: 'المسار الدقيق للملف على السيرفر المحلي' },
       { key: 'agentPort', labelAr: 'منفذ الـ Local Agent Gateway', placeholder: '8085', type: 'number', required: true, helpAr: 'منفذ خدمة الـ Agent المحلية الآمنة' },
@@ -645,14 +645,14 @@ export const LOCAL_POS_METHODS: LocalPosMethodConfig[] = [
       { key: 'hostIp', labelAr: 'عنوان IP المحلي أو اسم السيرفر (Host / Local IP)', placeholder: '192.168.1.50 أو POS-SERVER', required: true },
       { key: 'port', labelAr: 'منفذ الاتصال (Port)', placeholder: '1433', type: 'number', required: true },
       { key: 'dbName', labelAr: 'اسم قاعدة البيانات (Database Name)', placeholder: 'POS_STORE_DB', required: true },
-      { key: 'username', labelAr: 'اسم مستخدم القراءة (Read-only User)', placeholder: 'bizos_reader', required: true },
+      { key: 'username', labelAr: 'اسم مستخدم القراءة (Read-only User)', placeholder: 'profness_reader', required: true },
       { key: 'password', labelAr: 'كلمة المرور', placeholder: '••••••••', type: 'password', required: true },
     ],
   },
   {
     id: 'local_agent',
     nameAr: '3. Local Agent (برنامج وسيط يتثبت على جهاز المحل)',
-    nameEn: 'BizOS Local Agent',
+    nameEn: 'Profness Local Agent',
     icon: '💻',
     badge: 'مستوصى به للأنظمة المغلقة',
     descriptionAr: 'تثبيت برنامج وسيط خفيف وقوي على جهاز المحل لقراءة البيانات المسموح بها آلياً دون فتح راوتر المحل للإنترنت.',
@@ -701,7 +701,7 @@ export const LOCAL_POS_METHODS: LocalPosMethodConfig[] = [
     nameEn: 'Scheduled File Import',
     icon: '📂',
     badge: 'مراقبة المجلدات الآلية',
-    descriptionAr: 'إذا كان البرنامج المغلق يصدّر تقارير دورية إلى مجلد محدد بانتظام، يقوم BizOS بمراقبة المجلد وسحب الملفات آلياً.',
+    descriptionAr: 'إذا كان البرنامج المغلق يصدّر تقارير دورية إلى مجلد محدد بانتظام، يقوم Profness بمراقبة المجلد وسحب الملفات آلياً.',
     fields: [
       { key: 'watchFolderPath', labelAr: 'مسار مجلد التقارير المصدرة (Watch Folder Path)', placeholder: 'C:\\POS_System\\DailyExports\\', required: true, helpAr: 'المسار المحتوي على تقارير الكاشير المحدثة' },
       { key: 'fileMask', labelAr: 'تسمية أو نمط الملفات (File Mask)', placeholder: 'daily_sales_*.csv', required: true },
@@ -726,7 +726,7 @@ export const LOCAL_POS_METHODS: LocalPosMethodConfig[] = [
     nameEn: 'Custom Integration',
     icon: '🛠️',
     badge: 'تكامل مخصص مع المطور',
-    descriptionAr: 'توفير بروتوكول توثيق وSDK مخصص يتيح للشركة المطورة لبرنامج المحل إرسال البيانات مباشرة إلى BizOS.',
+    descriptionAr: 'توفير بروتوكول توثيق وSDK مخصص يتيح للشركة المطورة لبرنامج المحل إرسال البيانات مباشرة إلى Profness.',
     fields: [
       { key: 'developerCompany', labelAr: 'اسم الشركة أو المطور الأصلي للبرنامج', placeholder: 'شركة الحلول البرمجية للمبيعات', required: true },
       { key: 'developerEmail', labelAr: 'البريد الإلكتروني للدعم الفني للمطور', placeholder: 'support@pos-vendor.com', required: true },
@@ -737,7 +737,7 @@ export const LOCAL_POS_METHODS: LocalPosMethodConfig[] = [
         type: 'select',
         required: true,
         options: [
-          { labelAr: 'BizOS Webhook Receiver (JSON Payload)', value: 'webhook' },
+          { labelAr: 'Profness Webhook Receiver (JSON Payload)', value: 'webhook' },
           { labelAr: 'Socket Stream / TCP Service Listener', value: 'socket' },
         ],
       },
@@ -775,8 +775,8 @@ const SAMPLE_EXTERNAL_PAYLOAD: Record<string, any> = {
   note: "الرجاء التوصيل للفترة المسائية",
 };
 
-// Target BizOS Fields definition
-interface TargetBizOSField {
+// Target Profness Fields definition
+interface TargetProfnessField {
   key: FieldMapping['targetField'];
   labelAr: string;
   labelEn: string;
@@ -785,7 +785,7 @@ interface TargetBizOSField {
   descriptionAr: string;
 }
 
-const BIZOS_TARGET_FIELDS: TargetBizOSField[] = [
+const BIZOS_TARGET_FIELDS: TargetProfnessField[] = [
   {
     key: 'external_id',
     labelAr: 'المعرف الخارجي للطلب (ID)',
@@ -1242,7 +1242,7 @@ export const AutoIntegrationSales: React.FC = () => {
         details: [
           `✓ تم الوصول بنجاح إلى https://${cleanDomain}`,
           '✓ تم فحص وتأكيد صحة المفاتيح والتخويل (200 OK)',
-          `✓ تم استكشاف ${dynamicRes.length} موارد متوفرة وجاهزة للنقل إلى أقسام BizOS`,
+          `✓ تم استكشاف ${dynamicRes.length} موارد متوفرة وجاهزة للنقل إلى أقسام Profness`,
         ],
       });
     }, 1100);
@@ -1457,7 +1457,7 @@ export const AutoIntegrationSales: React.FC = () => {
       id: `conn-social-${selectedSocialPlatformId}-${Date.now()}`,
       name: pageName,
       type: 'webhook' as ConnectionType,
-      baseUrl: `https://api.social.bizos.internal/v1/${selectedSocialPlatformId}`,
+      baseUrl: `https://api.social.profness.internal/v1/${selectedSocialPlatformId}`,
       apiKey: mainKey,
       maskedKey: maskKey(mainKey),
       authType: 'bearer',
@@ -1614,7 +1614,7 @@ export const AutoIntegrationSales: React.FC = () => {
       id: `conn-db-${selectedDbEngineId}-${Date.now()}`,
       name: dbNameLabel,
       type: 'site' as ConnectionType,
-      baseUrl: `https://db-connector.bizos.internal/v1/${selectedDbEngineId}`,
+      baseUrl: `https://db-connector.profness.internal/v1/${selectedDbEngineId}`,
       apiKey: dbFieldValues.password || dbFieldValues.privateKey || 'sec_key_masked',
       maskedKey: maskKey(dbFieldValues.password || dbFieldValues.privateKey || 'sec_key_masked'),
       authType: 'bearer',
@@ -1755,7 +1755,7 @@ export const AutoIntegrationSales: React.FC = () => {
       id: `conn-local-${selectedLocalMethodId}-${Date.now()}`,
       name: connName,
       type: 'custom_rest' as ConnectionType,
-      baseUrl: `http://local-pos.bizos.internal/v1/${selectedLocalMethodId}`,
+      baseUrl: `http://local-pos.profness.internal/v1/${selectedLocalMethodId}`,
       apiKey: localFieldValues.apiKey || localFieldValues.agentToken || 'sec_local_key',
       maskedKey: maskKey(localFieldValues.apiKey || localFieldValues.agentToken || 'sec_local_key'),
       authType: 'bearer',
@@ -2040,7 +2040,7 @@ export const AutoIntegrationSales: React.FC = () => {
 
   const handleAddOrUpdateMapping = () => {
     if (!selectedSourcePath || !selectedTargetField) {
-      alert(isRtl ? 'يرجى تحديد حقل المصدر الخارجي وحقل BizOS المستهدف' : 'Please select both source path and target field.');
+      alert(isRtl ? 'يرجى تحديد حقل المصدر الخارجي وحقل Profness المستهدف' : 'Please select both source path and target field.');
       return;
     }
 
@@ -2405,10 +2405,10 @@ export const AutoIntegrationSales: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-lg">
-                    {isRtl ? 'ربط متجرك الإلكتروني بقاعدة بيانات BizOS' : 'Connect E-Commerce Store'}
+                    {isRtl ? 'ربط متجرك الإلكتروني بقاعدة بيانات Profness' : 'Connect E-Commerce Store'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'سحب المنتجات والطلبات والعملاء وتوجيهها تلقائياً للأقسام المناسبة' : 'Discover and route store data to BizOS departments'}
+                    {isRtl ? 'سحب المنتجات والطلبات والعملاء وتوجيهها تلقائياً للأقسام المناسبة' : 'Discover and route store data to Profness departments'}
                   </p>
                 </div>
               </div>
@@ -2704,7 +2704,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'اكتشاف الموارد المتاحة في متجرك' : 'Discovered Store Resources'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'حدد الموارد التي تريد تسمح بتمكين نقلها إلى قاعدة بيانات BizOS:' : 'Select which entities to stream from your store:'}
+                    {isRtl ? 'حدد الموارد التي تريد تسمح بتمكين نقلها إلى قاعدة بيانات Profness:' : 'Select which entities to stream from your store:'}
                   </p>
                 </div>
 
@@ -2770,10 +2770,10 @@ export const AutoIntegrationSales: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">
-                    {isRtl ? 'توجيه بيانات المتجر إلى أقسام BizOS (Department Data Routing)' : 'Route Data to BizOS Departments'}
+                    {isRtl ? 'توجيه بيانات المتجر إلى أقسام Profness (Department Data Routing)' : 'Route Data to Profness Departments'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'اختر القسم المناسب في BizOS لاستقبال كل مورد مستورد:' : 'Map each store resource to its corresponding BizOS module:'}
+                    {isRtl ? 'اختر القسم المناسب في Profness لاستقبال كل مورد مستورد:' : 'Map each store resource to its corresponding Profness module:'}
                   </p>
                 </div>
 
@@ -2839,7 +2839,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'إعدادات منظومة المزامنة واعتماد الربط' : 'Sync Strategy & Final Authorization'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'اختر خيارات المزامنة واعتماد التوصيل المباشر بقاعدة بيانات BizOS:' : 'Configure automated sync frequency and stock deduction rules:'}
+                    {isRtl ? 'اختر خيارات المزامنة واعتماد التوصيل المباشر بقاعدة بيانات Profness:' : 'Configure automated sync frequency and stock deduction rules:'}
                   </p>
                 </div>
 
@@ -3307,7 +3307,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'اكتشاف الموارد المتاحة في صفحتك' : 'Discovered Channel Resources'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'حدد الموارد التي تريد جلبها وتوجيهها تلقائياً داخل BizOS:' : 'Select which entities to stream from your social channel:'}
+                    {isRtl ? 'حدد الموارد التي تريد جلبها وتوجيهها تلقائياً داخل Profness:' : 'Select which entities to stream from your social channel:'}
                   </p>
                 </div>
 
@@ -3378,10 +3378,10 @@ export const AutoIntegrationSales: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">
-                    {isRtl ? 'توجيه بيانات الصفحة إلى أقسام BizOS (Department Data Routing)' : 'Route Social Data to BizOS Departments'}
+                    {isRtl ? 'توجيه بيانات الصفحة إلى أقسام Profness (Department Data Routing)' : 'Route Social Data to Profness Departments'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'اختر القسم المناسب في BizOS لاستقبال كل نوع من البيانات:' : 'Map each social resource to its corresponding BizOS module:'}
+                    {isRtl ? 'اختر القسم المناسب في Profness لاستقبال كل نوع من البيانات:' : 'Map each social resource to its corresponding Profness module:'}
                   </p>
                 </div>
 
@@ -3447,7 +3447,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'إعدادات المزامنة والتمييز بين الاستفسارات والطلبات' : 'Sync Strategy & Direct Order Confirmation'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'ضبط شروط التمييز الفوري وإرسال البيانات إلى قاعدة بيانات BizOS:' : 'Configure chat message distinction & Webhook triggers:'}
+                    {isRtl ? 'ضبط شروط التمييز الفوري وإرسال البيانات إلى قاعدة بيانات Profness:' : 'Configure chat message distinction & Webhook triggers:'}
                   </p>
                 </div>
 
@@ -3528,7 +3528,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'اربط قاعدة بيانات موقعك' : 'Connect Website Database'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'ربط سحابي أو مستضاف ذاتيًا وتوجيه البيانات آلياً إلى أقسام BizOS' : 'Connect cloud or self-hosted databases and map schemas'}
+                    {isRtl ? 'ربط سحابي أو مستضاف ذاتيًا وتوجيه البيانات آلياً إلى أقسام Profness' : 'Connect cloud or self-hosted databases and map schemas'}
                   </p>
                 </div>
               </div>
@@ -3645,8 +3645,8 @@ export const AutoIntegrationSales: React.FC = () => {
                       <Shield className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <p className="leading-relaxed">
                         {isRtl
-                          ? 'توضيح: هذا الاختيار يشمل قواعد البيانات على سيرفر خاص، سواء داخل المقر أو على سيرفر سحابي خاص. وسيتم استخدام BizOS Local Agent للاتصال الآمن دون فتح سيرفرك للإنترنت بشكل غير آمن.'
-                          : 'Note: Includes on-premise servers and private VPS setups. Connects securely via BizOS Local Gateway Agent without exposing ports.'}
+                          ? 'توضيح: هذا الاختيار يشمل قواعد البيانات على سيرفر خاص، سواء داخل المقر أو على سيرفر سحابي خاص. وسيتم استخدام Profness Local Agent للاتصال الآمن دون فتح سيرفرك للإنترنت بشكل غير آمن.'
+                          : 'Note: Includes on-premise servers and private VPS setups. Connects securely via Profness Local Gateway Agent without exposing ports.'}
                       </p>
                     </div>
                   )}
@@ -3861,7 +3861,7 @@ export const AutoIntegrationSales: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <span className="font-bold flex items-center gap-2">
                           <Cpu className="w-4 h-4 text-emerald-400" />
-                          {isRtl ? 'حالة BizOS Local Gateway Agent:' : 'BizOS Local Agent Status:'}
+                          {isRtl ? 'حالة Profness Local Gateway Agent:' : 'Profness Local Agent Status:'}
                         </span>
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -3870,7 +3870,7 @@ export const AutoIntegrationSales: React.FC = () => {
                       </div>
                       <p className="text-[11px] text-slate-300 leading-relaxed">
                         {isRtl
-                          ? 'يقوم الـ Agent بربط قاعدة بياناتك المحلية أو السيرفر الخاص بـ BizOS بشكل مشفر تماماً دون الحاجة لفتح المنفذ على الإنترنت.'
+                          ? 'يقوم الـ Agent بربط قاعدة بياناتك المحلية أو السيرفر الخاص بـ Profness بشكل مشفر تماماً دون الحاجة لفتح المنفذ على الإنترنت.'
                           : 'Local Agent streams data securely without public port exposure.'}
                       </p>
                     </div>
@@ -3988,7 +3988,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'استكشاف الجداول والـ Collections المتاحة (Data Schema Discovery)' : 'Discovered Tables & Collections'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'اختر الجداول والحقول المراد مزامنتها مع BizOS:' : 'Select tables and fields to map and sync:'}
+                    {isRtl ? 'اختر الجداول والحقول المراد مزامنتها مع Profness:' : 'Select tables and fields to map and sync:'}
                   </p>
                 </div>
 
@@ -4046,15 +4046,15 @@ export const AutoIntegrationSales: React.FC = () => {
               </div>
             )}
 
-            {/* STEP 5: Department Data Routing (توجيه البيانات إلى أقسام BizOS) */}
+            {/* STEP 5: Department Data Routing (توجيه البيانات إلى أقسام Profness) */}
             {dbWizardStep === 5 && (
               <div className="space-y-5">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">
-                    {isRtl ? 'توجيه الجداول إلى أقسام BizOS (Department Data Routing)' : 'Route Database Tables to BizOS Modules'}
+                    {isRtl ? 'توجيه الجداول إلى أقسام Profness (Department Data Routing)' : 'Route Database Tables to Profness Modules'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'حدد القسم المستهدف في BizOS لكل جدول تم اختياره:' : 'Map each table to its target BizOS module:'}
+                    {isRtl ? 'حدد القسم المستهدف في Profness لكل جدول تم اختياره:' : 'Map each table to its target Profness module:'}
                   </p>
                 </div>
 
@@ -4117,7 +4117,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'اعتماد المزامنة والربط النهائي (Sync Strategy & Activation)' : 'Final Sync Schedule & Activation'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'ضبط آلية تحديث البيانات والتكرار بين موقعك وBizOS:' : 'Configure update intervals, deduplication & sync logging:'}
+                    {isRtl ? 'ضبط آلية تحديث البيانات والتكرار بين موقعك وProfness:' : 'Configure update intervals, deduplication & sync logging:'}
                   </p>
                 </div>
 
@@ -4257,8 +4257,8 @@ export const AutoIntegrationSales: React.FC = () => {
                   </div>
                   <p>
                     {isRtl
-                      ? 'كلمة "نظام محلي أو مغلق" لا تعني عدم وجود حل إطلاقاً. يتيح BizOS 6 آليات مختلفة للربط حسب إمكانيات برنامج المحل. ولكن إذا كان البرنامج لا يوفر API، ولا يسمح بالوصول لقاعدة البيانات، ولا يصدّر ملفات Excel/CSV، ولا يتيح الربط المخصص، فلن نتمكن من ضمان الربط الآلي الكامل.'
-                      : 'Closed system does not mean no solution! BizOS provides 6 different paths depending on POS capabilities.'}
+                      ? 'كلمة "نظام محلي أو مغلق" لا تعني عدم وجود حل إطلاقاً. يتيح Profness 6 آليات مختلفة للربط حسب إمكانيات برنامج المحل. ولكن إذا كان البرنامج لا يوفر API، ولا يسمح بالوصول لقاعدة البيانات، ولا يصدّر ملفات Excel/CSV، ولا يتيح الربط المخصص، فلن نتمكن من ضمان الربط الآلي الكامل.'
+                      : 'Closed system does not mean no solution! Profness provides 6 different paths depending on POS capabilities.'}
                   </p>
                 </div>
 
@@ -4495,7 +4495,7 @@ export const AutoIntegrationSales: React.FC = () => {
                     {isRtl ? 'السجلات والبيانات المكتشفة في الكاشير المحلي:' : 'Discovered Local POS Entities'}
                   </h4>
                   <p className="text-xs text-slate-500">
-                    {isRtl ? 'اختر البيانات المصدرة المراد نقلها إلى BizOS:' : 'Select cashier entities to sync:'}
+                    {isRtl ? 'اختر البيانات المصدرة المراد نقلها إلى Profness:' : 'Select cashier entities to sync:'}
                   </p>
                 </div>
 
@@ -4555,7 +4555,7 @@ export const AutoIntegrationSales: React.FC = () => {
               <div className="space-y-5">
                 <div>
                   <h4 className="font-bold text-slate-900 text-sm mb-1">
-                    {isRtl ? 'توجيه بيانات الكاشير إلى أقسام BizOS (Department Data Routing)' : 'Route POS Data to BizOS Modules'}
+                    {isRtl ? 'توجيه بيانات الكاشير إلى أقسام Profness (Department Data Routing)' : 'Route POS Data to Profness Modules'}
                   </h4>
                   <p className="text-xs text-slate-500">
                     {isRtl ? 'حدد القسم المناسب لكل نوع من بيانات النظام المحلي:' : 'Map each entity to its corresponding module:'}
@@ -4754,7 +4754,7 @@ export const AutoIntegrationSales: React.FC = () => {
                           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                             {isConnected
                               ? (isRtl ? `مربوط حالياً: ${ecomConn.name}` : `Connected: ${ecomConn.name}`)
-                              : (isRtl ? 'ربط المتاجر الإلكترونية (Shopify, WooCommerce, سلة, زد...) وسحب البيانات إلى BizOS.' : 'Sync orders and inventory automatically from your online store.')}
+                              : (isRtl ? 'ربط المتاجر الإلكترونية (Shopify, WooCommerce, سلة, زد...) وسحب البيانات إلى Profness.' : 'Sync orders and inventory automatically from your online store.')}
                           </p>
                         </div>
                       </div>
@@ -4994,7 +4994,7 @@ export const AutoIntegrationSales: React.FC = () => {
                           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                             {isConnected
                               ? (isRtl ? `مربوط حالياً: ${dbConn.name}` : `Connected: ${dbConn.name}`)
-                              : (isRtl ? 'ربط قاعدة بيانات موقعك الإلكتروني (PostgreSQL, MySQL, MongoDB, Firebase) مع أقسام BizOS.' : 'Connect custom website database with BizOS departments.')}
+                              : (isRtl ? 'ربط قاعدة بيانات موقعك الإلكتروني (PostgreSQL, MySQL, MongoDB, Firebase) مع أقسام Profness.' : 'Connect custom website database with Profness departments.')}
                           </p>
                         </div>
                       </div>
@@ -5505,10 +5505,10 @@ export const AutoIntegrationSales: React.FC = () => {
                 : 'Copy this URL into your e-commerce platform webhooks settings to stream instant sales.'}
             </p>
             <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between font-mono text-xs text-emerald-400">
-              <span className="truncate">https://bizos.internal/api/webhooks/sales-auto?key={activeConnector?.id}</span>
+              <span className="truncate">https://profness.internal/api/webhooks/sales-auto?key={activeConnector?.id}</span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`https://bizos.internal/api/webhooks/sales-auto?key=${activeConnector?.id}`);
+                  navigator.clipboard.writeText(`https://profness.internal/api/webhooks/sales-auto?key=${activeConnector?.id}`);
                   alert(isRtl ? 'تم نسخ رابط الويب هوك بنجاح!' : 'Copied Webhook URL!');
                 }}
                 className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-sans text-xs font-bold transition-colors shrink-0"
@@ -5594,14 +5594,14 @@ export const AutoIntegrationSales: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  {isRtl ? 'عمود BizOS المستهدف:' : 'Target BizOS Column:'}
+                  {isRtl ? 'عمود Profness المستهدف:' : 'Target Profness Column:'}
                 </label>
                 <select
                   value={selectedTargetField || ''}
                   onChange={(e) => setSelectedTargetField(e.target.value as FieldMapping['targetField'])}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-800 bg-slate-50"
                 >
-                  <option value="">{isRtl ? '-- اختر عمود BizOS --' : '-- Select Target Column --'}</option>
+                  <option value="">{isRtl ? '-- اختر عمود Profness --' : '-- Select Target Column --'}</option>
                   {BIZOS_TARGET_FIELDS.map((tf) => (
                     <option key={tf.key} value={tf.key}>
                       {tf.labelAr} {tf.isRequired ? '*' : ''}
@@ -5644,7 +5644,7 @@ export const AutoIntegrationSales: React.FC = () => {
 
             {/* Canvas Headers */}
             <div className="flex items-center justify-between border-b-2 border-slate-800 pb-4 relative z-10">
-              {/* Left Header (BizOS Database) in RTL */}
+              {/* Left Header (Profness Database) in RTL */}
               <div className="flex items-center gap-3">
                 <span className="font-mono text-xs uppercase font-bold tracking-widest text-slate-400 bg-slate-800 px-3 py-1 rounded-md border border-slate-700">
                   Pipeline
@@ -5652,7 +5652,7 @@ export const AutoIntegrationSales: React.FC = () => {
                 <div className="flex items-center gap-2">
                   <Database className="w-5 h-5 text-indigo-400" />
                   <h4 className="font-bold text-white text-base md:text-lg">
-                    {isRtl ? 'قاعدة بيانات BizOS المستهدفة' : 'Target BizOS Database'}
+                    {isRtl ? 'قاعدة بيانات Profness المستهدفة' : 'Target Profness Database'}
                   </h4>
                 </div>
               </div>
@@ -6112,7 +6112,7 @@ export const AutoIntegrationSales: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* LEFT COLUMN (BizOS Target) in RTL */}
+                    {/* LEFT COLUMN (Profness Target) in RTL */}
                     <div
                       onClick={() => {
                         if (selectedSourcePath) {
@@ -6255,10 +6255,10 @@ export const AutoIntegrationSales: React.FC = () => {
                     </pre>
                   </div>
 
-                  {/* Right: Output BizOS Object */}
+                  {/* Right: Output Profness Object */}
                   <div className="bg-slate-900 text-indigo-300 p-4 rounded-xl font-mono text-xs space-y-2">
                     <div className="text-slate-400 border-b border-slate-800 pb-2">
-                      {isRtl ? '2. هيكل البيانات النهائي في BizOS (Mapped Output)' : 'Mapped Output Result'}
+                      {isRtl ? '2. هيكل البيانات النهائي في Profness (Mapped Output)' : 'Mapped Output Result'}
                     </div>
                     <pre className="overflow-x-auto text-[11px] leading-relaxed">
                       {JSON.stringify(testReport.mappedResult, null, 2)}

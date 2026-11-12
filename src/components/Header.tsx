@@ -57,18 +57,21 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
             </button>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             {customPalette.brandLogoUrl ? (
               <img src={customPalette.brandLogoUrl} alt="Logo" className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shadow-xs" />
             ) : (
-              <div
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-white shadow-xs font-bold text-base sm:text-lg tracking-wider"
-                style={{ backgroundColor: customPalette.primaryAccent }}
-              >
-                B
-              </div>
+              <img
+                src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
+                alt="Profness Logo"
+                className="w-8 h-8 sm:w-9 sm:h-9 object-contain shrink-0 filter drop-shadow-xs"
+              />
             )}
-            <span className="font-bold text-lg sm:text-xl tracking-tight">BizOS</span>
+            <img
+              src="/assets/aistudio/Profness_Full_Logo_transparent.png"
+              alt="Profness"
+              className="h-5 sm:h-6 w-auto object-contain select-none"
+            />
           </div>
 
           <div className="h-4 w-px bg-slate-200/80 hidden md:block" />
