@@ -321,55 +321,81 @@ export async function createTenantForOwner(
       };
     }
 
-    const newTenantId =
-      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-        ? crypto.randomUUID()
-        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
+    // Call database RPC function create_tenant_and_link (creates tenant & links current user as owner)
+    const { data, error } = await supabase.rpc('create_tenant_and_link', {
+      p_name: cleanName,
+    });
 
-    // Insert tenant first (without .select() so strict SELECT RLS won't fail before membership exists)
-    const { error: tenantError } = await supabase
-      .from('tenants')
-      .insert([{ id: newTenantId, name: cleanName }]);
-
-    if (tenantError) {
-      return { success: false, error: tenantError.message };
+    if (error) {
+      console.error('Error creating project:', error.message);
+      return { success: false, error: error.message };
     }
 
-    // Link current authenticated user as owner in tenant_members
-    const { data: memberData, error: memberError } = await supabase
-      .from('tenant_members')
-      .insert([
-        {
-          tenant_id: newTenantId,
-          user_id: userId,
-          role: 'owner',
-          is_active: true,
-        },
-      ])
-      .select('id, tenant_id, user_id, role, is_active, created_at')
-      .maybeSingle();
+    console.log('Project created:', data);
 
-    if (memberError) {
-      return { success: false, error: memberError.message };
+    const record = Array.isArray(data) ? data[0] : data;
+    let resolvedTenantId =
+      typeof record === 'string'
+        ? record.trim()
+        : String(record?.tenant_id || record?.id || '').trim();
+    let resolvedMemberId =
+      typeof record === 'object' && record !== null
+        ? String(record.member_id || record.id || '').trim()
+        : '';
+    let resolvedName =
+      typeof record === 'object' && record !== null && record.name
+        ? String(record.name)
+        : cleanName;
+    let resolvedCreatedAt =
+      typeof record === 'object' && record !== null && record.created_at
+        ? String(record.created_at)
+        : new Date().toISOString();
+
+    // If the RPC returns void or omits tenant_id, read back the newly linked owner membership
+    if (!resolvedTenantId) {
+      const { data: linkedRow } = await supabase
+        .from('tenant_members')
+        .select('id, tenant_id, created_at, tenants(id, name, created_at)')
+        .eq('user_id', userId)
+        .eq('role', 'owner')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (linkedRow?.tenant_id) {
+        const joinedTenant = Array.isArray(linkedRow.tenants)
+          ? linkedRow.tenants[0]
+          : linkedRow.tenants;
+        resolvedTenantId = linkedRow.tenant_id;
+        resolvedMemberId = linkedRow.id || resolvedTenantId;
+        resolvedName = joinedTenant?.name || cleanName;
+        resolvedCreatedAt =
+          joinedTenant?.created_at || linkedRow.created_at || resolvedCreatedAt;
+      }
+    }
+
+    if (!resolvedTenantId) {
+      return {
+        success: false,
+        error: 'تم إنشاء المشروع ولكن تعذر تحديد معرف المشروع المرتبط.',
+      };
     }
 
     return {
       success: true,
       tenant: {
-        id: memberData?.id || newTenantId,
-        tenantId: newTenantId,
-        name: cleanName,
+        id: resolvedMemberId || resolvedTenantId,
+        tenantId: resolvedTenantId,
+        name: resolvedName,
         role: 'owner',
         isActive: true,
-        createdAt: memberData?.created_at || new Date().toISOString(),
+        createdAt: resolvedCreatedAt,
         metrics: { ...EMPTY_METRICS },
       },
     };
   } catch (err: any) {
+    console.error('Error creating project:', err?.message || err);
     return {
       success: false,
       error: err?.message || 'حدث خطأ غير متوقع أثناء إنشاء المشروع',
