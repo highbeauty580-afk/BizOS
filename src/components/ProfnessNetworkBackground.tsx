@@ -55,24 +55,24 @@ export const ProfnessNetworkBackground: React.FC = () => {
       depth: number; // 0.4 to 1.2 for 3D parallax depth
     }
 
-    const particleCount = Math.min(65, Math.floor((width * height) / 18000));
+    const particleCount = Math.min(80, Math.floor((width * height) / 14000));
     const particles: Particle[] = [];
 
     const createParticle = (): Particle => {
       const color = colors[Math.floor(Math.random() * colors.length)];
-      const depth = 0.5 + Math.random() * 0.7;
-      const baseRadius = (1.5 + Math.random() * 2.8) * depth;
+      const depth = 0.6 + Math.random() * 0.7;
+      const baseRadius = (2.0 + Math.random() * 2.8) * depth;
       return {
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.45 * depth,
-        vy: (Math.random() - 0.5) * 0.45 * depth,
+        vx: (Math.random() - 0.5) * 0.40 * depth,
+        vy: (Math.random() - 0.5) * 0.40 * depth,
         radius: baseRadius,
         baseRadius,
         color,
-        alpha: Math.random() * 0.1,
-        maxAlpha: (0.25 + Math.random() * 0.45) * depth,
-        fadeSpeed: 0.003 + Math.random() * 0.006,
+        alpha: Math.random() * 0.15,
+        maxAlpha: (0.42 + Math.random() * 0.45) * depth,
+        fadeSpeed: 0.0035 + Math.random() * 0.0055,
         fadingIn: true,
         depth,
       };
@@ -108,31 +108,31 @@ export const ProfnessNetworkBackground: React.FC = () => {
           }
         } else {
           p.alpha -= p.fadeSpeed;
-          if (p.alpha <= 0.03) {
+          if (p.alpha <= 0.06) {
             p.fadingIn = true;
             // Slightly evolve color & speed
             p.color = colors[Math.floor(Math.random() * colors.length)];
-            p.maxAlpha = (0.25 + Math.random() * 0.45) * p.depth;
+            p.maxAlpha = (0.42 + Math.random() * 0.45) * p.depth;
           }
         }
 
-        // Draw particle node with a soft glow
+        // Draw particle node with solid core
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${p.alpha})`;
         ctx.fill();
 
-        // Extra subtle ambient halo around nodes
-        if (p.alpha > 0.25) {
+        // Ambient luminous halo around nodes for easy noticing
+        if (p.alpha > 0.20) {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius * 2.2, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${p.alpha * 0.2})`;
+          ctx.arc(p.x, p.y, p.radius * 2.4, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${p.alpha * 0.28})`;
           ctx.fill();
         }
       }
 
       // Draw connecting plexus network lines
-      const maxDistance = 140;
+      const maxDistance = 160;
       for (let i = 0; i < particles.length; i++) {
         const p1 = particles[i];
         for (let j = i + 1; j < particles.length; j++) {
@@ -144,9 +144,9 @@ export const ProfnessNetworkBackground: React.FC = () => {
           if (dist < maxDistance) {
             const distanceFactor = 1 - dist / maxDistance;
             // Line opacity depends on both particles' current alpha
-            const lineAlpha = Math.min(p1.alpha, p2.alpha) * distanceFactor * 0.75;
+            const lineAlpha = Math.min(p1.alpha, p2.alpha) * distanceFactor * 0.95;
 
-            if (lineAlpha > 0.01) {
+            if (lineAlpha > 0.02) {
               ctx.beginPath();
               ctx.moveTo(p1.x, p1.y);
               ctx.lineTo(p2.x, p2.y);
@@ -157,7 +157,7 @@ export const ProfnessNetworkBackground: React.FC = () => {
               grad.addColorStop(1, `rgba(${p2.color.r}, ${p2.color.g}, ${p2.color.b}, ${lineAlpha})`);
 
               ctx.strokeStyle = grad;
-              ctx.lineWidth = 0.9 * Math.min(p1.depth, p2.depth);
+              ctx.lineWidth = 1.15 * Math.min(p1.depth, p2.depth);
               ctx.stroke();
             }
           }
@@ -178,7 +178,7 @@ export const ProfnessNetworkBackground: React.FC = () => {
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 pointer-events-none z-[1] w-full h-full mix-blend-multiply opacity-80"
+      className="absolute inset-0 pointer-events-none z-[1] w-full h-full mix-blend-multiply opacity-95"
     />
   );
 };
