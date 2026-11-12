@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { ProfnessLogo } from './ProfnessLogo';
 
 export const LoginPage: React.FC = () => {
   const { signInWithPassword, signUp, resetPassword, signInWithGoogle, authError, setAuthError } = useAuth();
@@ -140,36 +141,36 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#faf8ff] text-slate-900 font-sans selection:bg-purple-100 selection:text-purple-900"
+      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#F5F7FA] text-[#172B4D] font-sans selection:bg-[#EDF1F6] selection:text-[#013589]"
     >
-      {/* Ambient Purple Mesh Gradient Orbs */}
+      {/* Ambient Cool Blue Mesh Gradient Orbs (Derived from Deep Blue and Sky Blue) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        {/* Top/Center soft glowing purple orb */}
+        {/* Top/Center soft glowing cool-blue orb */}
         <div 
           className="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[520px] rounded-full blur-[130px] opacity-75"
           style={{
-            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.28) 0%, rgba(124, 58, 237, 0.18) 45%, rgba(99, 102, 241, 0.08) 70%, transparent 100%)',
+            background: 'radial-gradient(circle, rgba(71, 126, 216, 0.22) 0%, rgba(37, 89, 175, 0.14) 45%, rgba(1, 53, 137, 0.06) 70%, transparent 100%)',
           }}
         />
         {/* Bottom Left ambient glow */}
         <div 
           className="absolute -bottom-40 -left-24 w-[500px] h-[500px] rounded-full blur-[140px] opacity-60"
           style={{
-            background: 'radial-gradient(circle, rgba(147, 51, 234, 0.22) 0%, rgba(192, 132, 252, 0.12) 50%, transparent 100%)',
+            background: 'radial-gradient(circle, rgba(1, 53, 137, 0.16) 0%, rgba(71, 126, 216, 0.10) 50%, transparent 100%)',
           }}
         />
         {/* Bottom Right ambient glow */}
         <div 
           className="absolute -bottom-36 -right-20 w-[550px] h-[550px] rounded-full blur-[150px] opacity-60"
           style={{
-            background: 'radial-gradient(circle, rgba(124, 58, 237, 0.20) 0%, rgba(99, 102, 241, 0.12) 50%, transparent 100%)',
+            background: 'radial-gradient(circle, rgba(37, 89, 175, 0.16) 0%, rgba(101, 223, 210, 0.08) 50%, transparent 100%)',
           }}
         />
         {/* Subtle grid pattern overlay */}
         <div 
           className="absolute inset-0 opacity-[0.025]"
           style={{
-            backgroundImage: `radial-gradient(circle at 50% 50%, #7c3aed 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(circle at 50% 50%, #2559AF 1px, transparent 1px)`,
             backgroundSize: '32px 32px',
           }}
         />
@@ -177,33 +178,39 @@ export const LoginPage: React.FC = () => {
 
       {/* Top Bar with Brand Logo and Language Toggle */}
       <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between z-10 relative">
-        {/* Brand Logo matching the screenshot */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-purple-500 flex flex-col items-center justify-center gap-1 shadow-md shadow-purple-600/25">
-            <span className="w-4 h-0.5 bg-white rounded-full"></span>
-            <span className="w-4 h-0.5 bg-white/90 rounded-full"></span>
-            <span className="w-2.5 h-0.5 bg-white/80 rounded-full self-start ml-2.5"></span>
-          </div>
-          <span className="font-bold text-xl tracking-tight text-slate-900">BizOS</span>
+        {/* Official Profness Brand Logo & Wordmark */}
+        <div className="flex items-center gap-3 sm:gap-3.5">
+          {/* Spire Architectural Icon (Enlarged with Crisp Detail & No Quality Loss) */}
+          <img
+            src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
+            alt="Profness Icon"
+            className="h-12 sm:h-14 w-auto object-contain shrink-0 filter drop-shadow-xs transition-transform hover:scale-105"
+          />
+          {/* Official Profness Brand Wordmark from Image */}
+          <img
+            src="/assets/aistudio/Profness_Full_Logo_transparent.png"
+            alt="Profness"
+            className="h-8 sm:h-9 w-auto object-contain select-none"
+          />
         </div>
 
         {/* Language Switcher */}
         <button
           type="button"
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-purple-200/70 bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold shadow-xs hover:border-purple-300 transition-all cursor-pointer backdrop-blur-md"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#DCE3ED] bg-white/80 hover:bg-white text-[#172B4D] text-xs font-semibold shadow-xs hover:border-[#2559AF]/50 transition-all cursor-pointer backdrop-blur-md"
           title="Switch Language / تغيير اللغة"
         >
-          <span className="material-symbols-outlined text-sm text-purple-600">translate</span>
-          <span className="uppercase text-[11px] font-bold">{language === 'en' ? 'العربية' : 'English'}</span>
+          <span className="material-symbols-outlined text-sm text-[#2559AF]">translate</span>
+          <span className="uppercase text-[11px] font-bold text-[#172B4D]">{language === 'en' ? 'العربية' : 'English'}</span>
         </button>
       </header>
 
       {/* Main Form Centerpiece */}
       <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 z-10 relative">
-        {/* Pill Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 border border-purple-200/80 shadow-[0_2px_10px_-2px_rgba(124,58,237,0.15)] mb-3.5 text-purple-900 text-[11px] font-bold tracking-widest uppercase backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-purple-600 animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.8)]"></span>
+        {/* Pill Badge with Aqua (#65DFD2) Technology Accent */}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 border border-[#DCE3ED] shadow-[0_2px_10px_-2px_rgba(1,53,137,0.10)] mb-3.5 text-[#013589] text-[11px] font-bold tracking-widest uppercase backdrop-blur-md">
+          <span className="w-2 h-2 rounded-full bg-[#65DFD2] animate-pulse shadow-[0_0_8px_rgba(101,223,210,0.85)]"></span>
           <span>
             {mode === 'signin' && (isRtl ? 'مرحباً بك مجدداً' : 'WELCOME BACK')}
             {mode === 'signup' && (isRtl ? 'حساب جديد' : 'CREATE ACCOUNT')}
@@ -211,15 +218,15 @@ export const LoginPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Heading */}
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight mb-2 text-center">
+        {/* Heading in Deep Blue (#013589) */}
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-[#013589] tracking-tight mb-2 text-center">
           {mode === 'signin' && (isRtl ? 'تسجيل الدخول' : 'Sign in')}
           {mode === 'signup' && (isRtl ? 'إنشاء حساب جديد' : 'Create an account')}
           {mode === 'forgot' && (isRtl ? 'استعادة كلمة المرور' : 'Reset password')}
         </h1>
 
-        {/* Subtitle */}
-        <p className="text-slate-500 text-sm sm:text-base max-w-sm text-center mb-8 font-normal leading-relaxed">
+        {/* Subtitle in Secondary Text (#68778D) */}
+        <p className="text-[#68778D] text-sm sm:text-base max-w-sm text-center mb-8 font-normal leading-relaxed">
           {mode === 'signin' &&
             (isRtl
               ? 'تابع عملك من حيث توقفت في مساحة العمل الخاصة بك.'
@@ -236,11 +243,11 @@ export const LoginPage: React.FC = () => {
 
         {/* Floating Card with Deep Diffused Soft Shadows & Glassmorphism Depth */}
         <div 
-          className="w-full max-w-[420px] bg-white/90 backdrop-blur-2xl rounded-3xl border border-white/80 p-7 sm:p-9 transition-all relative"
+          className="w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-3xl border border-[#DCE3ED]/80 p-7 sm:p-9 transition-all relative"
           style={{
             boxShadow: `
-              0 30px 70px -15px rgba(124, 58, 237, 0.16),
-              0 15px 35px -10px rgba(99, 102, 241, 0.12),
+              0 30px 70px -15px rgba(1, 53, 137, 0.12),
+              0 15px 35px -10px rgba(37, 89, 175, 0.08),
               0 4px 12px rgba(0, 0, 0, 0.03),
               inset 0 1px 1px 0 rgba(255, 255, 255, 0.9)
             `,
@@ -280,7 +287,7 @@ export const LoginPage: React.FC = () => {
             {/* Full Name Field (Sign Up Only) */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
                   {isRtl ? 'الاسم الكامل' : 'Full Name'}
                 </label>
                 <div className="relative">
@@ -289,7 +296,7 @@ export const LoginPage: React.FC = () => {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder={isRtl ? 'مثال: محمد أحمد' : 'e.g. John Doe'}
-                    className="w-full px-4 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                    className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all"
                   />
                 </div>
               </div>
@@ -297,7 +304,7 @@ export const LoginPage: React.FC = () => {
 
             {/* Email Field */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
                 {isRtl ? 'البريد الإلكتروني' : 'Email'}
               </label>
               <input
@@ -307,7 +314,7 @@ export const LoginPage: React.FC = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={isRtl ? 'name@company.com' : 'name@company.com'}
                 autoComplete="email"
-                className="w-full px-4 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all text-start"
+                className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all text-start"
                 dir="ltr"
               />
             </div>
@@ -316,7 +323,7 @@ export const LoginPage: React.FC = () => {
             {mode !== 'forgot' && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700">
+                  <label className="text-xs font-semibold text-[#172B4D]">
                     {isRtl ? 'كلمة المرور' : 'Password'}
                   </label>
                   {mode === 'signin' && (
@@ -326,7 +333,7 @@ export const LoginPage: React.FC = () => {
                         resetFormState();
                         setMode('forgot');
                       }}
-                      className="text-xs text-indigo-600 hover:text-indigo-700 font-medium hover:underline transition-colors cursor-pointer"
+                      className="text-xs text-[#2559AF] hover:text-[#013589] font-medium hover:underline transition-colors cursor-pointer"
                     >
                       {isRtl ? 'نسيت كلمة المرور؟' : 'Forgot password?'}
                     </button>
@@ -340,7 +347,7 @@ export const LoginPage: React.FC = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                    className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 sm:py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all`}
+                    className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all`}
                     dir="ltr"
                   />
                   <button
@@ -349,7 +356,7 @@ export const LoginPage: React.FC = () => {
                     tabIndex={-1}
                     className={`absolute top-1/2 -translate-y-1/2 ${
                       isRtl ? 'left-3' : 'right-3'
-                    } text-slate-400 hover:text-slate-600 transition-colors cursor-pointer flex items-center justify-center p-1`}
+                    } text-[#68778D] hover:text-[#172B4D] transition-colors cursor-pointer flex items-center justify-center p-1`}
                   >
                     <span className="material-symbols-outlined text-lg">
                       {showPassword ? 'visibility_off' : 'visibility'}
@@ -362,7 +369,7 @@ export const LoginPage: React.FC = () => {
             {/* Confirm Password Field (Sign Up Only) */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
                   {isRtl ? 'تأكيد كلمة المرور' : 'Confirm Password'}
                 </label>
                 <input
@@ -372,26 +379,26 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="new-password"
-                  className="w-full px-4 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                  className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all"
                   dir="ltr"
                 />
               </div>
             )}
 
-            {/* Submit Primary Action Button with Vibrant Purple Gradient & 3D Layered Glow */}
+            {/* Submit Primary Action Button with Profness Blue Gradient (#013589 -> #2559AF -> #477ED8) & 3D Layered Glow */}
             <div className="pt-2 relative group">
-              {/* Colored Glow Shadow Underneath */}
+              {/* Soft Blue Glow Shadow Underneath */}
               <div 
                 className="absolute inset-0 rounded-2xl opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                 style={{
-                  background: 'linear-gradient(135deg, #9333ea 0%, #7c3aed 50%, #6366f1 100%)',
+                  background: 'linear-gradient(135deg, #013589 0%, #2559AF 50%, #477ED8 100%)',
                   transform: 'translateY(6px) scale(0.95)',
                 }}
               />
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="relative w-full py-3.5 px-4 bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-700 hover:via-indigo-700 hover:to-purple-800 text-white font-bold text-sm rounded-2xl shadow-[0_12px_28px_-6px_rgba(124,58,237,0.55),0_4px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-white/25"
+                className="relative w-full py-3.5 px-4 bg-gradient-to-r from-[#013589] via-[#2559AF] to-[#477ED8] hover:from-[#002B70] hover:via-[#1F4C97] hover:to-[#3B6DC4] text-white font-bold text-sm rounded-2xl shadow-[0_12px_28px_-6px_rgba(1,53,137,0.55),0_4px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-white/25"
               >
                 {isSubmitting ? (
                   <>
@@ -412,13 +419,13 @@ export const LoginPage: React.FC = () => {
           {/* Social Divider & Google Button (Only in Signin / Signup) */}
           {mode !== 'forgot' && (
             <>
-              {/* Modern SaaS Divider with Sleek Pill */}
+              {/* Modern SaaS Divider with Sleek Pill in Neutral/Blue Palette */}
               <div className="relative my-6 flex items-center justify-center">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full h-px bg-gradient-to-r from-transparent via-purple-200/80 to-transparent"></div>
+                  <div className="w-full h-px bg-gradient-to-r from-transparent via-[#DCE3ED] to-transparent"></div>
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="px-3.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md border border-purple-100/80 text-[10px] font-bold text-slate-400 uppercase tracking-widest shadow-[0_2px_8px_-2px_rgba(124,58,237,0.08)]">
+                  <span className="px-3.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md border border-[#DCE3ED] text-[10px] font-bold text-[#68778D] uppercase tracking-widest shadow-[0_2px_8px_-2px_rgba(1,53,137,0.06)]">
                     {isRtl ? 'أو' : 'OR'}
                   </span>
                 </div>
@@ -429,7 +436,7 @@ export const LoginPage: React.FC = () => {
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isSubmitting}
-                className="w-full py-3 px-4 bg-white/80 hover:bg-white border border-slate-200/80 hover:border-purple-200 text-slate-700 font-semibold text-xs rounded-2xl transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_-4px_rgba(124,58,237,0.12)] flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60 backdrop-blur-sm group"
+                className="w-full py-3 px-4 bg-white/80 hover:bg-white border border-[#DCE3ED] hover:border-[#2559AF]/50 text-[#172B4D] font-semibold text-xs rounded-2xl transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_-4px_rgba(1,53,137,0.12)] flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60 backdrop-blur-sm group"
               >
                 {/* Official Google Icon */}
                 <div className="w-5 h-5 flex items-center justify-center transition-transform group-hover:scale-105">
@@ -452,7 +459,7 @@ export const LoginPage: React.FC = () => {
                     />
                   </svg>
                 </div>
-                <span className="tracking-tight text-slate-700 group-hover:text-slate-900 transition-colors">
+                <span className="tracking-tight text-[#172B4D] group-hover:text-[#013589] transition-colors">
                   {isRtl ? 'متابعة باستخدام Google' : 'Continue with Google'}
                 </span>
               </button>
@@ -468,7 +475,7 @@ export const LoginPage: React.FC = () => {
                   resetFormState();
                   setMode('signin');
                 }}
-                className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                className="text-xs text-[#2559AF] hover:text-[#013589] font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-sm">
                   {isRtl ? 'arrow_forward' : 'arrow_back'}
@@ -480,17 +487,17 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Footer Toggle beneath card */}
-        <div className="mt-6 text-center text-xs sm:text-sm text-slate-500">
+        <div className="mt-6 text-center text-xs sm:text-sm text-[#68778D]">
           {mode === 'signin' && (
             <p>
-              {isRtl ? 'جديد في BizOS؟ ' : 'New to BizOS? '}
+              {isRtl ? 'جديد في Profness؟ ' : 'New to Profness? '}
               <button
                 type="button"
                 onClick={() => {
                   resetFormState();
                   setMode('signup');
                 }}
-                className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline cursor-pointer"
+                className="text-[#2559AF] hover:text-[#013589] font-semibold hover:underline cursor-pointer"
               >
                 {isRtl ? 'إنشاء حساب جديد' : 'Create an account'}
               </button>
@@ -506,7 +513,7 @@ export const LoginPage: React.FC = () => {
                   resetFormState();
                   setMode('signin');
                 }}
-                className="text-indigo-600 hover:text-indigo-700 font-semibold hover:underline cursor-pointer"
+                className="text-[#2559AF] hover:text-[#013589] font-semibold hover:underline cursor-pointer"
               >
                 {isRtl ? 'تسجيل الدخول' : 'Sign in'}
               </button>
@@ -516,8 +523,8 @@ export const LoginPage: React.FC = () => {
       </div>
 
       {/* Subtle Bottom Credit */}
-      <footer className="w-full text-center py-4 text-[11px] text-slate-400 z-10">
-        <span>BizOS Cloud Workspace • {isRtl ? 'نظام تشغيل وإدارة المؤسسات' : 'Business Operations System'}</span>
+      <footer className="w-full text-center py-4 text-[11px] text-[#68778D] z-10">
+        <span>Profness Cloud Workspace • {isRtl ? 'منصة العمليات وإدارة الأعمال الاحترافية' : 'Professional Business Operations Platform'}</span>
       </footer>
     </div>
   );
