@@ -11,7 +11,11 @@ import React, { useEffect, useRef } from 'react';
  * - Layered behind all UI elements with pointer-events: none and subtle opacity
  *   so it enhances the atmospheric ambient background without covering cards, text, or buttons.
  */
-export const ProfnessNetworkBackground: React.FC = () => {
+export interface ProfnessNetworkBackgroundProps {
+  theme?: 'light' | 'dark';
+}
+
+export const ProfnessNetworkBackground: React.FC<ProfnessNetworkBackgroundProps> = ({ theme = 'light' }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -32,13 +36,20 @@ export const ProfnessNetworkBackground: React.FC = () => {
 
     window.addEventListener('resize', handleResize);
 
-    // Color definitions
-    const colors = [
-      { r: 1, g: 53, b: 137, hex: '#013589' },   // Deep Blue
-      { r: 37, g: 89, b: 175, hex: '#2559AF' },  // Royal Blue
-      { r: 71, g: 126, b: 216, hex: '#477ED8' }, // Sky Blue
-      { r: 101, g: 223, b: 210, hex: '#65DFD2' },// Aqua
-    ];
+    const colors =
+      theme === 'dark'
+        ? [
+            { r: 20, g: 184, b: 166, hex: '#14B8A6' },  // Teal 500
+            { r: 45, g: 212, b: 191, hex: '#2DD4BF' },  // Teal 400
+            { r: 16, g: 185, b: 129, hex: '#10B981' },  // Emerald 500
+            { r: 101, g: 223, b: 210, hex: '#65DFD2' }, // Profness Aqua
+          ]
+        : [
+            { r: 1, g: 53, b: 137, hex: '#013589' },   // Deep Blue
+            { r: 37, g: 89, b: 175, hex: '#2559AF' },  // Royal Blue
+            { r: 71, g: 126, b: 216, hex: '#477ED8' }, // Sky Blue
+            { r: 101, g: 223, b: 210, hex: '#65DFD2' },// Aqua
+          ];
 
     interface Particle {
       x: number;
@@ -52,7 +63,7 @@ export const ProfnessNetworkBackground: React.FC = () => {
       maxAlpha: number;
       fadeSpeed: number;
       fadingIn: boolean;
-      depth: number; // 0.4 to 1.2 for 3D parallax depth
+      depth: number;
     }
 
     const particleCount = Math.min(80, Math.floor((width * height) / 14000));
@@ -71,7 +82,7 @@ export const ProfnessNetworkBackground: React.FC = () => {
         baseRadius,
         color,
         alpha: Math.random() * 0.15,
-        maxAlpha: (0.42 + Math.random() * 0.45) * depth,
+        maxAlpha: (theme === 'dark' ? 0.34 + Math.random() * 0.36 : 0.42 + Math.random() * 0.45) * depth,
         fadeSpeed: 0.0035 + Math.random() * 0.0055,
         fadingIn: true,
         depth,
@@ -82,25 +93,20 @@ export const ProfnessNetworkBackground: React.FC = () => {
       particles.push(createParticle());
     }
 
-    // Main render loop
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
-      // Update and draw particles
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
-        // Position drift
         p.x += p.vx;
         p.y += p.vy;
 
-        // Wrap around boundaries smoothly
         if (p.x < -30) p.x = width + 30;
         if (p.x > width + 30) p.x = -30;
         if (p.y < -30) p.y = height + 30;
         if (p.y > height + 30) p.y = -30;
 
-        // Breathing fade in / fade out cycle like the video
         if (p.fadingIn) {
           p.alpha += p.fadeSpeed;
           if (p.alpha >= p.maxAlpha) {
@@ -110,19 +116,16 @@ export const ProfnessNetworkBackground: React.FC = () => {
           p.alpha -= p.fadeSpeed;
           if (p.alpha <= 0.06) {
             p.fadingIn = true;
-            // Slightly evolve color & speed
             p.color = colors[Math.floor(Math.random() * colors.length)];
-            p.maxAlpha = (0.42 + Math.random() * 0.45) * p.depth;
+            p.maxAlpha = (theme === 'dark' ? 0.34 + Math.random() * 0.36 : 0.42 + Math.random() * 0.45) * p.depth;
           }
         }
 
-        // Draw particle node with solid core
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${p.color.r}, ${p.color.g}, ${p.color.b}, ${p.alpha})`;
         ctx.fill();
 
-        // Ambient luminous halo around nodes for easy noticing
         if (p.alpha > 0.20) {
           ctx.beginPath();
           ctx.arc(p.x, p.y, p.radius * 2.4, 0, Math.PI * 2);
@@ -131,7 +134,6 @@ export const ProfnessNetworkBackground: React.FC = () => {
         }
       }
 
-      // Draw connecting plexus network lines
       const maxDistance = 160;
       for (let i = 0; i < particles.length; i++) {
         const p1 = particles[i];
@@ -143,15 +145,13 @@ export const ProfnessNetworkBackground: React.FC = () => {
 
           if (dist < maxDistance) {
             const distanceFactor = 1 - dist / maxDistance;
-            // Line opacity depends on both particles' current alpha
-            const lineAlpha = Math.min(p1.alpha, p2.alpha) * distanceFactor * 0.95;
+            const lineAlpha = Math.min(p1.alpha, p2.alpha) * distanceFactor * (theme === 'dark' ? 0.65 : 0.95);
 
             if (lineAlpha > 0.02) {
               ctx.beginPath();
               ctx.moveTo(p1.x, p1.y);
               ctx.lineTo(p2.x, p2.y);
 
-              // Smooth gradient line between the two particle colors
               const grad = ctx.createLinearGradient(p1.x, p1.y, p2.x, p2.y);
               grad.addColorStop(0, `rgba(${p1.color.r}, ${p1.color.g}, ${p1.color.b}, ${lineAlpha})`);
               grad.addColorStop(1, `rgba(${p2.color.r}, ${p2.color.g}, ${p2.color.b}, ${lineAlpha})`);
@@ -173,12 +173,14 @@ export const ProfnessNetworkBackground: React.FC = () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [theme]);
 
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 pointer-events-none z-[1] w-full h-full mix-blend-multiply opacity-95"
+      className={`absolute inset-0 pointer-events-none z-[1] w-full h-full ${
+        theme === 'dark' ? 'mix-blend-screen opacity-80' : 'mix-blend-multiply opacity-95'
+      }`}
     />
   );
 };

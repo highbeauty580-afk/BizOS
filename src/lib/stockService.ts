@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { FastItem } from '../types';
+import { getCurrentActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Stock Service for BizOS
@@ -29,16 +30,23 @@ export interface AddStockParams {
   product_fk?: string;
 }
 
-export async function fetchStockFromSupabase(): Promise<{ data: FastItem[]; error: string | null }> {
+export async function fetchStockFromSupabase(tenantId?: string): Promise<{ data: FastItem[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'لم يتم تكوين متغيرات بيئة Supabase.' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('stock')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase fetch stock error:', error.message, error.details);
@@ -90,6 +98,7 @@ export async function addStockToSupabase(
     const qty = parseFloat(params.quantity as any) || 0;
     const calcAmount = cost * qty;
 
+    const resolvedTenantId = getCurrentActiveTenantId();
     const cleanPayload: Record<string, any> = {
       Stock_name: params.stock_name.trim(),
       stock_type: params.stock_type,
@@ -104,6 +113,9 @@ export async function addStockToSupabase(
 
     if (params.product_fk) {
       cleanPayload.product_fk = params.product_fk;
+    }
+    if (resolvedTenantId) {
+      cleanPayload.tenant_id = resolvedTenantId;
     }
 
     const { data, error } = await supabase

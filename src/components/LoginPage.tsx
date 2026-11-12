@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
+import { Globe, Moon, Sun } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
-import { ProfnessLogo } from './ProfnessLogo';
 import { ProfnessNetworkBackground } from './ProfnessNetworkBackground';
 
 export const LoginPage: React.FC = () => {
   const { signInWithPassword, signUp, resetPassword, signInWithGoogle, authError, setAuthError } = useAuth();
-  const { language, setLanguage } = useApp();
+  const { language, setLanguage, isDarkPortal: isDarkMode, toggleDarkPortal } = useApp();
 
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
   const [email, setEmail] = useState('');
@@ -118,7 +118,6 @@ export const LoginPage: React.FC = () => {
       return;
     }
 
-    // Sign in mode
     setIsSubmitting(true);
     const res = await signInWithPassword(email, password);
     setIsSubmitting(false);
@@ -142,79 +141,180 @@ export const LoginPage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden bg-[#F5F7FA] text-[#172B4D] font-sans selection:bg-[#EDF1F6] selection:text-[#013589]"
+      dir={isRtl ? 'rtl' : 'ltr'}
+      className={`min-h-screen w-full flex flex-col justify-between items-center relative overflow-hidden font-sans transition-colors duration-300 ${
+        isDarkMode
+          ? 'bg-[#060b14] text-slate-100 selection:bg-teal-500/30 selection:text-teal-200'
+          : 'bg-[#F5F7FA] text-[#172B4D] selection:bg-[#EDF1F6] selection:text-[#013589]'
+      }`}
     >
-      {/* Ambient Cool Blue Mesh Gradient Orbs (Derived from Deep Blue and Sky Blue) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
-        {/* Animated Network Plexus Background (Appearing & Disappearing in Official Palette) */}
-        <ProfnessNetworkBackground />
+      {/* Ambient Background Layer (Dark Teal/Emerald vs Classic Light Blue) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <ProfnessNetworkBackground theme={isDarkMode ? 'dark' : 'light'} />
 
-        {/* Top/Center soft glowing cool-blue orb */}
-        <div 
-          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[520px] rounded-full blur-[130px] opacity-75"
-          style={{
-            background: 'radial-gradient(circle, rgba(71, 126, 216, 0.22) 0%, rgba(37, 89, 175, 0.14) 45%, rgba(1, 53, 137, 0.06) 70%, transparent 100%)',
-          }}
-        />
-        {/* Bottom Left ambient glow */}
-        <div 
-          className="absolute -bottom-40 -left-24 w-[500px] h-[500px] rounded-full blur-[140px] opacity-60"
-          style={{
-            background: 'radial-gradient(circle, rgba(1, 53, 137, 0.16) 0%, rgba(71, 126, 216, 0.10) 50%, transparent 100%)',
-          }}
-        />
-        {/* Bottom Right ambient glow */}
-        <div 
-          className="absolute -bottom-36 -right-20 w-[550px] h-[550px] rounded-full blur-[150px] opacity-60"
-          style={{
-            background: 'radial-gradient(circle, rgba(37, 89, 175, 0.16) 0%, rgba(101, 223, 210, 0.08) 50%, transparent 100%)',
-          }}
-        />
-        {/* Subtle grid pattern overlay */}
-        <div 
-          className="absolute inset-0 opacity-[0.025]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 50% 50%, #2559AF 1px, transparent 1px)`,
-            backgroundSize: '32px 32px',
-          }}
-        />
+        {isDarkMode ? (
+          <>
+            <div
+              className="absolute -top-44 left-1/2 -translate-x-1/2 w-[780px] h-[520px] rounded-full blur-[140px] opacity-60 animate-float-slow"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(20, 184, 166, 0.22) 0%, rgba(16, 185, 129, 0.12) 45%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute -bottom-48 -left-24 w-[540px] h-[540px] rounded-full blur-[150px] opacity-55"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(13, 148, 136, 0.20) 0%, rgba(6, 182, 212, 0.08) 55%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute -bottom-40 -right-24 w-[540px] h-[540px] rounded-full blur-[150px] opacity-50"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, rgba(20, 184, 166, 0.08) 55%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute inset-0 opacity-[0.06]"
+              style={{
+                backgroundImage: 'radial-gradient(circle at 50% 50%, #2dd4bf 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <div
+              className="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[520px] rounded-full blur-[130px] opacity-75"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(71, 126, 216, 0.22) 0%, rgba(37, 89, 175, 0.14) 45%, rgba(1, 53, 137, 0.06) 70%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute -bottom-40 -left-24 w-[500px] h-[500px] rounded-full blur-[140px] opacity-60"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(1, 53, 137, 0.16) 0%, rgba(71, 126, 216, 0.10) 50%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute -bottom-36 -right-20 w-[550px] h-[550px] rounded-full blur-[150px] opacity-60"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(37, 89, 175, 0.16) 0%, rgba(101, 223, 210, 0.08) 50%, transparent 100%)',
+              }}
+            />
+            <div
+              className="absolute inset-0 opacity-[0.025]"
+              style={{
+                backgroundImage: 'radial-gradient(circle at 50% 50%, #2559AF 1px, transparent 1px)',
+                backgroundSize: '32px 32px',
+              }}
+            />
+          </>
+        )}
       </div>
 
-      {/* Top Bar with Brand Logo and Language Toggle - Anchored to outer edges */}
+      {/* Top Bar with Brand Logo, Theme Switcher & Language Switcher */}
       <header className="w-full px-6 sm:px-10 lg:px-12 py-5 sm:py-6 flex items-center justify-between z-10 relative">
-        {/* Official Profness Brand Logo & Wordmark - Refined Balanced Scale */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
-          {/* Spire Architectural Icon (Harmonious, Crisp & Clear Scale) */}
-          <img
-            src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
-            alt="Profness Icon"
-            className="h-9 sm:h-10 w-auto object-contain shrink-0 filter drop-shadow-xs transition-transform hover:scale-105"
-          />
-          {/* Official Profness Brand Wordmark from Image */}
+        <div className="flex items-center gap-3">
+          {isDarkMode ? (
+            <div className="w-10 h-10 rounded-xl bg-slate-900/80 border border-teal-500/25 flex items-center justify-center shadow-lg shadow-teal-500/10">
+              <img
+                src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
+                alt="Profness Icon"
+                className="h-7 w-7 object-contain"
+              />
+            </div>
+          ) : (
+            <img
+              src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
+              alt="Profness Icon"
+              className="h-9 sm:h-10 w-auto object-contain shrink-0 filter drop-shadow-xs transition-transform hover:scale-105"
+            />
+          )}
           <img
             src="/assets/aistudio/Profness_Full_Logo_transparent.png"
             alt="Profness"
-            className="h-6 sm:h-7 w-auto object-contain select-none"
+            className={`h-5 sm:h-6 w-auto object-contain select-none transition-all ${
+              isDarkMode ? 'brightness-0 invert opacity-95' : 'sm:h-7'
+            }`}
           />
         </div>
 
-        {/* Language Switcher - Placed at opposite edge respecting RTL/LTR */}
-        <button
-          type="button"
-          onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#DCE3ED] bg-white/80 hover:bg-white text-[#172B4D] text-xs font-semibold shadow-xs hover:border-[#2559AF]/50 transition-all cursor-pointer backdrop-blur-md shrink-0"
-          title="Switch Language / تغيير اللغة"
-        >
-          <span className="material-symbols-outlined text-sm text-[#2559AF]">translate</span>
-          <span className="uppercase text-[11px] font-bold text-[#172B4D]">{language === 'en' ? 'العربية' : 'English'}</span>
-        </button>
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Light / Dark Mode Toggle Button */}
+          <button
+            type="button"
+            onClick={toggleDarkPortal}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer backdrop-blur-md shrink-0 ${
+              isDarkMode
+                ? 'border-teal-500/20 bg-slate-900/60 hover:bg-slate-900/90 hover:border-teal-400/40 text-slate-200 hover:text-teal-300 shadow-lg'
+                : 'border-[#DCE3ED] bg-white/80 hover:bg-white hover:border-[#2559AF]/50 text-[#172B4D] shadow-xs'
+            }`}
+            title={
+              isDarkMode
+                ? isRtl
+                  ? 'التبديل إلى الوضع المضيء'
+                  : 'Switch to Light Mode'
+                : isRtl
+                  ? 'التبديل إلى الوضع الليلي'
+                  : 'Switch to Dark Mode'
+            }
+          >
+            {isDarkMode ? (
+              <>
+                <Sun className="w-3.5 h-3.5 text-amber-300" />
+                <span className="hidden sm:inline font-bold">
+                  {isRtl ? 'الوضع المضيء' : 'Light'}
+                </span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-3.5 h-3.5 text-[#2559AF]" />
+                <span className="hidden sm:inline font-bold">
+                  {isRtl ? 'الوضع الليلي' : 'Dark'}
+                </span>
+              </>
+            )}
+          </button>
+
+          {/* Language Switcher */}
+          <button
+            type="button"
+            onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all cursor-pointer backdrop-blur-md shrink-0 ${
+              isDarkMode
+                ? 'border-teal-500/20 bg-slate-900/60 hover:bg-slate-900/90 hover:border-teal-400/40 text-slate-200 hover:text-teal-300 shadow-lg'
+                : 'border-[#DCE3ED] bg-white/80 hover:bg-white hover:border-[#2559AF]/50 text-[#172B4D] shadow-xs'
+            }`}
+            title="Switch Language / تغيير اللغة"
+          >
+            <Globe className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-400' : 'text-[#2559AF]'}`} />
+            <span className="text-xs font-bold">{language === 'en' ? 'العربية' : 'English'}</span>
+          </button>
+        </div>
       </header>
 
       {/* Main Form Centerpiece */}
       <div className="w-full flex-1 flex flex-col items-center justify-center px-4 py-8 z-10 relative">
-        {/* Pill Badge with Aqua (#65DFD2) Technology Accent */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 border border-[#DCE3ED] shadow-[0_2px_10px_-2px_rgba(1,53,137,0.10)] mb-3.5 text-[#013589] text-[11px] font-bold tracking-widest uppercase backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-[#65DFD2] animate-pulse shadow-[0_0_8px_rgba(101,223,210,0.85)]"></span>
+        {/* Status Badge */}
+        <div
+          className={`inline-flex items-center gap-2 px-3.5 py-1.5 mb-4 text-[11px] font-bold tracking-widest uppercase backdrop-blur-md transition-all ${
+            isDarkMode
+              ? 'rounded-lg bg-teal-500/10 border border-teal-400/25 text-teal-300 shadow-[0_0_20px_rgba(20,184,166,0.12)]'
+              : 'rounded-full bg-white/80 border border-[#DCE3ED] text-[#013589] shadow-[0_2px_10px_-2px_rgba(1,53,137,0.10)]'
+          }`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full animate-pulse ${
+              isDarkMode
+                ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.95)]'
+                : 'bg-[#65DFD2] shadow-[0_0_8px_rgba(101,223,210,0.85)]'
+            }`}
+          />
           <span>
             {mode === 'signin' && (isRtl ? 'مرحباً بك مجدداً' : 'WELCOME BACK')}
             {mode === 'signup' && (isRtl ? 'حساب جديد' : 'CREATE ACCOUNT')}
@@ -222,15 +322,23 @@ export const LoginPage: React.FC = () => {
           </span>
         </div>
 
-        {/* Heading in Deep Blue (#013589) */}
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-[#013589] tracking-tight mb-2 text-center">
+        {/* Heading */}
+        <h1
+          className={`text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 text-center transition-colors ${
+            isDarkMode ? 'text-white' : 'text-[#013589]'
+          }`}
+        >
           {mode === 'signin' && (isRtl ? 'تسجيل الدخول' : 'Sign in')}
           {mode === 'signup' && (isRtl ? 'إنشاء حساب جديد' : 'Create an account')}
           {mode === 'forgot' && (isRtl ? 'استعادة كلمة المرور' : 'Reset password')}
         </h1>
 
-        {/* Subtitle in Secondary Text (#68778D) */}
-        <p className="text-[#68778D] text-sm sm:text-base max-w-sm text-center mb-8 font-normal leading-relaxed">
+        {/* Subtitle */}
+        <p
+          className={`text-sm sm:text-base max-w-sm text-center mb-8 font-normal leading-relaxed transition-colors ${
+            isDarkMode ? 'text-slate-300/85' : 'text-[#68778D]'
+          }`}
+        >
           {mode === 'signin' &&
             (isRtl
               ? 'تابع عملك من حيث توقفت في مساحة العمل الخاصة بك.'
@@ -245,27 +353,53 @@ export const LoginPage: React.FC = () => {
               : 'Enter your email address and we will send you a reset link.')}
         </p>
 
-        {/* Floating Card with Deep Diffused Soft Shadows & Glassmorphism Depth */}
-        <div 
-          className="w-full max-w-[420px] bg-white/95 backdrop-blur-2xl rounded-3xl border border-[#DCE3ED]/80 p-7 sm:p-9 transition-all relative"
-          style={{
-            boxShadow: `
-              0 30px 70px -15px rgba(1, 53, 137, 0.12),
-              0 15px 35px -10px rgba(37, 89, 175, 0.08),
-              0 4px 12px rgba(0, 0, 0, 0.03),
-              inset 0 1px 1px 0 rgba(255, 255, 255, 0.9)
-            `,
-          }}
+        {/* Auth Card */}
+        <div
+          className={`w-full max-w-[430px] rounded-3xl p-7 sm:p-9 transition-all relative overflow-hidden ${
+            isDarkMode
+              ? 'bg-slate-900/40 backdrop-blur-xl border border-teal-500/20 shadow-2xl'
+              : 'bg-white/95 backdrop-blur-2xl border border-[#DCE3ED]/80'
+          }`}
+          style={
+            isDarkMode
+              ? undefined
+              : {
+                  boxShadow: `
+                    0 30px 70px -15px rgba(1, 53, 137, 0.12),
+                    0 15px 35px -10px rgba(37, 89, 175, 0.08),
+                    0 4px 12px rgba(0, 0, 0, 0.03),
+                    inset 0 1px 1px 0 rgba(255, 255, 255, 0.9)
+                  `,
+                }
+          }
         >
+          {isDarkMode && (
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-400/60 to-transparent" />
+          )}
+
           {/* Error Banner */}
           {displayError && (
-            <div className="mb-5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2 animate-in fade-in duration-200">
-              <span className="material-symbols-outlined text-base shrink-0 text-rose-600 mt-0.5">error</span>
+            <div
+              className={`mb-5 p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
+                isDarkMode
+                  ? 'bg-rose-950/60 border-rose-500/35 text-rose-200'
+                  : 'bg-rose-50 border-rose-200 text-rose-700'
+              }`}
+            >
+              <span
+                className={`material-symbols-outlined text-base shrink-0 mt-0.5 ${
+                  isDarkMode ? 'text-rose-400' : 'text-rose-600'
+                }`}
+              >
+                error
+              </span>
               <span className="leading-relaxed flex-1">{displayError}</span>
               <button
                 type="button"
                 onClick={resetFormState}
-                className="text-rose-400 hover:text-rose-700 text-sm font-bold ml-1 cursor-pointer"
+                className={`text-sm font-bold ml-1 cursor-pointer ${
+                  isDarkMode ? 'text-rose-400 hover:text-rose-200' : 'text-rose-400 hover:text-rose-700'
+                }`}
               >
                 ×
               </button>
@@ -274,13 +408,27 @@ export const LoginPage: React.FC = () => {
 
           {/* Success Banner */}
           {successMessage && (
-            <div className="mb-5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-start gap-2 animate-in fade-in duration-200">
-              <span className="material-symbols-outlined text-base shrink-0 text-emerald-600 mt-0.5">check_circle</span>
+            <div
+              className={`mb-5 p-3.5 rounded-xl border text-xs font-medium flex items-start gap-2.5 ${
+                isDarkMode
+                  ? 'bg-emerald-950/55 border-emerald-500/35 text-emerald-200'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}
+            >
+              <span
+                className={`material-symbols-outlined text-base shrink-0 mt-0.5 ${
+                  isDarkMode ? 'text-emerald-400' : 'text-emerald-600'
+                }`}
+              >
+                check_circle
+              </span>
               <span className="leading-relaxed flex-1">{successMessage}</span>
               <button
                 type="button"
                 onClick={resetFormState}
-                className="text-emerald-400 hover:text-emerald-700 text-sm font-bold ml-1 cursor-pointer"
+                className={`text-sm font-bold ml-1 cursor-pointer ${
+                  isDarkMode ? 'text-emerald-400 hover:text-emerald-200' : 'text-emerald-400 hover:text-emerald-700'
+                }`}
               >
                 ×
               </button>
@@ -291,24 +439,34 @@ export const LoginPage: React.FC = () => {
             {/* Full Name Field (Sign Up Only) */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
+                <label
+                  className={`block text-xs font-semibold mb-1.5 ${
+                    isDarkMode ? 'text-slate-200' : 'text-[#172B4D]'
+                  }`}
+                >
                   {isRtl ? 'الاسم الكامل' : 'Full Name'}
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder={isRtl ? 'مثال: محمد أحمد' : 'e.g. John Doe'}
-                    className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all"
-                  />
-                </div>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder={isRtl ? 'مثال: محمد أحمد' : 'e.g. John Doe'}
+                  className={`w-full px-4 py-2.5 sm:py-3 rounded-xl text-sm focus:outline-none transition-all ${
+                    isDarkMode
+                      ? 'bg-slate-950/75 border border-teal-500/25 text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                      : 'bg-white border border-[#DCE3ED] text-[#172B4D] placeholder-[#8A9BB4] focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10'
+                  }`}
+                />
               </div>
             )}
 
             {/* Email Field */}
             <div>
-              <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
+              <label
+                className={`block text-xs font-semibold mb-1.5 ${
+                  isDarkMode ? 'text-slate-200' : 'text-[#172B4D]'
+                }`}
+              >
                 {isRtl ? 'البريد الإلكتروني' : 'Email'}
               </label>
               <input
@@ -316,9 +474,13 @@ export const LoginPage: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder={isRtl ? 'name@company.com' : 'name@company.com'}
+                placeholder="name@company.com"
                 autoComplete="email"
-                className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all text-start"
+                className={`w-full px-4 py-2.5 sm:py-3 rounded-xl text-sm focus:outline-none transition-all text-start ${
+                  isDarkMode
+                    ? 'bg-slate-950/75 border border-teal-500/25 text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                    : 'bg-white border border-[#DCE3ED] text-[#172B4D] placeholder-[#8A9BB4] focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10'
+                }`}
                 dir="ltr"
               />
             </div>
@@ -327,7 +489,11 @@ export const LoginPage: React.FC = () => {
             {mode !== 'forgot' && (
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold text-[#172B4D]">
+                  <label
+                    className={`text-xs font-semibold ${
+                      isDarkMode ? 'text-slate-200' : 'text-[#172B4D]'
+                    }`}
+                  >
                     {isRtl ? 'كلمة المرور' : 'Password'}
                   </label>
                   {mode === 'signin' && (
@@ -337,7 +503,11 @@ export const LoginPage: React.FC = () => {
                         resetFormState();
                         setMode('forgot');
                       }}
-                      className="text-xs text-[#2559AF] hover:text-[#013589] font-medium hover:underline transition-colors cursor-pointer"
+                      className={`text-xs font-medium hover:underline transition-colors cursor-pointer ${
+                        isDarkMode
+                          ? 'text-teal-300 hover:text-teal-200'
+                          : 'text-[#2559AF] hover:text-[#013589]'
+                      }`}
                     >
                       {isRtl ? 'نسيت كلمة المرور؟' : 'Forgot password?'}
                     </button>
@@ -351,7 +521,11 @@ export const LoginPage: React.FC = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-                    className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all`}
+                    className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 sm:py-3 rounded-xl text-sm focus:outline-none transition-all ${
+                      isDarkMode
+                        ? 'bg-slate-950/75 border border-teal-500/25 text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                        : 'bg-white border border-[#DCE3ED] text-[#172B4D] placeholder-[#8A9BB4] focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10'
+                    }`}
                     dir="ltr"
                   />
                   <button
@@ -360,7 +534,9 @@ export const LoginPage: React.FC = () => {
                     tabIndex={-1}
                     className={`absolute top-1/2 -translate-y-1/2 ${
                       isRtl ? 'left-3' : 'right-3'
-                    } text-[#68778D] hover:text-[#172B4D] transition-colors cursor-pointer flex items-center justify-center p-1`}
+                    } transition-colors cursor-pointer flex items-center justify-center p-1 ${
+                      isDarkMode ? 'text-slate-400 hover:text-teal-300' : 'text-[#68778D] hover:text-[#172B4D]'
+                    }`}
                   >
                     <span className="material-symbols-outlined text-lg">
                       {showPassword ? 'visibility_off' : 'visibility'}
@@ -373,7 +549,11 @@ export const LoginPage: React.FC = () => {
             {/* Confirm Password Field (Sign Up Only) */}
             {mode === 'signup' && (
               <div>
-                <label className="block text-xs font-semibold text-[#172B4D] mb-1.5">
+                <label
+                  className={`block text-xs font-semibold mb-1.5 ${
+                    isDarkMode ? 'text-slate-200' : 'text-[#172B4D]'
+                  }`}
+                >
                   {isRtl ? 'تأكيد كلمة المرور' : 'Confirm Password'}
                 </label>
                 <input
@@ -383,30 +563,46 @@ export const LoginPage: React.FC = () => {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete="new-password"
-                  className="w-full px-4 py-2.5 sm:py-3 bg-white border border-[#DCE3ED] rounded-xl text-sm text-[#172B4D] placeholder-[#8A9BB4] focus:outline-none focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10 transition-all"
+                  className={`w-full px-4 py-2.5 sm:py-3 rounded-xl text-sm focus:outline-none transition-all ${
+                    isDarkMode
+                      ? 'bg-slate-950/75 border border-teal-500/25 text-slate-100 placeholder-slate-500 focus:border-teal-400 focus:ring-2 focus:ring-teal-500/20'
+                      : 'bg-white border border-[#DCE3ED] text-[#172B4D] placeholder-[#8A9BB4] focus:border-[#2559AF] focus:ring-4 focus:ring-[#2559AF]/10'
+                  }`}
                   dir="ltr"
                 />
               </div>
             )}
 
-            {/* Submit Primary Action Button with Profness Blue Gradient (#013589 -> #2559AF -> #477ED8) & 3D Layered Glow */}
+            {/* Primary Action Button */}
             <div className="pt-2 relative group">
-              {/* Soft Blue Glow Shadow Underneath */}
-              <div 
-                className="absolute inset-0 rounded-2xl opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
-                style={{
-                  background: 'linear-gradient(135deg, #013589 0%, #2559AF 50%, #477ED8 100%)',
-                  transform: 'translateY(6px) scale(0.95)',
-                }}
-              />
+              {isDarkMode ? (
+                <div className="absolute -inset-0.5 rounded-2xl bg-gradient-to-r from-teal-500 to-emerald-400 opacity-40 blur-lg group-hover:opacity-75 transition-opacity duration-300 pointer-events-none" />
+              ) : (
+                <div
+                  className="absolute inset-0 rounded-2xl opacity-75 blur-xl group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(135deg, #013589 0%, #2559AF 50%, #477ED8 100%)',
+                    transform: 'translateY(6px) scale(0.95)',
+                  }}
+                />
+              )}
+
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="relative w-full py-3.5 px-4 bg-gradient-to-r from-[#013589] via-[#2559AF] to-[#477ED8] hover:from-[#002B70] hover:via-[#1F4C97] hover:to-[#3B6DC4] text-white font-bold text-sm rounded-2xl shadow-[0_12px_28px_-6px_rgba(1,53,137,0.55),0_4px_12px_rgba(0,0,0,0.1)] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 border border-white/25"
+                className={`relative w-full py-3.5 px-4 font-extrabold text-sm rounded-2xl active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 ${
+                  isDarkMode
+                    ? 'bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 shadow-xl shadow-teal-500/25 border border-teal-300/30'
+                    : 'bg-gradient-to-r from-[#013589] via-[#2559AF] to-[#477ED8] hover:from-[#002B70] hover:via-[#1F4C97] hover:to-[#3B6DC4] text-white font-bold shadow-[0_12px_28px_-6px_rgba(1,53,137,0.55),0_4px_12px_rgba(0,0,0,0.1)] border border-white/25'
+                }`}
               >
                 {isSubmitting ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span
+                      className={`w-4 h-4 border-2 rounded-full animate-spin ${
+                        isDarkMode ? 'border-slate-950/30 border-t-slate-950' : 'border-white/30 border-t-white'
+                      }`}
+                    />
                     <span>{isRtl ? 'جاري المعالجة...' : 'Processing...'}</span>
                   </>
                 ) : (
@@ -420,29 +616,40 @@ export const LoginPage: React.FC = () => {
             </div>
           </form>
 
-          {/* Social Divider & Google Button (Only in Signin / Signup) */}
+          {/* Social Divider & Google Button */}
           {mode !== 'forgot' && (
             <>
-              {/* Modern SaaS Divider with Sleek Pill in Neutral/Blue Palette */}
               <div className="relative my-6 flex items-center justify-center">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full h-px bg-gradient-to-r from-transparent via-[#DCE3ED] to-transparent"></div>
+                  <div
+                    className={`w-full h-px bg-gradient-to-r from-transparent to-transparent ${
+                      isDarkMode ? 'via-teal-500/25' : 'via-[#DCE3ED]'
+                    }`}
+                  />
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="px-3.5 py-0.5 rounded-full bg-white/90 backdrop-blur-md border border-[#DCE3ED] text-[10px] font-bold text-[#68778D] uppercase tracking-widest shadow-[0_2px_8px_-2px_rgba(1,53,137,0.06)]">
+                  <span
+                    className={`px-3.5 py-0.5 backdrop-blur-md border text-[10px] font-bold uppercase tracking-widest ${
+                      isDarkMode
+                        ? 'rounded-lg bg-slate-900/95 border-teal-500/20 text-slate-400'
+                        : 'rounded-full bg-white/90 border-[#DCE3ED] text-[#68778D] shadow-[0_2px_8px_-2px_rgba(1,53,137,0.06)]'
+                    }`}
+                  >
                     {isRtl ? 'أو' : 'OR'}
                   </span>
                 </div>
               </div>
 
-              {/* Continue with Google - Refined High-End SaaS Button */}
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
                 disabled={isSubmitting}
-                className="w-full py-3 px-4 bg-white/80 hover:bg-white border border-[#DCE3ED] hover:border-[#2559AF]/50 text-[#172B4D] font-semibold text-xs rounded-2xl transition-all duration-200 shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_-4px_rgba(1,53,137,0.12)] flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60 backdrop-blur-sm group"
+                className={`w-full py-3 px-4 font-semibold text-xs rounded-2xl transition-all duration-200 flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99] disabled:opacity-60 backdrop-blur-sm group border ${
+                  isDarkMode
+                    ? 'bg-slate-950/60 hover:bg-slate-900/90 border-teal-500/20 hover:border-teal-400/45 text-slate-100 shadow-lg'
+                    : 'bg-white/80 hover:bg-white border-[#DCE3ED] hover:border-[#2559AF]/50 text-[#172B4D] shadow-[0_2px_8px_rgba(0,0,0,0.03)] hover:shadow-[0_8px_20px_-4px_rgba(1,53,137,0.12)]'
+                }`}
               >
-                {/* Official Google Icon */}
                 <div className="w-5 h-5 flex items-center justify-center transition-transform group-hover:scale-105">
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                     <path
@@ -463,7 +670,13 @@ export const LoginPage: React.FC = () => {
                     />
                   </svg>
                 </div>
-                <span className="tracking-tight text-[#172B4D] group-hover:text-[#013589] transition-colors">
+                <span
+                  className={`tracking-tight transition-colors ${
+                    isDarkMode
+                      ? 'text-slate-200 group-hover:text-teal-200'
+                      : 'text-[#172B4D] group-hover:text-[#013589]'
+                  }`}
+                >
                   {isRtl ? 'متابعة باستخدام Google' : 'Continue with Google'}
                 </span>
               </button>
@@ -479,7 +692,9 @@ export const LoginPage: React.FC = () => {
                   resetFormState();
                   setMode('signin');
                 }}
-                className="text-xs text-[#2559AF] hover:text-[#013589] font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                className={`text-xs font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer ${
+                  isDarkMode ? 'text-teal-300 hover:text-teal-200' : 'text-[#2559AF] hover:text-[#013589]'
+                }`}
               >
                 <span className="material-symbols-outlined text-sm">
                   {isRtl ? 'arrow_forward' : 'arrow_back'}
@@ -491,7 +706,11 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Footer Toggle beneath card */}
-        <div className="mt-6 text-center text-xs sm:text-sm text-[#68778D]">
+        <div
+          className={`mt-6 text-center text-xs sm:text-sm ${
+            isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+          }`}
+        >
           {mode === 'signin' && (
             <p>
               {isRtl ? 'جديد في Profness؟ ' : 'New to Profness? '}
@@ -501,7 +720,9 @@ export const LoginPage: React.FC = () => {
                   resetFormState();
                   setMode('signup');
                 }}
-                className="text-[#2559AF] hover:text-[#013589] font-semibold hover:underline cursor-pointer"
+                className={`font-semibold hover:underline cursor-pointer ${
+                  isDarkMode ? 'text-teal-300 hover:text-teal-200' : 'text-[#2559AF] hover:text-[#013589]'
+                }`}
               >
                 {isRtl ? 'إنشاء حساب جديد' : 'Create an account'}
               </button>
@@ -517,7 +738,9 @@ export const LoginPage: React.FC = () => {
                   resetFormState();
                   setMode('signin');
                 }}
-                className="text-[#2559AF] hover:text-[#013589] font-semibold hover:underline cursor-pointer"
+                className={`font-semibold hover:underline cursor-pointer ${
+                  isDarkMode ? 'text-teal-300 hover:text-teal-200' : 'text-[#2559AF] hover:text-[#013589]'
+                }`}
               >
                 {isRtl ? 'تسجيل الدخول' : 'Sign in'}
               </button>
@@ -527,8 +750,11 @@ export const LoginPage: React.FC = () => {
       </div>
 
       {/* Subtle Bottom Credit */}
-      <footer className="w-full text-center py-4 text-[11px] text-[#68778D] z-10">
-        <span>Profness Cloud Workspace • {isRtl ? 'منصة العمليات وإدارة الأعمال الاحترافية' : 'Professional Business Operations Platform'}</span>
+      <footer className={`w-full text-center py-5 text-xs z-10 ${isDarkMode ? 'text-slate-500' : 'text-[#68778D]'}`}>
+        <span>
+          Profness Cloud •{' '}
+          {isRtl ? 'منصة العمليات وإدارة الأعمال الاحترافية' : 'Professional Business Operations Platform'}
+        </span>
       </footer>
     </div>
   );

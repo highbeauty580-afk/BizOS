@@ -56,6 +56,7 @@ import {
   DEFAULT_ORDER_STATUS,
 } from '../lib/ordersService';
 import { isSupabaseConfigured } from '../lib/supabase';
+import { TenantWithMembership, setCurrentActiveTenantId } from '../lib/tenantsService';
 import { useAuth } from './AuthContext';
 
 export const THEME_CONFIGS: Record<ColorTheme, ThemeConfig> = {
@@ -301,9 +302,18 @@ interface AppContextType {
   updateBuyerPersona: (data: Partial<BuyerPersona>) => void;
   clearMarketingData: () => void;
 
+  // Multi-Tenant Workspace State
+  activeTenant: TenantWithMembership | null;
+  isConsultantUser: boolean;
+  selectTenant: (tenant: TenantWithMembership | null, isConsultant?: boolean) => void;
+
+  // Portal (Login & Project Selection) Theme Mode
+  isDarkPortal: boolean;
+  toggleDarkPortal: () => void;
+
   // Global Helpers
   resetToDefault: () => void;
-  refreshDataFromSupabase: () => Promise<void>;
+  refreshDataFromSupabase: (overrideTenantId?: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -314,6 +324,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [theme, setTheme] = useState<ColorTheme>('indigo');
   const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
   const [businessName, setBusinessName] = useState<string>('Profness Enterprise');
+  const [activeTenant, setActiveTenant] = useState<TenantWithMembership | null>(null);
+  const [isConsultantUser, setIsConsultantUser] = useState<boolean>(false);
+  const [isDarkPortal, setIsDarkPortal] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('profness_login_theme');
+      return saved ? saved === 'dark' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleDarkPortal = () => {
+    setIsDarkPortal((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('profness_login_theme', next ? 'dark' : 'light');
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
 
   // Pure In-Memory React State (Exclusively synchronized with Supabase DB)
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -341,8 +373,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     document.documentElement.lang = language;
   }, [language]);
 
-  // Central Supabase Data Fetching on Mount / Manual Refresh
-  const refreshDataFromSupabase = async () => {
+  // Central Supabase Data Fetching Scoped by Active Tenant
+  const refreshDataFromSupabase = async (overrideTenantId?: string) => {
+    const targetTenantId = overrideTenantId ?? activeTenant?.tenantId;
+    if (!targetTenantId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setCurrentActiveTenantId(targetTenantId);
     setIsLoading(true);
     setFetchError(null);
 
@@ -354,7 +393,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       // 1. Fetch Customers
-      const custRes = await fetchCustomersFromSupabase();
+      const custRes = await fetchCustomersFromSupabase(targetTenantId);
       if (custRes.error) {
         console.warn('Supabase fetch customers warning:', custRes.error);
       } else if (custRes.data) {
@@ -362,8 +401,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 2. Fetch Products & Stock
-      const prodRes = await fetchProductsFromSupabase();
-      const stockRes = await fetchStockFromSupabase();
+      const prodRes = await fetchProductsFromSupabase(targetTenantId);
+      const stockRes = await fetchStockFromSupabase(targetTenantId);
 
       if (prodRes.error || stockRes.error) {
         const err = prodRes.error || stockRes.error;
@@ -404,14 +443,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFastItems(combined);
 
       // 3. Fetch Expense Transactions
-      const expRes = await fetchExpenseTransactionsFromSupabase();
+      const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
       if (expRes.data) {
         setExpenses(expRes.data);
       }
 
       // 4. Fetch Sales Transactions, Orders & Order Items from Supabase
-      const salesRes = await fetchSalesTransactionsFromSupabase();
-      const ordersRes = await fetchOrdersFromSupabase();
+      const salesRes = await fetchSalesTransactionsFromSupabase(targetTenantId);
+      const ordersRes = await fetchOrdersFromSupabase(targetTenantId);
       const orderItemsRes = await fetchOrderItemsFromSupabase();
 
       const ordersList = ordersRes.data || [];
@@ -529,17 +568,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const { user } = useAuth();
 
-  useEffect(() => {
-    if (user) {
-      refreshDataFromSupabase();
-    } else {
-      // Clear data if user logs out
+  const selectTenant = (tenant: TenantWithMembership | null, isConsultant?: boolean) => {
+    if (typeof isConsultant === 'boolean') {
+      setIsConsultantUser(isConsultant);
+    }
+
+    if (!tenant) {
+      setCurrentActiveTenantId(null);
+      setActiveTenant(null);
       setCustomers([]);
       setFastItems([]);
       setTransactions([]);
       setExpenses([]);
+      setPendingSales([]);
+      setFetchError(null);
+      return;
     }
-  }, [user]);
+
+    setCurrentActiveTenantId(tenant.tenantId);
+    setActiveTenant(tenant);
+    setBusinessName(tenant.name);
+    setCurrentPage('home');
+    setCustomers([]);
+    setFastItems([]);
+    setTransactions([]);
+    setExpenses([]);
+    setPendingSales([]);
+  };
+
+  useEffect(() => {
+    if (user && activeTenant) {
+      refreshDataFromSupabase(activeTenant.tenantId);
+    } else if (!user) {
+      setCurrentActiveTenantId(null);
+      setActiveTenant(null);
+      setIsConsultantUser(false);
+      setCustomers([]);
+      setFastItems([]);
+      setTransactions([]);
+      setExpenses([]);
+      setPendingSales([]);
+    }
+  }, [user, activeTenant?.tenantId]);
 
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
@@ -1135,6 +1205,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateMarketingP,
         updateBuyerPersona,
         clearMarketingData,
+
+        activeTenant,
+        isConsultantUser,
+        selectTenant,
+
+        isDarkPortal,
+        toggleDarkPortal,
 
         resetToDefault,
         refreshDataFromSupabase,

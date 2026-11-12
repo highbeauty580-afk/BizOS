@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { getCurrentActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Financial Transactions Service for BizOS
@@ -28,6 +29,7 @@ export async function addFinancialTransactionToSupabase(
   }
 
   try {
+    const resolvedTenantId = getCurrentActiveTenantId();
     const cleanPayload: any = {
       transactions_amount: parseFloat(params.amount as any) || 0,
       transactions_method: params.method,
@@ -38,6 +40,9 @@ export async function addFinancialTransactionToSupabase(
 
     if (params.stock_fk) {
       cleanPayload.Stock_fk = params.stock_fk;
+    }
+    if (resolvedTenantId) {
+      cleanPayload.tenant_id = resolvedTenantId;
     }
 
     let { data, error } = await supabase
@@ -144,16 +149,23 @@ export async function deleteFinancialTransactionInSupabase(
   }
 }
 
-export async function fetchExpenseTransactionsFromSupabase(): Promise<{ data: any[]; error: string | null }> {
+export async function fetchExpenseTransactionsFromSupabase(tenantId?: string): Promise<{ data: any[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'Supabase Config Error' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('transactions')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return { data: [], error: error.message };
@@ -205,17 +217,24 @@ export async function fetchExpenseTransactionsFromSupabase(): Promise<{ data: an
   }
 }
 
-export async function fetchSalesTransactionsFromSupabase(): Promise<{ data: any[]; error: string | null }> {
+export async function fetchSalesTransactionsFromSupabase(tenantId?: string): Promise<{ data: any[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'Supabase Config Error' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('transactions')
       .select('*')
       .in('transactions_type', ['Sales_Trans', 'Return_Trans'])
       .order('created_at', { ascending: false });
+
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return { data: [], error: error.message };

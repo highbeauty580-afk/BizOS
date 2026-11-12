@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { PaletteModal } from './PaletteModal';
+import { LayoutGrid } from 'lucide-react';
 
 interface HeaderProps {
   isMobileMenuOpen?: boolean;
@@ -15,6 +16,9 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
     customPalette,
     businessName,
     setBusinessName,
+    activeTenant,
+    isConsultantUser,
+    selectTenant,
     resetToDefault,
   } = useApp();
   const { user, signOut } = useAuth();
@@ -103,6 +107,18 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
               </button>
             )}
           </div>
+
+          {activeTenant && isConsultantUser && (
+            <button
+              type="button"
+              onClick={() => selectTenant(null)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-500/30 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition-all cursor-pointer active:scale-95 shrink-0"
+              title={isRtl ? 'العودة إلى بوابة المشاريع' : 'Switch Project / Workspace Hub'}
+            >
+              <LayoutGrid className="w-3.5 h-3.5 text-teal-600" />
+              <span className="hidden sm:inline">{isRtl ? 'المشاريع' : 'Projects'}</span>
+            </button>
+          )}
         </div>
 
         {/* Right Controls: Palette Customizer, Language Toggle, User & Logout */}

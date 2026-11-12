@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { FastItem } from '../types';
+import { getCurrentActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Product Service for BizOS
@@ -23,16 +24,23 @@ export interface AddProductParams {
   measure_ptype?: string;
 }
 
-export async function fetchProductsFromSupabase(): Promise<{ data: FastItem[]; error: string | null }> {
+export async function fetchProductsFromSupabase(tenantId?: string): Promise<{ data: FastItem[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'لم يتم تكوين متغيرات بيئة Supabase.' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase fetch products error:', error.message, error.details);
@@ -74,7 +82,8 @@ export async function addProductToSupabase(
   }
 
   try {
-    const cleanPayload = {
+    const resolvedTenantId = getCurrentActiveTenantId();
+    const cleanPayload: Record<string, any> = {
       product_name: params.product_name.trim(),
       product_type: params.product_type.trim() || 'Retail',
       product_description: params.product_description?.trim() || null,
@@ -83,6 +92,10 @@ export async function addProductToSupabase(
       product_code: params.product_code?.trim() || null,
       Measure_PType: params.measure_ptype?.trim() || 'قطعة',
     };
+
+    if (resolvedTenantId) {
+      cleanPayload.tenant_id = resolvedTenantId;
+    }
 
     console.log('2. Sending Clean Payload to public.products:', cleanPayload);
 

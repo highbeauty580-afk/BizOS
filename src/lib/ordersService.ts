@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabase';
+import { getCurrentActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Orders Service for BizOS
@@ -77,7 +78,7 @@ export async function addOrderToSupabase(
   const preparingStatus = params.preparingStatus || DEFAULT_PREPARING_STATUS;
   const orderStatus = params.orderStatus || DEFAULT_ORDER_STATUS;
 
-  // Exact casing payload according to database instructions
+  const resolvedTenantId = getCurrentActiveTenantId();
   const exactPayload: Record<string, any> = {
     Customer_Name: params.customerName.trim(),
     Customer_Phone1: (params.customerPhone1 || '').trim(),
@@ -89,6 +90,9 @@ export async function addOrderToSupabase(
     Preparing_Status: preparingStatus,
     order_status: orderStatus,
   };
+  if (resolvedTenantId) {
+    exactPayload.tenant_id = resolvedTenantId;
+  }
 
   try {
     let { data, error } = await supabase
@@ -110,6 +114,9 @@ export async function addOrderToSupabase(
         preparing_status: preparingStatus,
         order_status: orderStatus,
       };
+      if (resolvedTenantId) {
+        lowerPayload.tenant_id = resolvedTenantId;
+      }
 
       const retryRes = await supabase
         .from('orders')
@@ -155,20 +162,31 @@ export async function addOrderToSupabase(
   }
 }
 
-export async function fetchOrdersFromSupabase(): Promise<{ data: OrderRecord[]; error: string | null }> {
+export async function fetchOrdersFromSupabase(tenantId?: string): Promise<{ data: OrderRecord[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'Supabase Config Error' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
 
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       // In case created_at column doesn't exist, try un-ordered
-      const retry = await supabase.from('orders').select('*');
+      let retryQuery = supabase.from('orders').select('*');
+      if (resolvedTenantId) {
+        retryQuery = retryQuery.eq('tenant_id', resolvedTenantId);
+      }
+      const retry = await retryQuery;
       if (retry.error) {
         console.error('❌ Supabase fetch orders error:', retry.error.message);
         return { data: [], error: retry.error.message };

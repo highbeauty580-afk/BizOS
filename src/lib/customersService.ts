@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { Customer, CustomerType, CustomerStatus } from '../types';
+import { getCurrentActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Customer Data Service for BizOS
@@ -17,16 +18,23 @@ export interface AddCustomerParams {
   creditLimit?: number;
 }
 
-export async function fetchCustomersFromSupabase(): Promise<{ data: Customer[]; error: string | null }> {
+export async function fetchCustomersFromSupabase(tenantId?: string): Promise<{ data: Customer[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'لم يتم تكوين متغيرات بيئة Supabase (VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY).' };
   }
 
   try {
-    const { data, error } = await supabase
+    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
+    let query = supabase
       .from('customers')
       .select('*')
       .order('created_at', { ascending: false });
+
+    if (resolvedTenantId) {
+      query = query.eq('tenant_id', resolvedTenantId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('❌ Supabase fetch customers error:', error);
@@ -65,16 +73,21 @@ export async function addCustomerToSupabase(
   }
 
   try {
-    const payload = {
+    const resolvedTenantId = getCurrentActiveTenantId();
+    const payload: Record<string, any> = {
       customer_name: params.name.trim(),
       customer_phone_1: params.phone1.trim(),
       customer_phone_2: params.phone2?.trim() || null,
       customer_address: params.address.trim(),
       customer_email: params.email?.trim() || null,
       customer_type: params.type || 'Individual',
-      customer_status: params.status || 'Active', // Defaults to 'Active' to satisfy chk_customer_status constraint
+      customer_status: params.status || 'Active',
       credit_limit: params.creditLimit !== undefined ? params.creditLimit : 0.0,
     };
+
+    if (resolvedTenantId) {
+      payload.tenant_id = resolvedTenantId;
+    }
 
     console.log('2. Sending Payload to Supabase public.customers:', payload);
 
