@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { ProfnessLogo } from './ProfnessLogo';
+import { ProfnessNetworkBackground } from './ProfnessNetworkBackground';
 
 export const LoginPage: React.FC = () => {
   const { signInWithPassword, signUp, resetPassword, signInWithGoogle, authError, setAuthError } = useAuth();
@@ -145,6 +146,9 @@ export const LoginPage: React.FC = () => {
     >
       {/* Ambient Cool Blue Mesh Gradient Orbs (Derived from Deep Blue and Sky Blue) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+        {/* Animated Network Plexus Background (Appearing & Disappearing in Official Palette) */}
+        <ProfnessNetworkBackground />
+
         {/* Top/Center soft glowing cool-blue orb */}
         <div 
           className="absolute -top-32 left-1/2 -translate-x-1/2 w-[720px] h-[520px] rounded-full blur-[130px] opacity-75"
@@ -176,29 +180,29 @@ export const LoginPage: React.FC = () => {
         />
       </div>
 
-      {/* Top Bar with Brand Logo and Language Toggle */}
-      <header className="w-full max-w-6xl mx-auto px-6 py-6 flex items-center justify-between z-10 relative">
-        {/* Official Profness Brand Logo & Wordmark */}
-        <div className="flex items-center gap-3 sm:gap-3.5">
-          {/* Spire Architectural Icon (Enlarged with Crisp Detail & No Quality Loss) */}
+      {/* Top Bar with Brand Logo and Language Toggle - Anchored to outer edges */}
+      <header className="w-full px-6 sm:px-10 lg:px-12 py-5 sm:py-6 flex items-center justify-between z-10 relative">
+        {/* Official Profness Brand Logo & Wordmark - Refined Balanced Scale */}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Spire Architectural Icon (Harmonious, Crisp & Clear Scale) */}
           <img
             src="/assets/aistudio/profness_v6-removebg-preview__1__59596515.png"
             alt="Profness Icon"
-            className="h-12 sm:h-14 w-auto object-contain shrink-0 filter drop-shadow-xs transition-transform hover:scale-105"
+            className="h-9 sm:h-10 w-auto object-contain shrink-0 filter drop-shadow-xs transition-transform hover:scale-105"
           />
           {/* Official Profness Brand Wordmark from Image */}
           <img
             src="/assets/aistudio/Profness_Full_Logo_transparent.png"
             alt="Profness"
-            className="h-8 sm:h-9 w-auto object-contain select-none"
+            className="h-6 sm:h-7 w-auto object-contain select-none"
           />
         </div>
 
-        {/* Language Switcher */}
+        {/* Language Switcher - Placed at opposite edge respecting RTL/LTR */}
         <button
           type="button"
           onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#DCE3ED] bg-white/80 hover:bg-white text-[#172B4D] text-xs font-semibold shadow-xs hover:border-[#2559AF]/50 transition-all cursor-pointer backdrop-blur-md"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[#DCE3ED] bg-white/80 hover:bg-white text-[#172B4D] text-xs font-semibold shadow-xs hover:border-[#2559AF]/50 transition-all cursor-pointer backdrop-blur-md shrink-0"
           title="Switch Language / تغيير اللغة"
         >
           <span className="material-symbols-outlined text-sm text-[#2559AF]">translate</span>
