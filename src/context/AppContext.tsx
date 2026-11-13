@@ -306,6 +306,8 @@ interface AppContextType {
   // Multi-Tenant Workspace State
   activeTenant: TenantWithMembership | null;
   currentTenantId: string | null;
+  availableProjectsCount: number;
+  setAvailableProjectsCount: (count: number) => void;
   isConsultantUser: boolean;
   isOwnerUser: boolean;
   isCashierUser: boolean;
@@ -330,6 +332,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
   const [businessName, setBusinessName] = useState<string>('Profness Enterprise');
   const [activeTenant, setActiveTenant] = useState<TenantWithMembership | null>(null);
+  const [availableProjectsCount, setAvailableProjectsCount] = useState<number>(0);
   const [isConsultantUser, setIsConsultantUser] = useState<boolean>(false);
   const activeTenantIdRef = useRef<string | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
@@ -656,6 +659,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
+      setAvailableProjectsCount(0);
       setIsConsultantUser(false);
       clearWorkspaceState();
       return;
@@ -668,6 +672,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
+      setAvailableProjectsCount(0);
       setIsConsultantUser(false);
       clearWorkspaceState();
     }
@@ -1286,6 +1291,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         activeTenant,
         currentTenantId,
+        availableProjectsCount,
+        setAvailableProjectsCount,
         isConsultantUser,
         isOwnerUser,
         isCashierUser,

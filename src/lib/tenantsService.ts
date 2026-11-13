@@ -31,6 +31,7 @@ export interface PostAuthPortalState {
   isConsultant: boolean;
   isCashier: boolean;
   isDisabledCashier: boolean;
+  hasMultipleProjects: boolean;
   ownerProject: TenantWithMembership | null;
   staffProject: TenantWithMembership | null;
   projects: TenantWithMembership[];
@@ -225,6 +226,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       isConsultant: false,
       isCashier: false,
       isDisabledCashier: false,
+      hasMultipleProjects: false,
       ownerProject: null,
       staffProject: null,
       projects: [],
@@ -253,6 +255,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
         isConsultant: Boolean(user.user_metadata?.is_consultant),
         isCashier: String(user.user_metadata?.role || '').toLowerCase() === 'cashier',
         isDisabledCashier: false,
+        hasMultipleProjects: false,
         ownerProject: null,
         staffProject: null,
         projects: [],
@@ -295,6 +298,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
           isConsultant: true,
           isCashier: false,
           isDisabledCashier: false,
+          hasMultipleProjects: false,
           ownerProject: null,
           staffProject: null,
           projects: [],
@@ -357,6 +361,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
         isConsultant: true,
         isCashier: false,
         isDisabledCashier: false,
+        hasMultipleProjects: projects.length > 1,
         ownerProject: null,
         staffProject: null,
         projects,
@@ -364,91 +369,96 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       };
     }
 
-    // RULE A: Owner Account (Single-Project Constraint: role = 'owner' & is_active = true)
-    const ownerRow = activeMemberships.find(
-      (row: any) => String(row.role || '').toLowerCase() === 'owner'
-    );
+    // Build all active project memberships for non-consultant users (supports Owner in Project A + Cashier in Project B)
+    const uniqueProjectsByTenantId = new Map<string, TenantWithMembership>();
 
-    if (ownerRow) {
-      let tenantObj = Array.isArray(ownerRow.tenants) ? ownerRow.tenants[0] : ownerRow.tenants;
-      if (!tenantObj && ownerRow.tenant_id) {
+    for (const row of activeMemberships) {
+      const tid = String(row.tenant_id || '').trim();
+      if (!tid) continue;
+
+      const roleNormalized = String(row.role || 'cashier').toLowerCase();
+      const existing = uniqueProjectsByTenantId.get(tid);
+
+      // If user somehow has 2 rows for same tenant, prefer higher privilege (owner > admin > cashier)
+      if (existing && existing.role === 'owner') {
+        continue;
+      }
+
+      let tenantObj = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
+      if (!tenantObj) {
         const { data: fallbackTenant } = await supabase
           .from('tenants')
           .select('id, name, created_at')
-          .eq('id', ownerRow.tenant_id)
+          .eq('id', tid)
           .maybeSingle();
         tenantObj = fallbackTenant;
       }
 
-      const metrics = await fetchTenantQuickMetrics(ownerRow.tenant_id);
-      const ownerProject: TenantWithMembership = {
-        id: ownerRow.id,
-        tenantId: ownerRow.tenant_id,
-        name: tenantObj?.name || 'مشروعي',
-        role: 'owner',
+      const isPrivilegedRole = roleNormalized === 'owner' || roleNormalized === 'admin';
+      const metrics = isPrivilegedRole ? await fetchTenantQuickMetrics(tid) : { ...EMPTY_METRICS };
+
+      verifiedTenantIds.add(tid);
+
+      uniqueProjectsByTenantId.set(tid, {
+        id: row.id,
+        tenantId: tid,
+        name:
+          tenantObj?.name ||
+          (roleNormalized === 'owner' ? 'مشروعي' : 'نقطة البيع'),
+        role: roleNormalized,
         isActive: true,
-        createdAt: tenantObj?.created_at || ownerRow.created_at || new Date().toISOString(),
+        createdAt: tenantObj?.created_at || row.created_at || new Date().toISOString(),
         metrics,
-      };
+      });
+    }
 
-      if (ownerRow.tenant_id) {
-        verifiedTenantIds.add(ownerRow.tenant_id);
-        setCurrentActiveTenantId(ownerRow.tenant_id);
-      }
+    const userProjects = Array.from(uniqueProjectsByTenantId.values());
 
+    // Multi-Project & Multi-Role Switcher: user belongs to 2+ projects -> display all projects with role badges
+    if (userProjects.length > 1) {
       return {
         profile,
         isConsultant: false,
         isCashier: false,
         isDisabledCashier: false,
-        ownerProject,
+        hasMultipleProjects: true,
+        ownerProject: null,
         staffProject: null,
-        projects: [ownerProject],
+        projects: userProjects,
         error: null,
       };
     }
 
-    // RULE C: Cashier / Staff Account -> Direct Route to Assigned Project POS Screen (never show Owner onboarding)
-    const staffRow = activeMemberships.find((row: any) => {
-      const r = String(row.role || '').toLowerCase();
-      return r === 'cashier' || r === 'staff' || r === 'member' || r === 'admin';
-    });
+    // Single-Project Route: exactly 1 active project
+    if (userProjects.length === 1) {
+      const singleProject = userProjects[0];
+      setCurrentActiveTenantId(singleProject.tenantId);
 
-    if (staffRow) {
-      let tenantObj = Array.isArray(staffRow.tenants) ? staffRow.tenants[0] : staffRow.tenants;
-      if (!tenantObj && staffRow.tenant_id) {
-        const { data: fallbackTenant } = await supabase
-          .from('tenants')
-          .select('id, name, created_at')
-          .eq('id', staffRow.tenant_id)
-          .maybeSingle();
-        tenantObj = fallbackTenant;
+      // RULE A Condition 1: Single Owner project -> skip onboarding & route directly to dashboard
+      if (singleProject.role === 'owner') {
+        return {
+          profile,
+          isConsultant: false,
+          isCashier: false,
+          isDisabledCashier: false,
+          hasMultipleProjects: false,
+          ownerProject: singleProject,
+          staffProject: null,
+          projects: [singleProject],
+          error: null,
+        };
       }
 
-      const staffRole = String(staffRow.role || 'cashier').toLowerCase();
-      const staffProject: TenantWithMembership = {
-        id: staffRow.id,
-        tenantId: staffRow.tenant_id,
-        name: tenantObj?.name || 'نقطة البيع',
-        role: staffRole,
-        isActive: true,
-        createdAt: tenantObj?.created_at || staffRow.created_at || new Date().toISOString(),
-        metrics: { ...EMPTY_METRICS },
-      };
-
-      if (staffRow.tenant_id) {
-        verifiedTenantIds.add(staffRow.tenant_id);
-        setCurrentActiveTenantId(staffRow.tenant_id);
-      }
-
+      // RULE C: Single Cashier / Staff project -> route directly to POS Cashier screen
       return {
         profile,
         isConsultant: false,
-        isCashier: staffRole === 'cashier',
+        isCashier: singleProject.role === 'cashier',
         isDisabledCashier: false,
+        hasMultipleProjects: false,
         ownerProject: null,
-        staffProject,
-        projects: [staffProject],
+        staffProject: singleProject,
+        projects: [singleProject],
         error: null,
       };
     }
@@ -469,6 +479,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       isConsultant: false,
       isCashier: isCashierAccount,
       isDisabledCashier: isCashierAccount,
+      hasMultipleProjects: false,
       ownerProject: null,
       staffProject: null,
       projects: [],
@@ -480,6 +491,7 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       isConsultant: false,
       isCashier: false,
       isDisabledCashier: false,
+      hasMultipleProjects: false,
       ownerProject: null,
       staffProject: null,
       projects: [],

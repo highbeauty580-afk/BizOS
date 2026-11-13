@@ -39,7 +39,13 @@ interface PostAuthPortalProps {
 
 export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }) => {
   const { user, signOut } = useAuth();
-  const { language, setLanguage, isDarkPortal: isDarkMode, toggleDarkPortal } = useApp();
+  const {
+    language,
+    setLanguage,
+    isDarkPortal: isDarkMode,
+    toggleDarkPortal,
+    setAvailableProjectsCount,
+  } = useApp();
 
   const isRtl = language === 'ar';
 
@@ -48,6 +54,7 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
     isConsultant: false,
     isCashier: false,
     isDisabledCashier: false,
+    hasMultipleProjects: false,
     ownerProject: null,
     staffProject: null,
     projects: [],
@@ -78,9 +85,10 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
       }
 
       const result = await fetchPostAuthPortalData(user);
+      setAvailableProjectsCount(result.projects.length);
 
-      // Rule A Condition 1: Owner already has an active project -> skip onboarding & route directly into project dashboard
-      if (!result.error && !result.isConsultant && result.ownerProject) {
+      // Single-Project Owner: skip portal & route directly into Owner dashboard
+      if (!result.error && !result.isConsultant && !result.hasMultipleProjects && result.ownerProject) {
         setHasLockedOnboarding(true);
         setIsAutoRoutingOwner(true);
         setPortalState(result);
@@ -90,8 +98,8 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
         return;
       }
 
-      // Rule C: Cashier / Staff Account -> skip portal & route directly into POS cashier screen
-      if (!result.error && !result.isConsultant && result.staffProject) {
+      // Single-Project Cashier / Staff: skip portal & route directly into POS cashier screen
+      if (!result.error && !result.isConsultant && !result.hasMultipleProjects && result.staffProject) {
         setHasLockedOnboarding(true);
         setIsAutoRoutingOwner(true);
         setPortalState(result);
@@ -105,7 +113,7 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
       setIsLoading(false);
       setIsRefreshing(false);
     },
-    [user]
+    [user, setAvailableProjectsCount]
   );
 
   useEffect(() => {
@@ -121,7 +129,8 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
 
   const getRoleLabel = (role: TenantRole): string => {
     const normalized = String(role || 'consultant').toLowerCase();
-    if (normalized === 'owner') return isRtl ? 'مالك المشروع' : 'Owner';
+    if (normalized === 'owner') return isRtl ? 'مالك المشروع (Owner)' : 'Owner';
+    if (normalized === 'cashier') return isRtl ? 'كاشير مبيعات (Cashier)' : 'Cashier (POS Only)';
     if (normalized === 'consultant' || normalized === 'advisor') {
       return isRtl ? 'إشراف استشاري' : 'Consultant Oversight';
     }
@@ -219,13 +228,15 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
   const showOwnerOnboarding =
     !showLoadingSkeleton &&
     !portalState.isConsultant &&
+    !portalState.hasMultipleProjects &&
     !portalState.isCashier &&
     !portalState.isDisabledCashier &&
     !portalState.ownerProject &&
     !portalState.staffProject &&
     !hasLockedOnboarding &&
     !portalState.error;
-  const showConsultantDashboard = !showLoadingSkeleton && portalState.isConsultant;
+  const showConsultantDashboard =
+    !showLoadingSkeleton && (portalState.isConsultant || portalState.hasMultipleProjects);
   const OpenArrow = isRtl ? ArrowUpLeft : ArrowUpRight;
 
   const glassCardClass = isDarkMode
@@ -353,16 +364,20 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
                   ? isRtl
                     ? 'بوابة الاستشاري ومتابعة المشاريع'
                     : 'Consultant Multi-Project Oversight'
-                  : isRtl
-                    ? 'نظام الإدارة السحابي'
-                    : 'Cloud Workspace Portal'}
+                  : portalState.hasMultipleProjects
+                    ? isRtl
+                      ? 'بوابة المشاريع وتبديل الصلاحيات'
+                      : 'Multi-Project & Role Switcher'
+                    : isRtl
+                      ? 'نظام الإدارة السحابي'
+                      : 'Cloud Workspace Portal'}
               </span>
             </div>
           </div>
 
           {/* Right Action Controls */}
           <div className="flex items-center gap-2 sm:gap-2.5">
-            {portalState.isConsultant && (
+            {(portalState.isConsultant || portalState.hasMultipleProjects) && (
               <button
                 type="button"
                 onClick={() => loadPortalData(true)}
@@ -736,7 +751,13 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
                     />
                     <Briefcase className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-300' : 'text-[#2559AF]'}`} />
                     <span>
-                      {isRtl ? 'لوحة الاستشاري — الإشراف العام على المشاريع' : 'Advisor Command Center — All Projects'}
+                      {portalState.isConsultant
+                        ? isRtl
+                          ? 'لوحة الاستشاري — الإشراف العام على المشاريع'
+                          : 'Advisor Command Center — All Projects'
+                        : isRtl
+                        ? 'مشاريعك وصلاحياتك المرتبطة — اختر مساحة العمل'
+                        : 'Your Projects & Assigned Roles — Choose Workspace'}
                     </span>
                   </div>
 
@@ -749,9 +770,13 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
                   </h1>
 
                   <p className={`text-sm max-w-2xl leading-relaxed ${isDarkMode ? 'text-slate-300/85' : 'text-[#68778D]'}`}>
-                    {isRtl
-                      ? 'بصفتك مستشاراً، يمكنك استعراض جميع المشاريع المسجلة في المنصة والانتقال مباشرة لإدارة أي مشروع.'
-                      : 'As a consultant, you have oversight across all registered projects in the database. Click any project card to manage its workspace.'}
+                    {portalState.isConsultant
+                      ? isRtl
+                        ? 'بصفتك مستشاراً، يمكنك استعراض جميع المشاريع المسجلة في المنصة والانتقال مباشرة لإدارة أي مشروع.'
+                        : 'As a consultant, you have oversight across all registered projects in the database. Click any project card to manage its workspace.'
+                      : isRtl
+                      ? 'حسابك مرتبط بأكثر من مشروع. يمكنك اختيار المشروع المناسب الآن؛ الدخول بدور "مالك" يمنحك الصلاحيات الكاملة، بينما الدخول بدور "كاشير" يفتح شاشة البيع (POS) فقط.'
+                      : 'Your account belongs to multiple projects. Enter an Owner project for full management access, or a Cashier project for POS-only access.'}
                   </p>
                 </div>
 
@@ -869,195 +894,264 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
             {/* Responsive Multi-Project Grid */}
             {filteredProjects.length > 0 ? (
               <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredProjects.map((project) => (
-                  <article
-                    key={project.tenantId}
-                    onClick={() => onSelectTenant(project, true)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onSelectTenant(project, true);
-                      }
-                    }}
-                    className={`group ${glassCardClass} rounded-2xl p-6 flex flex-col justify-between gap-5 hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden focus:outline-none ${
-                      isDarkMode
-                        ? 'hover:border-teal-400/50 hover:shadow-teal-500/15 focus:ring-2 focus:ring-teal-400/60'
-                        : 'hover:border-[#2559AF]/45 hover:shadow-[0_24px_48px_-12px_rgba(1,53,137,0.16)] focus:ring-2 focus:ring-[#2559AF]/50'
-                    }`}
-                  >
-                    {isDarkMode && (
-                      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-400/40 to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
-                    )}
+                {filteredProjects.map((project) => {
+                  const normalizedRole = String(project.role || 'cashier').toLowerCase();
+                  const isCashierCard = !portalState.isConsultant && normalizedRole === 'cashier';
+                  const isOwnerCard = normalizedRole === 'owner';
 
-                    <div className="space-y-4">
-                      {/* Card Header */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div
-                          className={`w-12 h-12 rounded-xl border flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform ${
-                            isDarkMode
-                              ? 'bg-gradient-to-br from-teal-500/20 to-emerald-500/10 border-teal-400/30'
-                              : 'bg-gradient-to-br from-[#EDF1F6] to-white border-[#DCE3ED]'
-                          }`}
-                        >
-                          <Layers className={`w-6 h-6 ${isDarkMode ? 'text-teal-300' : 'text-[#2559AF]'}`} />
-                        </div>
-
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${
-                            isDarkMode
-                              ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.18)]'
-                              : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full animate-pulse ${
-                              isDarkMode
-                                ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.95)]'
-                                : 'bg-emerald-500'
-                            }`}
-                          />
-                          <span>{isRtl ? 'نشط' : 'Active'}</span>
-                        </span>
-                      </div>
-
-                      {/* Project Title & Metadata */}
-                      <div>
-                        <h2
-                          className={`text-lg font-extrabold transition-colors line-clamp-1 ${
-                            isDarkMode
-                              ? 'text-white group-hover:text-teal-200'
-                              : 'text-[#013589] group-hover:text-[#2559AF]'
-                          }`}
-                        >
-                          <bdi>{project.name}</bdi>
-                        </h2>
-                        <div
-                          className={`flex items-center gap-2 mt-1 text-xs ${
-                            isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
-                          }`}
-                        >
-                          <span className={`font-semibold ${isDarkMode ? 'text-teal-300/90' : 'text-[#2559AF]'}`}>
-                            {getRoleLabel(project.role)}
-                          </span>
-                          <span>•</span>
-                          <span>{formatDate(project.createdAt)}</span>
-                        </div>
-                      </div>
-
-                      {/* Quick Metrics Preview */}
-                      <div className="grid grid-cols-2 gap-2.5 pt-1">
-                        <div
-                          className={`rounded-xl border px-3 py-2.5 ${
-                            isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
-                          }`}
-                        >
-                          <div
-                            className={`flex items-center gap-1.5 text-[11px] ${
-                              isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
-                            }`}
-                          >
-                            <ShoppingBag className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-400' : 'text-[#2559AF]'}`} />
-                            <span>{isRtl ? 'الطلبات' : 'Orders'}</span>
-                          </div>
-                          <p
-                            className={`text-base font-bold tabular-nums mt-0.5 ${
-                              isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
-                            }`}
-                          >
-                            {project.metrics.ordersCount}
-                          </p>
-                        </div>
-
-                        <div
-                          className={`rounded-xl border px-3 py-2.5 ${
-                            isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
-                          }`}
-                        >
-                          <div
-                            className={`flex items-center gap-1.5 text-[11px] ${
-                              isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
-                            }`}
-                          >
-                            <Users className={`w-3.5 h-3.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
-                            <span>{isRtl ? 'العملاء' : 'Customers'}</span>
-                          </div>
-                          <p
-                            className={`text-base font-bold tabular-nums mt-0.5 ${
-                              isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
-                            }`}
-                          >
-                            {project.metrics.customersCount}
-                          </p>
-                        </div>
-
-                        <div
-                          className={`rounded-xl border px-3 py-2.5 ${
-                            isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
-                          }`}
-                        >
-                          <div
-                            className={`flex items-center gap-1.5 text-[11px] ${
-                              isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
-                            }`}
-                          >
-                            <Package className={`w-3.5 h-3.5 ${isDarkMode ? 'text-cyan-400' : 'text-[#477ED8]'}`} />
-                            <span>{isRtl ? 'المنتجات' : 'Products'}</span>
-                          </div>
-                          <p
-                            className={`text-base font-bold tabular-nums mt-0.5 ${
-                              isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
-                            }`}
-                          >
-                            {project.metrics.productsCount}
-                          </p>
-                        </div>
-
-                        <div
-                          className={`rounded-xl border px-3 py-2.5 ${
-                            isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
-                          }`}
-                        >
-                          <div
-                            className={`flex items-center gap-1.5 text-[11px] ${
-                              isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
-                            }`}
-                          >
-                            <TrendingUp className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-300' : 'text-[#013589]'}`} />
-                            <span>{isRtl ? 'المبيعات' : 'Revenue'}</span>
-                          </div>
-                          <p
-                            className={`text-base font-bold tabular-nums mt-0.5 truncate ${
-                              isDarkMode ? 'text-teal-300' : 'text-[#013589]'
-                            }`}
-                          >
-                            {project.metrics.revenueTotal.toLocaleString(isRtl ? 'ar-EG' : 'en-US', {
-                              maximumFractionDigits: 0,
-                            })}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Manage Project Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectTenant(project, true);
+                  return (
+                    <article
+                      key={project.tenantId}
+                      onClick={() => onSelectTenant(project, portalState.isConsultant)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectTenant(project, portalState.isConsultant);
+                        }
                       }}
-                      className={`w-full py-3 px-4 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                      className={`group ${glassCardClass} rounded-2xl p-6 flex flex-col justify-between gap-5 hover:-translate-y-1 transition-all duration-300 cursor-pointer relative overflow-hidden focus:outline-none ${
                         isDarkMode
-                          ? 'bg-teal-500/15 hover:bg-gradient-to-r hover:from-teal-500 hover:to-emerald-500 border-teal-400/30 hover:border-transparent text-teal-200 hover:text-slate-950 group-hover:shadow-lg group-hover:shadow-teal-500/15'
-                          : 'bg-[#EDF1F6] hover:bg-gradient-to-r hover:from-[#013589] hover:via-[#2559AF] hover:to-[#477ED8] border-[#DCE3ED] hover:border-transparent text-[#013589] hover:text-white group-hover:shadow-md'
+                          ? 'hover:border-teal-400/50 hover:shadow-teal-500/15 focus:ring-2 focus:ring-teal-400/60'
+                          : 'hover:border-[#2559AF]/45 hover:shadow-[0_24px_48px_-12px_rgba(1,53,137,0.16)] focus:ring-2 focus:ring-[#2559AF]/50'
                       }`}
                     >
-                      <span>{isRtl ? 'إدارة المشروع' : 'Manage Project'}</span>
-                      <OpenArrow className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-                    </button>
-                  </article>
-                ))}
+                      {isDarkMode && (
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-teal-400/40 to-transparent opacity-60 group-hover:opacity-100 transition-opacity" />
+                      )}
+
+                      <div className="space-y-4">
+                        {/* Card Header */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div
+                            className={`w-12 h-12 rounded-xl border flex items-center justify-center shadow-inner group-hover:scale-105 transition-transform ${
+                              isDarkMode
+                                ? 'bg-gradient-to-br from-teal-500/20 to-emerald-500/10 border-teal-400/30'
+                                : 'bg-gradient-to-br from-[#EDF1F6] to-white border-[#DCE3ED]'
+                            }`}
+                          >
+                            <Layers className={`w-6 h-6 ${isDarkMode ? 'text-teal-300' : 'text-[#2559AF]'}`} />
+                          </div>
+
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-bold ${
+                              isCashierCard
+                                ? isDarkMode
+                                  ? 'bg-amber-500/15 border-amber-400/30 text-amber-300'
+                                  : 'bg-amber-50 border-amber-200 text-amber-800'
+                                : isOwnerCard
+                                  ? isDarkMode
+                                    ? 'bg-indigo-500/20 border-indigo-400/35 text-indigo-200'
+                                    : 'bg-indigo-50 border-indigo-200 text-indigo-800'
+                                  : isDarkMode
+                                    ? 'bg-emerald-500/15 border-emerald-400/30 text-emerald-300'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                                isCashierCard
+                                  ? 'bg-amber-400'
+                                  : isOwnerCard
+                                    ? 'bg-indigo-400'
+                                    : 'bg-emerald-400'
+                              }`}
+                            />
+                            <span>
+                              {isCashierCard
+                                ? 'cashier'
+                                : isOwnerCard
+                                  ? 'owner'
+                                  : isRtl
+                                    ? 'نشط'
+                                    : 'Active'}
+                            </span>
+                          </span>
+                        </div>
+
+                        {/* Project Title & Metadata */}
+                        <div>
+                          <h2
+                            className={`text-lg font-extrabold transition-colors line-clamp-1 ${
+                              isDarkMode
+                                ? 'text-white group-hover:text-teal-200'
+                                : 'text-[#013589] group-hover:text-[#2559AF]'
+                            }`}
+                          >
+                            <bdi>{project.name}</bdi>
+                          </h2>
+                          <div
+                            className={`flex items-center gap-2 mt-1 text-xs ${
+                              isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+                            }`}
+                          >
+                            <span
+                              className={`font-semibold ${
+                                isCashierCard
+                                  ? isDarkMode
+                                    ? 'text-amber-300/90'
+                                    : 'text-amber-700'
+                                  : isDarkMode
+                                    ? 'text-teal-300/90'
+                                    : 'text-[#2559AF]'
+                              }`}
+                            >
+                              {getRoleLabel(project.role)}
+                            </span>
+                            <span>•</span>
+                            <span>{formatDate(project.createdAt)}</span>
+                          </div>
+                        </div>
+
+                        {/* Quick Metrics Preview (Hidden on Cashier cards to preserve financial privacy) */}
+                        {isCashierCard ? (
+                          <div
+                            className={`rounded-xl border p-3.5 text-xs leading-relaxed ${
+                              isDarkMode
+                                ? 'bg-slate-950/55 border-amber-500/20 text-slate-300'
+                                : 'bg-amber-50/60 border-amber-200/80 text-amber-950'
+                            }`}
+                          >
+                            <div className="font-bold mb-1">
+                              {isRtl ? 'صلاحية نقطة البيع فقط (Cashier)' : 'POS Cashier Scope Only'}
+                            </div>
+                            <div className="text-[11px] opacity-80">
+                              {isRtl
+                                ? 'وصول مباشر لشاشة الكاشير والبيع وتحديث مخزون هذا المشروع دون المصروفات أو التقارير المالية.'
+                                : 'Direct access to POS checkout & project stock updates without expenses or profit reports.'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2.5 pt-1">
+                            <div
+                              className={`rounded-xl border px-3 py-2.5 ${
+                                isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
+                              }`}
+                            >
+                              <div
+                                className={`flex items-center gap-1.5 text-[11px] ${
+                                  isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+                                }`}
+                              >
+                                <ShoppingBag className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-400' : 'text-[#2559AF]'}`} />
+                                <span>{isRtl ? 'الطلبات' : 'Orders'}</span>
+                              </div>
+                              <p
+                                className={`text-base font-bold tabular-nums mt-0.5 ${
+                                  isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
+                                }`}
+                              >
+                                {project.metrics.ordersCount}
+                              </p>
+                            </div>
+
+                            <div
+                              className={`rounded-xl border px-3 py-2.5 ${
+                                isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
+                              }`}
+                            >
+                              <div
+                                className={`flex items-center gap-1.5 text-[11px] ${
+                                  isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+                                }`}
+                              >
+                                <Users className={`w-3.5 h-3.5 ${isDarkMode ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                                <span>{isRtl ? 'العملاء' : 'Customers'}</span>
+                              </div>
+                              <p
+                                className={`text-base font-bold tabular-nums mt-0.5 ${
+                                  isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
+                                }`}
+                              >
+                                {project.metrics.customersCount}
+                              </p>
+                            </div>
+
+                            <div
+                              className={`rounded-xl border px-3 py-2.5 ${
+                                isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
+                              }`}
+                            >
+                              <div
+                                className={`flex items-center gap-1.5 text-[11px] ${
+                                  isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+                                }`}
+                              >
+                                <Package className={`w-3.5 h-3.5 ${isDarkMode ? 'text-cyan-400' : 'text-[#477ED8]'}`} />
+                                <span>{isRtl ? 'المنتجات' : 'Products'}</span>
+                              </div>
+                              <p
+                                className={`text-base font-bold tabular-nums mt-0.5 ${
+                                  isDarkMode ? 'text-slate-100' : 'text-[#172B4D]'
+                                }`}
+                              >
+                                {project.metrics.productsCount}
+                              </p>
+                            </div>
+
+                            <div
+                              className={`rounded-xl border px-3 py-2.5 ${
+                                isDarkMode ? 'bg-slate-950/55 border-slate-800/90' : 'bg-[#F5F7FA] border-[#DCE3ED]'
+                              }`}
+                            >
+                              <div
+                                className={`flex items-center gap-1.5 text-[11px] ${
+                                  isDarkMode ? 'text-slate-400' : 'text-[#68778D]'
+                                }`}
+                              >
+                                <TrendingUp className={`w-3.5 h-3.5 ${isDarkMode ? 'text-teal-300' : 'text-[#013589]'}`} />
+                                <span>{isRtl ? 'المبيعات' : 'Revenue'}</span>
+                              </div>
+                              <p
+                                className={`text-base font-bold tabular-nums mt-0.5 truncate ${
+                                  isDarkMode ? 'text-teal-300' : 'text-[#013589]'
+                                }`}
+                              >
+                                {project.metrics.revenueTotal.toLocaleString(isRtl ? 'ar-EG' : 'en-US', {
+                                  maximumFractionDigits: 0,
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Enter Workspace Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectTenant(project, portalState.isConsultant);
+                        }}
+                        className={`w-full py-3 px-4 rounded-xl border font-bold text-sm flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer ${
+                          isCashierCard
+                            ? isDarkMode
+                              ? 'bg-amber-500/15 hover:bg-amber-500 border-amber-400/35 hover:border-transparent text-amber-200 hover:text-slate-950'
+                              : 'bg-amber-50 hover:bg-amber-600 border-amber-200 hover:border-transparent text-amber-900 hover:text-white'
+                            : isDarkMode
+                              ? 'bg-teal-500/15 hover:bg-gradient-to-r hover:from-teal-500 hover:to-emerald-500 border-teal-400/30 hover:border-transparent text-teal-200 hover:text-slate-950 group-hover:shadow-lg group-hover:shadow-teal-500/15'
+                              : 'bg-[#EDF1F6] hover:bg-gradient-to-r hover:from-[#013589] hover:via-[#2559AF] hover:to-[#477ED8] border-[#DCE3ED] hover:border-transparent text-[#013589] hover:text-white group-hover:shadow-md'
+                        }`}
+                      >
+                        <span>
+                          {portalState.isConsultant
+                            ? isRtl
+                              ? 'إدارة المشروع'
+                              : 'Manage Project'
+                            : isCashierCard
+                              ? isRtl
+                                ? 'فتح شاشة الكاشير (POS)'
+                                : 'Open Cashier POS'
+                              : isRtl
+                                ? 'الدخول كمالك المشروع'
+                                : 'Enter as Owner'}
+                        </span>
+                        <OpenArrow className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                      </button>
+                    </article>
+                  );
+                })}
               </section>
             ) : (
               /* Consultant Empty State / Search No Match */

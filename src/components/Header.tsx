@@ -17,7 +17,9 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
     businessName,
     setBusinessName,
     activeTenant,
+    availableProjectsCount,
     isConsultantUser,
+    isOwnerUser,
     isCashierUser,
     selectTenant,
     resetToDefault,
@@ -111,20 +113,33 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
                 className="hover:underline flex items-center gap-1 text-slate-800"
               >
                 <bdi>{businessName}</bdi>
+                {isOwnerUser && (
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-bold">
+                    {isRtl ? 'مالك' : 'Owner'}
+                  </span>
+                )}
                 <span className="material-symbols-outlined text-xs text-slate-400">edit</span>
               </button>
             )}
           </div>
 
-          {activeTenant && isConsultantUser && (
+          {activeTenant && (isConsultantUser || availableProjectsCount > 1) && (
             <button
               type="button"
               onClick={() => selectTenant(null)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-teal-500/30 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition-all cursor-pointer active:scale-95 shrink-0"
-              title={isRtl ? 'العودة إلى بوابة المشاريع' : 'Switch Project / Workspace Hub'}
+              title={isRtl ? 'التبديل بين المشاريع والأدوار' : 'Switch Project / Role'}
             >
               <LayoutGrid className="w-3.5 h-3.5 text-teal-600" />
-              <span className="hidden sm:inline">{isRtl ? 'المشاريع' : 'Projects'}</span>
+              <span className="hidden sm:inline">
+                {isConsultantUser
+                  ? isRtl
+                    ? 'المشاريع'
+                    : 'Projects'
+                  : isRtl
+                  ? 'تبديل المشروع'
+                  : 'Switch Project'}
+              </span>
             </button>
           )}
         </div>

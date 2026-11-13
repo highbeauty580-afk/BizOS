@@ -12,13 +12,33 @@ export interface StaffMemberRecord {
   email?: string;
 }
 
-export interface LinkStaffByEmailParams {
-  email: string;
-  role?: 'cashier' | string;
+export interface UserProjectMembershipSummary {
+  tenantId: string;
+  tenantName: string;
+  role: string;
+  isActive: boolean;
+}
+
+export interface RegisteredUserOption {
+  userId: string;
+  fullName: string;
+  email?: string;
+  memberships: UserProjectMembershipSummary[];
+}
+
+export interface OwnerTenantOption {
+  tenantId: string;
+  name: string;
+}
+
+export interface LinkStaffParams {
+  userId?: string;
+  email?: string;
+  role?: 'cashier' | 'owner' | string;
   tenantId?: string;
 }
 
-export interface LinkStaffByEmailResult {
+export interface LinkStaffResult {
   success: boolean;
   member?: StaffMemberRecord;
   wasUpdated?: boolean;
@@ -59,7 +79,6 @@ export async function fetchProjectStaffFromSupabase(
       new Set(rows.map((r: any) => r.user_id).filter((id: any) => typeof id === 'string' && id.trim() !== ''))
     );
 
-    // Fetch matching profile metadata safely (works even if profiles has varying optional columns)
     const profilesMap: Record<string, { fullName?: string; email?: string }> = {};
     if (userIds.length > 0) {
       try {
@@ -83,7 +102,6 @@ export async function fetchProjectStaffFromSupabase(
       }
     }
 
-    // Include current logged-in user details if present
     try {
       const {
         data: { user: currentUser },
@@ -133,13 +151,169 @@ export async function fetchProjectStaffFromSupabase(
 }
 
 /**
- * Looks up a pre-registered user_id by email (via public.profiles or optional RPC)
- * without triggering Supabase Auth SignUp rate limits.
+ * Fetch all registered users from public.profiles (and optional RPC fallback),
+ * enriched with each user's project memberships and roles so the Owner can pick
+ * a user from a dropdown without typos.
+ */
+export async function fetchRegisteredUsersForLinking(): Promise<{
+  data: RegisteredUserOption[];
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return { data: [], error: 'لم يتم تكوين اتصال Supabase.' };
+  }
+
+  try {
+    const {
+      data: { user: currentUser },
+    } = await supabase.auth.getUser();
+
+    const usersMap = new Map<string, { fullName?: string; email?: string }>();
+
+    // 1. Fetch from public.profiles
+    const { data: profilesData, error: profilesErr } = await supabase
+      .from('profiles')
+      .select('*')
+      .limit(500);
+
+    if (!profilesErr && Array.isArray(profilesData)) {
+      profilesData.forEach((p: any) => {
+        if (!p?.id) return;
+        usersMap.set(String(p.id), {
+          fullName: p.full_name || p.display_name || p.name || undefined,
+          email: p.email || undefined,
+        });
+      });
+    }
+
+    // 2. Optional RPC fallback (list_registered_users / get_all_profiles) if configured
+    if (usersMap.size === 0) {
+      try {
+        const { data: rpcUsers, error: rpcErr } = await supabase.rpc('list_registered_users');
+        if (!rpcErr && Array.isArray(rpcUsers)) {
+          rpcUsers.forEach((u: any) => {
+            const uid = String(u?.id || u?.user_id || '').trim();
+            if (!uid) return;
+            usersMap.set(uid, {
+              fullName: u.full_name || u.display_name || u.email?.split('@')[0] || undefined,
+              email: u.email || undefined,
+            });
+          });
+        }
+      } catch {
+        // Optional RPC not configured
+      }
+    }
+
+    // 3. Also enrich with any user_ids already visible in tenant_members
+    const userIds = Array.from(usersMap.keys());
+    const membershipsByUserId = new Map<string, UserProjectMembershipSummary[]>();
+
+    try {
+      const memberQuery = supabase
+        .from('tenant_members')
+        .select('tenant_id, user_id, role, is_active, tenants(id, name)')
+        .limit(1000);
+
+      const { data: allMembersData } =
+        userIds.length > 0 ? await memberQuery.in('user_id', userIds) : await memberQuery;
+
+      if (Array.isArray(allMembersData)) {
+        allMembersData.forEach((row: any) => {
+          const uid = String(row.user_id || '').trim();
+          if (!uid) return;
+
+          if (!usersMap.has(uid)) {
+            usersMap.set(uid, {});
+          }
+
+          const joinedTenant = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
+          const summary: UserProjectMembershipSummary = {
+            tenantId: String(row.tenant_id),
+            tenantName: joinedTenant?.name || `مشروع (${String(row.tenant_id).slice(0, 6)})`,
+            role: String(row.role || 'cashier').toLowerCase(),
+            isActive: row.is_active !== false,
+          };
+
+          const existingList = membershipsByUserId.get(uid) || [];
+          existingList.push(summary);
+          membershipsByUserId.set(uid, existingList);
+        });
+      }
+    } catch (memberEx) {
+      console.warn('⚠️ Optional memberships enrichment skipped:', memberEx);
+    }
+
+    const options: RegisteredUserOption[] = Array.from(usersMap.entries())
+      .filter(([uid]) => uid !== currentUser?.id)
+      .map(([uid, info]) => {
+        const cleanEmail = info.email?.trim();
+        const fallbackName = cleanEmail
+          ? cleanEmail.split('@')[0]
+          : `مستخدم (${uid.slice(0, 6)})`;
+        return {
+          userId: uid,
+          fullName: info.fullName?.trim() || fallbackName,
+          email: cleanEmail,
+          memberships: membershipsByUserId.get(uid) || [],
+        };
+      })
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
+
+    return {
+      data: options,
+      error: profilesErr && options.length === 0 ? profilesErr.message : null,
+    };
+  } catch (err: any) {
+    console.error('❌ Exception in fetchRegisteredUsersForLinking:', err);
+    return { data: [], error: err?.message || 'تعذر جلب قائمة المستخدمين المسجلين.' };
+  }
+}
+
+/**
+ * Fetch projects owned by the authenticated user so the Owner can pick or confirm the target tenant_id.
+ */
+export async function fetchOwnerManagedTenants(): Promise<OwnerTenantOption[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) return [];
+
+    const { data, error } = await supabase
+      .from('tenant_members')
+      .select('tenant_id, tenants(id, name)')
+      .eq('user_id', user.id)
+      .eq('role', 'owner')
+      .eq('is_active', true);
+
+    if (error || !Array.isArray(data)) return [];
+
+    const seen = new Set<string>();
+    const list: OwnerTenantOption[] = [];
+    data.forEach((row: any) => {
+      const tid = String(row.tenant_id || '').trim();
+      if (!tid || seen.has(tid)) return;
+      seen.add(tid);
+      const joinedTenant = Array.isArray(row.tenants) ? row.tenants[0] : row.tenants;
+      list.push({
+        tenantId: tid,
+        name: joinedTenant?.name || 'مشروعي',
+      });
+    });
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fallback lookup by email if caller submits email instead of userId directly.
  */
 async function lookupRegisteredUserByEmail(
   cleanEmail: string
-): Promise<{ userId: string | null; fullName?: string; lookupNote?: string }> {
-  // 1. Primary lookup in public.profiles by email
+): Promise<{ userId: string | null; fullName?: string }> {
   try {
     const { data: profileRow, error: profileErr } = await supabase
       .from('profiles')
@@ -158,23 +332,20 @@ async function lookupRegisteredUserByEmail(
           cleanEmail.split('@')[0],
       };
     }
-  } catch (err) {
-    console.warn('⚠️ Profiles email lookup warning:', err);
+  } catch {
+    // ignore
   }
 
-  // 2. Fallback RPC lookup (if get_user_id_by_email is configured in Supabase)
   try {
     const { data: rpcData, error: rpcErr } = await supabase.rpc('get_user_id_by_email', {
       p_email: cleanEmail,
     });
-
     if (!rpcErr && rpcData) {
       const record = Array.isArray(rpcData) ? rpcData[0] : rpcData;
       const rpcUserId =
         typeof record === 'string'
           ? record.trim()
           : String(record?.user_id || record?.id || '').trim();
-
       if (rpcUserId) {
         return {
           userId: rpcUserId,
@@ -186,30 +357,30 @@ async function lookupRegisteredUserByEmail(
       }
     }
   } catch {
-    // Optional RPC not configured; fall through cleanly
+    // ignore
   }
 
   return { userId: null };
 }
 
 /**
- * Owner-only workflow (No Auth Sign-Up / Zero Rate Limits):
- * 1. Verifies the current authenticated user is an active Owner of target tenant_id
- * 2. Searches for the pre-registered employee's user_id by email in profiles
- * 3. Inserts or updates public.tenant_members linking user_id -> active tenant_id with selected role (default 'cashier')
+ * Owner-only workflow:
+ * Links a selected pre-registered user (by userId from dropdown or email fallback)
+ * into public.tenant_members for target tenant_id with the chosen role (default 'cashier').
  */
-export async function linkStaffByEmailInSupabase(
-  params: LinkStaffByEmailParams
-): Promise<LinkStaffByEmailResult> {
+export async function linkStaffToTenantInSupabase(
+  params: LinkStaffParams
+): Promise<LinkStaffResult> {
   if (!isSupabaseConfigured) {
     return { success: false, error: 'لم يتم تكوين اتصال Supabase.' };
   }
 
-  const cleanEmail = params.email.trim().toLowerCase();
   const selectedRole = (params.role || 'cashier').trim().toLowerCase();
+  const explicitUserId = (params.userId || '').trim();
+  const cleanEmail = (params.email || '').trim().toLowerCase();
 
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    return { success: false, error: 'يرجى إدخال بريد إلكتروني صحيح للموظف.' };
+  if (!explicitUserId && (!cleanEmail || !cleanEmail.includes('@'))) {
+    return { success: false, error: 'يرجى اختيار الموظف من القائمة المنسدلة أولاً.' };
   }
 
   try {
@@ -223,7 +394,6 @@ export async function linkStaffByEmailInSupabase(
       };
     }
 
-    // Enforce Owner-only check before linking
     const {
       data: { user: ownerUser },
     } = await supabase.auth.getUser();
@@ -232,10 +402,13 @@ export async function linkStaffByEmailInSupabase(
       return { success: false, error: 'يجب تسجيل الدخول كمالك للمشروع أولاً.' };
     }
 
-    if (ownerUser.email && ownerUser.email.trim().toLowerCase() === cleanEmail) {
+    if (
+      (explicitUserId && explicitUserId === ownerUser.id) ||
+      (cleanEmail && ownerUser.email && ownerUser.email.trim().toLowerCase() === cleanEmail)
+    ) {
       return {
         success: false,
-        error: 'هذا البريد الإلكتروني يعود لحسابك الحالي كمالك للمشروع بالفعل.',
+        error: 'هذا الحساب يعود لك كمالك للمشروع بالفعل.',
       };
     }
 
@@ -256,18 +429,37 @@ export async function linkStaffByEmailInSupabase(
       };
     }
 
-    // Step 1: Lookup user_id for the pre-registered email
-    const foundUser = await lookupRegisteredUserByEmail(cleanEmail);
-    if (!foundUser.userId) {
-      return {
-        success: false,
-        error: `لم يتم العثور على حساب مسجل بالبريد (${cleanEmail}). يجب أن يقوم الموظف بتسجيل حسابه الشخصي في النظام أولاً (Sign Up)، ثم يمكنك ربطه هنا.`,
-      };
+    let targetUserId = explicitUserId;
+    let targetFullName = cleanEmail ? cleanEmail.split('@')[0] : '';
+    let targetEmail = cleanEmail || undefined;
+
+    if (!targetUserId && cleanEmail) {
+      const foundUser = await lookupRegisteredUserByEmail(cleanEmail);
+      if (!foundUser.userId) {
+        return {
+          success: false,
+          error: `لم يتم العثور على حساب مسجل بالبريد (${cleanEmail}). يرجى اختيار المستخدم من القائمة المنسدلة.`,
+        };
+      }
+      targetUserId = foundUser.userId;
+      targetFullName = foundUser.fullName || targetFullName;
+    } else if (targetUserId) {
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', targetUserId)
+          .maybeSingle();
+        if (prof) {
+          targetFullName =
+            prof.full_name || prof.display_name || prof.name || prof.email?.split('@')[0] || targetFullName;
+          targetEmail = prof.email || targetEmail;
+        }
+      } catch {
+        // non-fatal
+      }
     }
 
-    const targetUserId = foundUser.userId;
-
-    // Step 2: Check if user already has a membership record in this tenant -> Update or Insert
     const { data: existingMember, error: existingErr } = await supabase
       .from('tenant_members')
       .select('id, tenant_id, user_id, role, is_active, created_at')
@@ -277,10 +469,9 @@ export async function linkStaffByEmailInSupabase(
       .maybeSingle();
 
     if (existingErr) {
-      console.error('❌ Error checking existing membership:', existingErr.message);
       return {
         success: false,
-        error: `تعذر التحقق من العضوية الحالية للموظف: ${existingErr.message}`,
+        error: `تعذر التحقق من العضوية الحالية للمستخدم: ${existingErr.message}`,
       };
     }
 
@@ -304,7 +495,6 @@ export async function linkStaffByEmailInSupabase(
         .single();
 
       if (updateErr) {
-        console.error('❌ Supabase tenant_members update error:', updateErr.message);
         return {
           success: false,
           error: `تعذر تحديث سجل الموظف في المشروع: ${updateErr.message}`,
@@ -321,13 +511,12 @@ export async function linkStaffByEmailInSupabase(
           role: String(updatedMember.role || selectedRole).toLowerCase(),
           isActive: updatedMember.is_active !== false,
           createdAt: updatedMember.created_at || new Date().toISOString(),
-          fullName: foundUser.fullName || cleanEmail.split('@')[0],
-          email: cleanEmail,
+          fullName: targetFullName || `كاشير (${targetUserId.slice(0, 6)})`,
+          email: targetEmail,
         },
       };
     }
 
-    // Step 3: Insert new link into public.tenant_members
     const { data: insertedMember, error: insertErr } = await supabase
       .from('tenant_members')
       .insert([
@@ -342,7 +531,6 @@ export async function linkStaffByEmailInSupabase(
       .single();
 
     if (insertErr) {
-      console.error('❌ Supabase tenant_members insert error:', insertErr.message);
       return {
         success: false,
         error: `تعذر ربط الموظف بالمشروع (tenant_members): ${insertErr.message}`,
@@ -359,12 +547,12 @@ export async function linkStaffByEmailInSupabase(
         role: String(insertedMember.role || selectedRole).toLowerCase(),
         isActive: insertedMember.is_active !== false,
         createdAt: insertedMember.created_at || new Date().toISOString(),
-        fullName: foundUser.fullName || cleanEmail.split('@')[0],
-        email: cleanEmail,
+        fullName: targetFullName || `كاشير (${targetUserId.slice(0, 6)})`,
+        email: targetEmail,
       },
     };
   } catch (err: any) {
-    console.error('❌ Exception in linkStaffByEmailInSupabase:', err);
+    console.error('❌ Exception in linkStaffToTenantInSupabase:', err);
     return {
       success: false,
       error: err?.message || 'حدث خطأ غير متوقع أثناء ربط الموظف بالمشروع.',
