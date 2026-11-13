@@ -48,6 +48,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession(data.session);
           setUser(data.session?.user ?? null);
           setIsLoadingAuth(false);
+          if (data.session?.user) {
+            void syncUserEmailToProfile(data.session.user);
+          }
         }
       } catch (err: any) {
         console.error('❌ Exception in initializeAuth:', err);
@@ -78,6 +81,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  const syncUserEmailToProfile = async (authUser: User | null, explicitFullName?: string) => {
+    if (!authUser?.id || !authUser?.email) return;
+    try {
+      const cleanEmail = authUser.email.trim().toLowerCase();
+      const nameVal =
+        explicitFullName?.trim() ||
+        authUser.user_metadata?.full_name ||
+        authUser.user_metadata?.display_name ||
+        cleanEmail.split('@')[0];
+
+      const { data: existingProfile, error: lookupErr } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .eq('id', authUser.id)
+        .maybeSingle();
+
+      if (lookupErr) return;
+
+      if (existingProfile) {
+        if (!existingProfile.email || (!existingProfile.full_name && nameVal)) {
+          await supabase
+            .from('profiles')
+            .update({
+              email: cleanEmail,
+              ...(existingProfile.full_name ? {} : { full_name: nameVal }),
+            })
+            .eq('id', authUser.id);
+        }
+      } else {
+        await supabase.from('profiles').insert({
+          id: authUser.id,
+          email: cleanEmail,
+          full_name: nameVal,
+        });
+      }
+    } catch {
+      // Non-fatal if profiles schema differs or email column is absent
+    }
+  };
+
   const handleSignInWithPassword = async (email: string, password: string) => {
     setAuthError(null);
     try {
@@ -93,6 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setUser(data.user);
       setSession(data.session);
+      void syncUserEmailToProfile(data.user);
       return { error: null, user: data.user };
     } catch (err: any) {
       const errorObj = { message: err?.message || 'فشل تسجيل الدخول' } as AuthError;
@@ -125,6 +169,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data.user && data.session) {
         setUser(data.user);
         setSession(data.session);
+        void syncUserEmailToProfile(data.user, fullName);
       }
 
       return { error: null, user: data.user, needsEmailConfirmation };

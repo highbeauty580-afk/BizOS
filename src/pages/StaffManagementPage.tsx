@@ -2,11 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle2,
-  Eye,
-  EyeOff,
-  Lock,
+  Link2,
   Mail,
-  Plus,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -21,8 +18,8 @@ import {
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  createCashierStaffAccount,
   fetchProjectStaffFromSupabase,
+  linkStaffByEmailInSupabase,
   removeStaffMemberFromSupabase,
   StaffMemberRecord,
   toggleStaffActiveStatusInSupabase,
@@ -50,12 +47,10 @@ export const StaffManagementPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'owner' | 'cashier'>('all');
 
-  // Create Cashier Modal State
+  // Link Pre-Registered Staff by Email Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [fullName, setFullName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [selectedRole, setSelectedRole] = useState<'cashier'>('cashier');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -185,20 +180,18 @@ export const StaffManagementPage: React.FC = () => {
       setActionFeedback({
         type: 'error',
         message: isRtl
-          ? 'يرجى اختيار المشروع النشط أولاً قبل إضافة موظف جديد.'
-          : 'Please select an active project first before adding a new staff member.',
+          ? 'يرجى اختيار المشروع النشط أولاً قبل ربط موظف جديد.'
+          : 'Please select an active project first before linking a staff member.',
       });
       return;
     }
     setFormError(null);
-    setFullName('');
     setEmail('');
-    setPassword('');
-    setShowPassword(false);
+    setSelectedRole('cashier');
     setIsAddModalOpen(true);
   };
 
-  const handleCreateCashier = async (e: React.FormEvent) => {
+  const handleLinkStaffByEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setActionFeedback(null);
@@ -214,31 +207,33 @@ export const StaffManagementPage: React.FC = () => {
 
     setIsSubmitting(true);
 
-    const res = await createCashierStaffAccount({
-      fullName,
+    const res = await linkStaffByEmailInSupabase({
       email,
-      password,
+      role: selectedRole,
       tenantId: activeProjectId,
     });
 
     setIsSubmitting(false);
 
     if (!res.success || !res.member) {
-      setFormError(res.error || (isRtl ? 'فشل إنشاء حساب الموظف.' : 'Failed to create staff account.'));
+      setFormError(res.error || (isRtl ? 'فشل ربط الموظف بالمشروع.' : 'Failed to link staff account.'));
       return;
     }
 
-    setStaffList((prev) => [res.member!, ...prev]);
+    setStaffList((prev) => {
+      const withoutDup = prev.filter((m) => m.id !== res.member!.id && m.userId !== res.member!.userId);
+      return [res.member!, ...withoutDup];
+    });
     setIsAddModalOpen(false);
     setActionFeedback({
       type: 'success',
-      message: res.needsEmailConfirmation
+      message: res.wasUpdated
         ? isRtl
-          ? `تم إنشاء حساب الكاشير (${res.member.fullName}) وربطه بالمشروع! ملاحظة: يتطلب تفعيل البريد الإلكتروني قبل أول تسجيل دخول.`
-          : `Cashier (${res.member.fullName}) created and linked! Note: Email confirmation is required before first sign-in.`
+          ? `تم تحديث صلاحية الموظف (${res.member.email || res.member.fullName}) وتفعيله في مشروع "${activeTenant.name}" بنجاح.`
+          : `Updated and activated ${res.member.email || res.member.fullName} in "${activeTenant.name}".`
         : isRtl
-        ? `تم تسجيل حساب الكاشير (${res.member.fullName}) وربطه بمشروع "${activeTenant.name}" بنجاح! يمكنه الآن تسجيل الدخول مباشرة إلى شاشة الكاشير.`
-        : `Cashier (${res.member.fullName}) created and linked to "${activeTenant.name}"! They can now sign in directly to POS.`,
+        ? `تم ربط الموظف (${res.member.email || res.member.fullName}) بمشروع "${activeTenant.name}" بدور كاشير بنجاح!`
+        : `Linked ${res.member.email || res.member.fullName} to "${activeTenant.name}" as Cashier!`,
     });
     loadStaff(true);
   };
@@ -340,8 +335,8 @@ export const StaffManagementPage: React.FC = () => {
           </h1>
           <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
             {isRtl
-              ? 'عرض جميع الأعضاء المرتبطين بمشروعك الحالي وإضافة حسابات كاشير جديدة بصلاحية حصرية لشاشة البيع (POS) وتحديث المخزون دون الوصول للتقارير المالية أو المصروفات.'
-              : 'View staff linked to your active project and register new Cashier accounts scoped strictly to POS checkout and inventory updates.'}
+              ? 'اربط الموظفين المسجلين مسبقاً في النظام بمشروعك الحالي عبر البريد الإلكتروني بدور كاشير (POS وتحديث المخزون فقط)، دون الحاجة لإنشاء حسابات مصادقة جديدة.'
+              : 'Link pre-registered staff emails to your active project as Cashier (POS & stock deduction only) without creating duplicate Auth accounts.'}
           </p>
         </div>
 
@@ -363,9 +358,22 @@ export const StaffManagementPage: React.FC = () => {
             className="px-4 py-2.5 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 whitespace-nowrap"
             style={{ backgroundColor: themeConfig.primary }}
           >
-            <UserPlus className="w-4 h-4" />
-            <span>{isRtl ? '+ إضافة موظف كاشير جديد' : '+ Add Cashier Staff'}</span>
+            <Link2 className="w-4 h-4" />
+            <span>{isRtl ? '+ ربط موظف بالبريد الإلكتروني' : '+ Link Staff by Email'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Onboarding Instructions Banner */}
+      <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 text-indigo-950 text-xs flex items-start gap-3">
+        <UserPlus className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+        <div className="leading-relaxed">
+          <span className="font-bold">
+            {isRtl ? 'آلية ربط الموظف الجديدة: ' : 'How Staff Linking Works: '}
+          </span>
+          {isRtl
+            ? 'يقوم الموظف أولاً بتسجيل حسابه الشخصي العادي في شاشة التسجيل (Sign Up)، ثم يقوم المالك هنا بإدخال بريده الإلكتروني واختيار دور (كاشير) لربطه فوراً بالمشروع.'
+            : 'The employee first registers their own account via Sign Up, then the Owner enters their email here and assigns the Cashier role to link them to this project.'}
         </div>
       </div>
 
@@ -514,8 +522,8 @@ export const StaffManagementPage: React.FC = () => {
             </div>
             <p className="text-xs text-slate-500 max-w-sm">
               {isRtl
-                ? 'ابدأ بإضافة أول موظف كاشير ليتمكن من تسجيل الدخول واستخدام شاشة نقطة البيع الخاصة بمشروعك.'
-                : 'Add your first cashier staff member so they can sign in and access your POS terminal.'}
+                ? 'ابدأ بربط أول موظف كاشير عبر بريده الإلكتروني المسجل مسبقاً ليتمكن من الدخول لشاشة نقطة البيع الخاصة بمشروعك.'
+                : 'Link your first pre-registered cashier by email so they can sign in and access your POS terminal.'}
             </p>
             <button
               type="button"
@@ -523,8 +531,8 @@ export const StaffManagementPage: React.FC = () => {
               className="mt-1 px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
               style={{ backgroundColor: themeConfig.primary }}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{isRtl ? 'إضافة موظف كاشير' : 'Add Cashier'}</span>
+              <Link2 className="w-3.5 h-3.5" />
+              <span>{isRtl ? 'ربط موظف بالبريد' : 'Link Staff by Email'}</span>
             </button>
           </div>
         ) : (
@@ -674,7 +682,7 @@ export const StaffManagementPage: React.FC = () => {
         )}
       </div>
 
-      {/* ADD NEW CASHIER MODAL */}
+      {/* LINK PRE-REGISTERED STAFF MODAL */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 flex flex-col gap-5">
@@ -684,16 +692,16 @@ export const StaffManagementPage: React.FC = () => {
                   className="w-9 h-9 rounded-xl text-white flex items-center justify-center shadow-xs"
                   style={{ backgroundColor: themeConfig.primary }}
                 >
-                  <UserPlus className="w-4 h-4" />
+                  <Link2 className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    {isRtl ? 'إنشاء حساب موظف كاشير جديد' : 'Register New Cashier'}
+                    {isRtl ? 'ربط موظف مسجل بالمشروع' : 'Link Registered Staff Member'}
                   </h3>
                   <p className="text-[11px] text-slate-500">
                     {isRtl
-                      ? `سيتم ربط الحساب تلقائياً بمشروع: ${activeTenant.name}`
-                      : `Auto-linked to project: ${activeTenant.name}`}
+                      ? `المشروع الحالي: ${activeTenant.name}`
+                      : `Active project: ${activeTenant.name}`}
                   </p>
                 </div>
               </div>
@@ -707,30 +715,16 @@ export const StaffManagementPage: React.FC = () => {
             </div>
 
             {formError && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2">
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-start gap-2 leading-relaxed">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
                 <span>{formError}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateCashier} className="flex flex-col gap-4 text-xs">
+            <form onSubmit={handleLinkStaffByEmail} className="flex flex-col gap-4 text-xs">
               <div className="flex flex-col gap-1.5">
                 <label className="font-bold text-slate-700">
-                  {isRtl ? 'الاسم الكامل للموظف' : 'Staff Full Name'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder={isRtl ? 'مثال: أحمد محمد' : 'e.g. Ahmed Mohamed'}
-                  className="h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="font-bold text-slate-700">
-                  {isRtl ? 'البريد الإلكتروني لتسجيل الدخول' : 'Login Email'}
+                  {isRtl ? 'البريد الإلكتروني للموظف (المسجل مسبقاً)' : 'Pre-Registered Employee Email'}
                 </label>
                 <div className="relative">
                   <Mail
@@ -750,52 +744,35 @@ export const StaffManagementPage: React.FC = () => {
                     }`}
                   />
                 </div>
+                <span className="text-[10px] text-slate-400">
+                  {isRtl
+                    ? 'يجب أن يكون الموظف قد أنشأ حسابه الشخصي في النظام مسبقاً بهذا البريد.'
+                    : 'Employee must already have registered an account in the app with this email.'}
+                </span>
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="font-bold text-slate-700">
-                  {isRtl ? 'كلمة المرور' : 'Password'}
+                  {isRtl ? 'الدور الوظيفي داخل المشروع' : 'Assigned Role'}
                 </label>
-                <div className="relative">
-                  <Lock
-                    className={`w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 ${
-                      isRtl ? 'right-3' : 'left-3'
-                    }`}
-                  />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    minLength={6}
-                    dir="ltr"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className={`w-full h-10 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-mono focus:outline-none focus:border-indigo-500 ${
-                      isRtl ? 'pr-9 pl-10' : 'pl-9 pr-10'
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((p) => !p)}
-                    className={`absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer ${
-                      isRtl ? 'left-3' : 'right-3'
-                    }`}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <span className="text-[10px] text-slate-400">
-                  {isRtl ? 'الحد الأدنى 6 أحرف أو أرقام' : 'Minimum 6 characters'}
-                </span>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value as 'cashier')}
+                  className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="cashier">
+                    {isRtl ? 'كاشير (cashier) — شاشة البيع والمخزون فقط' : 'Cashier (cashier) — POS & Stock Only'}
+                  </option>
+                </select>
               </div>
 
               <div className="p-3 rounded-xl bg-teal-50/80 border border-teal-200/80 text-teal-900 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-teal-700 shrink-0 mt-0.5" />
                 <div className="text-[11px] leading-relaxed">
-                  <strong>{isRtl ? 'صلاحية الحساب تلقائياً:' : 'Assigned Role:'}</strong>{' '}
+                  <strong>{isRtl ? 'الربط المباشر بـ tenant_members:' : 'Direct Project Link:'}</strong>{' '}
                   {isRtl
-                    ? 'كاشير (cashier) — يفتح شاشة الكاشير مباشرة ويُمنع من صفحات المصروفات والأرباح والإعدادات.'
-                    : 'Cashier — routes straight to POS terminal; restricted from Expenses, Profits, Settings, and Staff.'}
+                    ? 'سيتم البحث عن معرف الحساب المرتبط بهذا البريد وإدراجه أو تحديثه داخل مشروعك بدور كاشير، ليدخل مباشرةً على شاشة الكاشير فقط.'
+                    : 'Looks up the registered user ID by email and inserts/updates their membership in your active project as Cashier.'}
                 </div>
               </div>
 
@@ -817,12 +794,12 @@ export const StaffManagementPage: React.FC = () => {
                   {isSubmitting ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>{isRtl ? 'جاري التسجيل والربط...' : 'Creating & Linking...'}</span>
+                      <span>{isRtl ? 'جاري البحث والربط...' : 'Searching & Linking...'}</span>
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>{isRtl ? 'إنشاء وربط الموظف' : 'Create & Link Cashier'}</span>
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>{isRtl ? 'ربط الموظف بالمشروع' : 'Link Staff Member'}</span>
                     </>
                   )}
                 </button>
