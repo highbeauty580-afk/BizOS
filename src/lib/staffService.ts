@@ -23,6 +23,8 @@ export interface RegisteredUserOption {
   userId: string;
   fullName: string;
   email?: string;
+  isCurrentUser?: boolean;
+  createdAt?: string;
   memberships: UserProjectMembershipSummary[];
 }
 
@@ -89,9 +91,10 @@ export async function fetchProjectStaffFromSupabase(
 
         if (!profilesErr && profilesData) {
           profilesData.forEach((p: any) => {
-            if (p?.id) {
-              profilesMap[p.id] = {
-                fullName: p.full_name || p.display_name || p.name || undefined,
+            const pid = String(p?.id || p?.user_id || '').trim();
+            if (pid) {
+              profilesMap[pid] = {
+                fullName: p.full_name || p.display_name || p.name || p.username || undefined,
                 email: p.email || undefined,
               };
             }
@@ -152,10 +155,12 @@ export async function fetchProjectStaffFromSupabase(
 
 /**
  * Fetch all registered users from public.profiles (and optional RPC fallback),
- * enriched with each user's project memberships and roles so the Owner can pick
- * a user from a dropdown without typos.
+ * enriched with each user's project memberships and roles so the Owner can see
+ * all registered accounts directly in Staff Management and link any of them.
  */
-export async function fetchRegisteredUsersForLinking(): Promise<{
+export async function fetchRegisteredUsersForLinking(optionsConfig?: {
+  includeCurrentUser?: boolean;
+}): Promise<{
   data: RegisteredUserOption[];
   error: string | null;
 }> {
@@ -163,14 +168,19 @@ export async function fetchRegisteredUsersForLinking(): Promise<{
     return { data: [], error: 'لم يتم تكوين اتصال Supabase.' };
   }
 
+  const includeCurrentUser = optionsConfig?.includeCurrentUser ?? false;
+
   try {
     const {
       data: { user: currentUser },
     } = await supabase.auth.getUser();
 
-    const usersMap = new Map<string, { fullName?: string; email?: string }>();
+    const usersMap = new Map<
+      string,
+      { fullName?: string; email?: string; createdAt?: string }
+    >();
 
-    // 1. Fetch from public.profiles
+    // 1. Fetch all registered accounts from public.profiles
     const { data: profilesData, error: profilesErr } = await supabase
       .from('profiles')
       .select('*')
@@ -178,25 +188,36 @@ export async function fetchRegisteredUsersForLinking(): Promise<{
 
     if (!profilesErr && Array.isArray(profilesData)) {
       profilesData.forEach((p: any) => {
-        if (!p?.id) return;
-        usersMap.set(String(p.id), {
-          fullName: p.full_name || p.display_name || p.name || undefined,
+        const uid = String(p?.id || p?.user_id || '').trim();
+        if (!uid) return;
+        usersMap.set(uid, {
+          fullName: p.full_name || p.display_name || p.name || p.username || undefined,
           email: p.email || undefined,
+          createdAt: p.created_at || undefined,
         });
       });
     }
 
-    // 2. Optional RPC fallback (list_registered_users / get_all_profiles) if configured
-    if (usersMap.size === 0) {
+    // 2. Fallback / supplement via RPC (list_registered_users) when profiles returns <= 1 row (e.g. RLS on profiles)
+    const nonSelfCount = Array.from(usersMap.keys()).filter((uid) => uid !== currentUser?.id).length;
+    if (profilesErr || nonSelfCount === 0) {
       try {
         const { data: rpcUsers, error: rpcErr } = await supabase.rpc('list_registered_users');
         if (!rpcErr && Array.isArray(rpcUsers)) {
           rpcUsers.forEach((u: any) => {
             const uid = String(u?.id || u?.user_id || '').trim();
             if (!uid) return;
+            const prev = usersMap.get(uid) || {};
             usersMap.set(uid, {
-              fullName: u.full_name || u.display_name || u.email?.split('@')[0] || undefined,
-              email: u.email || undefined,
+              fullName:
+                prev.fullName ||
+                u.full_name ||
+                u.display_name ||
+                u.name ||
+                u.email?.split('@')[0] ||
+                undefined,
+              email: prev.email || u.email || undefined,
+              createdAt: prev.createdAt || u.created_at || undefined,
             });
           });
         }
@@ -205,7 +226,21 @@ export async function fetchRegisteredUsersForLinking(): Promise<{
       }
     }
 
-    // 3. Also enrich with any user_ids already visible in tenant_members
+    // Ensure current authenticated user is represented if includeCurrentUser is requested
+    if (includeCurrentUser && currentUser?.id) {
+      const prev = usersMap.get(currentUser.id) || {};
+      usersMap.set(currentUser.id, {
+        fullName:
+          prev.fullName ||
+          currentUser.user_metadata?.full_name ||
+          currentUser.user_metadata?.display_name ||
+          currentUser.email?.split('@')[0],
+        email: prev.email || currentUser.email,
+        createdAt: prev.createdAt || currentUser.created_at,
+      });
+    }
+
+    // 3. Enrich with memberships from tenant_members
     const userIds = Array.from(usersMap.keys());
     const membershipsByUserId = new Map<string, UserProjectMembershipSummary[]>();
 
@@ -245,7 +280,7 @@ export async function fetchRegisteredUsersForLinking(): Promise<{
     }
 
     const options: RegisteredUserOption[] = Array.from(usersMap.entries())
-      .filter(([uid]) => uid !== currentUser?.id)
+      .filter(([uid]) => includeCurrentUser || uid !== currentUser?.id)
       .map(([uid, info]) => {
         const cleanEmail = info.email?.trim();
         const fallbackName = cleanEmail
@@ -255,10 +290,15 @@ export async function fetchRegisteredUsersForLinking(): Promise<{
           userId: uid,
           fullName: info.fullName?.trim() || fallbackName,
           email: cleanEmail,
+          isCurrentUser: uid === currentUser?.id,
+          createdAt: info.createdAt,
           memberships: membershipsByUserId.get(uid) || [],
         };
       })
-      .sort((a, b) => a.fullName.localeCompare(b.fullName, 'ar'));
+      .sort((a, b) => {
+        if (a.isCurrentUser !== b.isCurrentUser) return a.isCurrentUser ? 1 : -1;
+        return a.fullName.localeCompare(b.fullName, 'ar');
+      });
 
     return {
       data: options,

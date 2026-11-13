@@ -11,7 +11,6 @@ import {
   Trash2,
   UserCheck,
   UserPlus,
-  UserX,
   Users,
   X,
 } from 'lucide-react';
@@ -27,7 +26,19 @@ import {
   removeStaffMemberFromSupabase,
   StaffMemberRecord,
   toggleStaffActiveStatusInSupabase,
+  UserProjectMembershipSummary,
 } from '../lib/staffService';
+
+interface UnifiedAccountRow {
+  userId: string;
+  fullName: string;
+  email?: string;
+  isCurrentUser: boolean;
+  createdAt?: string;
+  otherMemberships: UserProjectMembershipSummary[];
+  /** Membership record inside the currently active project, or null if not yet linked */
+  projectMember: StaffMemberRecord | null;
+}
 
 export const StaffManagementPage: React.FC = () => {
   const {
@@ -45,27 +56,29 @@ export const StaffManagementPage: React.FC = () => {
   const activeProjectId = (currentTenantId || activeTenant?.tenantId || '').trim();
 
   const [staffList, setStaffList] = useState<StaffMemberRecord[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUserOption[]>([]);
+  const [ownerTenants, setOwnerTenants] = useState<OwnerTenantOption[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [roleFilter, setRoleFilter] = useState<'all' | 'owner' | 'cashier'>('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'unlinked' | 'cashier' | 'owner'>('all');
 
-  // Registered Users Dropdown & Multi-Tenant Link Modal State
+  // Modal state for advanced role/project linking
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUserOption[]>([]);
-  const [ownerTenants, setOwnerTenants] = useState<OwnerTenantOption[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
   const [userDropdownSearch, setUserDropdownSearch] = useState<string>('');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [targetTenantId, setTargetTenantId] = useState<string>(activeProjectId);
   const [selectedRole, setSelectedRole] = useState<'cashier' | 'owner'>('cashier');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [actionFeedback, setActionFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
+  const [actionFeedback, setActionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
-  const loadStaff = useCallback(
+  const loadStaffAndProfiles = useCallback(
     async (silent = false) => {
       if (!activeProjectId || !isOwnerUser) {
         setIsLoading(false);
@@ -79,13 +92,18 @@ export const StaffManagementPage: React.FC = () => {
       }
       setFetchError(null);
 
-      const res = await fetchProjectStaffFromSupabase(activeProjectId);
-      if (res.error) {
-        setFetchError(res.error);
+      const [staffRes, profilesRes, tenantsRes] = await Promise.all([
+        fetchProjectStaffFromSupabase(activeProjectId),
+        fetchRegisteredUsersForLinking({ includeCurrentUser: true }),
+        fetchOwnerManagedTenants(),
+      ]);
+
+      if (staffRes.error && profilesRes.error && profilesRes.data.length === 0) {
+        setFetchError(staffRes.error || profilesRes.error);
       } else {
         setStaffList((prev) => {
           const prevByUserId = new Map<string, StaffMemberRecord>(prev.map((m) => [m.userId, m]));
-          return res.data.map((member) => {
+          return staffRes.data.map((member) => {
             const cached = prevByUserId.get(member.userId);
             return {
               ...member,
@@ -97,6 +115,8 @@ export const StaffManagementPage: React.FC = () => {
             };
           });
         });
+        setRegisteredUsers(profilesRes.data);
+        setOwnerTenants(tenantsRes);
       }
 
       setIsLoading(false);
@@ -105,62 +125,114 @@ export const StaffManagementPage: React.FC = () => {
     [activeProjectId, isOwnerUser]
   );
 
-  const loadDropdownData = useCallback(async () => {
-    setIsLoadingUsers(true);
-    const [usersRes, tenantsRes] = await Promise.all([
-      fetchRegisteredUsersForLinking(),
-      fetchOwnerManagedTenants(),
-    ]);
-    setRegisteredUsers(usersRes.data);
-    setOwnerTenants(tenantsRes);
-    setIsLoadingUsers(false);
-  }, []);
-
   useEffect(() => {
-    loadStaff(false);
-  }, [loadStaff]);
+    loadStaffAndProfiles(false);
+  }, [loadStaffAndProfiles]);
 
   useEffect(() => {
     setTargetTenantId(activeProjectId);
   }, [activeProjectId]);
 
+  // Merge all registered profiles with the active project's tenant_members
+  const unifiedAccounts = useMemo<UnifiedAccountRow[]>(() => {
+    const memberByUserId = new Map<string, StaffMemberRecord>();
+    staffList.forEach((m) => {
+      memberByUserId.set(m.userId, m);
+    });
+
+    const rowsMap = new Map<string, UnifiedAccountRow>();
+
+    // 1. Add all accounts from public.profiles
+    registeredUsers.forEach((profileUser) => {
+      const linkedMember = memberByUserId.get(profileUser.userId) || null;
+      const otherMemberships = profileUser.memberships.filter(
+        (m) => m.tenantId !== activeProjectId
+      );
+      rowsMap.set(profileUser.userId, {
+        userId: profileUser.userId,
+        fullName:
+          profileUser.fullName ||
+          linkedMember?.fullName ||
+          profileUser.email?.split('@')[0] ||
+          `مستخدم (${profileUser.userId.slice(0, 6)})`,
+        email: profileUser.email || linkedMember?.email,
+        isCurrentUser: Boolean(profileUser.isCurrentUser || profileUser.userId === user?.id),
+        createdAt: linkedMember?.createdAt || profileUser.createdAt,
+        otherMemberships,
+        projectMember: linkedMember,
+      });
+    });
+
+    // 2. Ensure any tenant_members row not returned by profiles still appears
+    staffList.forEach((member) => {
+      if (!rowsMap.has(member.userId)) {
+        rowsMap.set(member.userId, {
+          userId: member.userId,
+          fullName: member.fullName,
+          email: member.email,
+          isCurrentUser: member.userId === user?.id,
+          createdAt: member.createdAt,
+          otherMemberships: [],
+          projectMember: member,
+        });
+      }
+    });
+
+    return Array.from(rowsMap.values()).sort((a, b) => {
+      // Order: Unlinked ready-to-add first -> Cashiers -> Owners
+      const rank = (row: UnifiedAccountRow) => {
+        if (!row.projectMember) return 0;
+        if (row.projectMember.role !== 'owner') return 1;
+        return 2;
+      };
+      const rankDiff = rank(a) - rank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return a.fullName.localeCompare(b.fullName, 'ar');
+    });
+  }, [registeredUsers, staffList, activeProjectId, user?.id]);
+
   const stats = useMemo(() => {
-    const total = staffList.length;
+    const totalProfiles = unifiedAccounts.length;
     const cashiers = staffList.filter((m) => m.role === 'cashier');
     const activeCashiers = cashiers.filter((m) => m.isActive).length;
-    const inactiveMembers = staffList.filter((m) => !m.isActive).length;
-    return { total, cashiersCount: cashiers.length, activeCashiers, inactiveMembers };
-  }, [staffList]);
+    const unlinkedCount = unifiedAccounts.filter((u) => !u.projectMember && !u.isCurrentUser).length;
+    return { totalProfiles, cashiersCount: cashiers.length, activeCashiers, unlinkedCount };
+  }, [unifiedAccounts, staffList]);
 
-  const filteredStaff = useMemo(() => {
+  const filteredAccounts = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return staffList.filter((m) => {
-      if (roleFilter === 'owner' && m.role !== 'owner') return false;
-      if (roleFilter === 'cashier' && m.role !== 'cashier') return false;
+    return unifiedAccounts.filter((row) => {
+      if (roleFilter === 'unlinked' && row.projectMember !== null) return false;
+      if (roleFilter === 'cashier' && row.projectMember?.role !== 'cashier') return false;
+      if (roleFilter === 'owner' && row.projectMember?.role !== 'owner') return false;
       if (!q) return true;
       return (
-        m.fullName.toLowerCase().includes(q) ||
-        (m.email && m.email.toLowerCase().includes(q)) ||
-        m.userId.toLowerCase().includes(q) ||
-        m.role.toLowerCase().includes(q)
+        row.fullName.toLowerCase().includes(q) ||
+        (row.email && row.email.toLowerCase().includes(q)) ||
+        row.userId.toLowerCase().includes(q)
       );
     });
-  }, [staffList, searchQuery, roleFilter]);
+  }, [unifiedAccounts, searchQuery, roleFilter]);
+
+  const linkableDropdownUsers = useMemo(
+    () => registeredUsers.filter((u) => !u.isCurrentUser && u.userId !== user?.id),
+    [registeredUsers, user?.id]
+  );
 
   const filteredDropdownUsers = useMemo(() => {
     const q = userDropdownSearch.trim().toLowerCase();
-    if (!q) return registeredUsers;
-    return registeredUsers.filter(
+    if (!q) return linkableDropdownUsers;
+    return linkableDropdownUsers.filter(
       (u) =>
         u.fullName.toLowerCase().includes(q) ||
         (u.email && u.email.toLowerCase().includes(q)) ||
         u.memberships.some((m) => m.tenantName.toLowerCase().includes(q))
     );
-  }, [registeredUsers, userDropdownSearch]);
+  }, [linkableDropdownUsers, userDropdownSearch]);
 
   const selectedUserRecord = useMemo(
-    () => registeredUsers.find((u) => u.userId === selectedUserId) || null,
-    [registeredUsers, selectedUserId]
+    () => linkableDropdownUsers.find((u) => u.userId === selectedUserId) || null,
+    [linkableDropdownUsers, selectedUserId]
   );
 
   // Strict Owner-only & Active-Project guard inside the page itself
@@ -214,23 +286,56 @@ export const StaffManagementPage: React.FC = () => {
     );
   }
 
-  const handleOpenAddModal = () => {
-    if (!activeProjectId) {
+  /**
+   * Direct one-click link button right inside the main accounts table:
+   * Immediately links any registered profile to the active project as 'cashier' in tenant_members.
+   */
+  const handleDirectLinkAsCashier = async (account: UnifiedAccountRow) => {
+    if (!activeProjectId || account.isCurrentUser) return;
+    setBusyKey(account.userId);
+    setActionFeedback(null);
+
+    const res = await linkStaffToTenantInSupabase({
+      userId: account.userId,
+      email: account.email,
+      role: 'cashier',
+      tenantId: activeProjectId,
+    });
+
+    setBusyKey(null);
+
+    if (!res.success || !res.member) {
       setActionFeedback({
         type: 'error',
-        message: isRtl
-          ? 'يرجى اختيار المشروع النشط أولاً قبل ربط موظف جديد.'
-          : 'Please select an active project first before linking a staff member.',
+        message: res.error || (isRtl ? 'تعذر ربط الحساب بالمشروع.' : 'Failed to link account.'),
       });
       return;
     }
+
+    setStaffList((prev) => {
+      const withoutDup = prev.filter(
+        (m) => m.id !== res.member!.id && m.userId !== res.member!.userId
+      );
+      return [res.member!, ...withoutDup];
+    });
+
+    setActionFeedback({
+      type: 'success',
+      message: isRtl
+        ? `تم ربط (${account.fullName}) بمشروع "${activeTenant.name}" بدور كاشير (cashier) وتفعيله فوراً.`
+        : `Linked and activated ${account.fullName} as cashier in "${activeTenant.name}".`,
+    });
+    void loadStaffAndProfiles(true);
+  };
+
+  const handleOpenAddModal = (preselectUserId = '') => {
     setFormError(null);
     setUserDropdownSearch('');
-    setSelectedUserId('');
+    setSelectedUserId(preselectUserId);
     setTargetTenantId(activeProjectId);
     setSelectedRole('cashier');
     setIsAddModalOpen(true);
-    void loadDropdownData();
+    void loadStaffAndProfiles(true);
   };
 
   const handleLinkSelectedUser = async (e: React.FormEvent) => {
@@ -294,18 +399,18 @@ export const StaffManagementPage: React.FC = () => {
         ? `تم ربط وتفعيل (${res.member.fullName}) في مشروع "${linkedTenantName}" بدور ${selectedRole} بنجاح!`
         : `Linked and activated ${res.member.fullName} in "${linkedTenantName}" as ${selectedRole}!`,
     });
-    loadStaff(true);
+    void loadStaffAndProfiles(true);
   };
 
   const handleToggleActive = async (member: StaffMemberRecord) => {
     if (member.role === 'owner' || member.userId === user?.id || !activeProjectId) return;
-    setBusyMemberId(member.id);
+    setBusyKey(member.userId);
     setActionFeedback(null);
 
     const nextState = !member.isActive;
     const res = await toggleStaffActiveStatusInSupabase(member.id, nextState, activeProjectId);
 
-    setBusyMemberId(null);
+    setBusyKey(null);
 
     if (!res.success) {
       setActionFeedback({
@@ -337,11 +442,11 @@ export const StaffManagementPage: React.FC = () => {
       : `Remove ${member.fullName} from "${activeTenant.name}"?`;
     if (!window.confirm(confirmText)) return;
 
-    setBusyMemberId(member.id);
+    setBusyKey(member.userId);
     setActionFeedback(null);
 
     const res = await removeStaffMemberFromSupabase(member.id, activeProjectId);
-    setBusyMemberId(null);
+    setBusyKey(null);
 
     if (!res.success) {
       setActionFeedback({
@@ -360,7 +465,8 @@ export const StaffManagementPage: React.FC = () => {
     });
   };
 
-  const formatDate = (iso: string) => {
+  const formatDate = (iso?: string) => {
+    if (!iso) return '—';
     try {
       return new Intl.DateTimeFormat(isRtl ? 'ar-EG' : 'en-US', {
         year: 'numeric',
@@ -368,7 +474,7 @@ export const StaffManagementPage: React.FC = () => {
         day: 'numeric',
       }).format(new Date(iso));
     } catch {
-      return '';
+      return '—';
     }
   };
 
@@ -395,22 +501,22 @@ export const StaffManagementPage: React.FC = () => {
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-            {isRtl ? 'إدارة الموظفين وحسابات الكاشير' : 'Staff & Cashier Access Management'}
+            {isRtl ? 'إدارة الموظفين والحسابات المسجلة' : 'Staff & Registered Accounts'}
           </h1>
           <p className="text-xs text-slate-500 max-w-2xl leading-relaxed">
             {isRtl
-              ? 'اختر الموظف المسجل مسبقاً من القائمة المنسدلة مباشرةً وحدد المشروع والدور الوظيفي (cashier) لربطه وتفعيله دون أي أخطاء إملائية.'
-              : 'Pick a pre-registered user directly from the dropdown, confirm the target project and role, and link them cleanly without typos.'}
+              ? 'يتم جلب جميع الحسابات المسجلة من جدول profiles مباشرة لتتمكن من ربط أي حساب بمشروعك الحالي بدور كاشير (cashier) بضغطة زر واحدة.'
+              : 'Displays all registered accounts from profiles directly so you can link any user to your active project as a cashier with one click.'}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={() => loadStaff(true)}
+            onClick={() => loadStaffAndProfiles(true)}
             disabled={isRefreshing}
             className="px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-60"
-            title={isRtl ? 'تحديث القائمة' : 'Refresh Staff List'}
+            title={isRtl ? 'تحديث القائمة' : 'Refresh Accounts'}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isRtl ? 'تحديث' : 'Refresh'}</span>
@@ -418,28 +524,30 @@ export const StaffManagementPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={handleOpenAddModal}
+            onClick={() => handleOpenAddModal()}
             className="px-4 py-2.5 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 whitespace-nowrap"
             style={{ backgroundColor: themeConfig.primary }}
           >
             <Link2 className="w-4 h-4" />
-            <span>{isRtl ? '+ إضافة / ربط موظف' : '+ Link Staff Member'}</span>
+            <span>{isRtl ? '+ ربط بدور أو مشروع محدد' : '+ Advanced Link'}</span>
           </button>
         </div>
       </div>
 
-      {/* Onboarding Instructions Banner */}
-      <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200/80 text-indigo-950 text-xs flex items-start gap-3">
-        <UserPlus className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-        <div className="leading-relaxed">
-          <span className="font-bold">
-            {isRtl ? 'آلية الاختيار والربط السريع: ' : 'Zero-Typo Staff Linking: '}
-          </span>
-          {isRtl
-            ? 'اختر الموظف من قائمة المستخدمين المسجلين، واستعرض مشاريعه وأدواره الحالية، ثم اضغط "ربط وتفعيل" لإضافته للمشروع بدور كاشير أو مالك.'
-            : 'Choose a registered user from the dropdown, inspect their existing projects/roles, and click "Link & Activate" for your active project.'}
+      {/* Helpful notice if RLS restricts reading other profiles */}
+      {!isLoading && linkableDropdownUsers.length === 0 && (
+        <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 text-xs flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <span className="font-bold">
+              {isRtl ? 'ملاحظة صلاحيات القراءة (RLS): ' : 'Database Visibility Notice: '}
+            </span>
+            {isRtl
+              ? 'لم يتم إرجاع حسابات لمستخدمين آخرين من جدول profiles حتى الآن. إذا كانت هناك حسابات مسجلة بالفعل في Supabase، تأكد من السماح للمستخدمين المسجلين بقراءة جدول profiles (سياسة SELECT لـ authenticated) أو تفعيل دالة list_registered_users.'
+              : 'No other user accounts were returned from profiles yet. Ensure authenticated users have SELECT policy on public.profiles (or list_registered_users RPC).'}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Feedback Banner */}
       {actionFeedback && (
@@ -473,9 +581,9 @@ export const StaffManagementPage: React.FC = () => {
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-[11px] font-bold text-slate-500">
-              {isRtl ? 'إجمالي أعضاء المشروع' : 'Total Project Members'}
+              {isRtl ? 'إجمالي الحسابات المسجلة' : 'Registered Accounts'}
             </div>
-            <div className="text-2xl font-extrabold text-slate-900 mt-1">{stats.total}</div>
+            <div className="text-2xl font-extrabold text-slate-900 mt-1">{stats.totalProfiles}</div>
           </div>
           <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
             <Users className="w-5 h-5" />
@@ -485,7 +593,7 @@ export const StaffManagementPage: React.FC = () => {
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-[11px] font-bold text-slate-500">
-              {isRtl ? 'موظفو الكاشير النشطون' : 'Active Cashiers'}
+              {isRtl ? 'موظفو الكاشير بالمشروع' : 'Project Cashiers'}
             </div>
             <div className="text-2xl font-extrabold text-emerald-700 mt-1">
               {stats.activeCashiers}
@@ -500,45 +608,40 @@ export const StaffManagementPage: React.FC = () => {
         <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-[11px] font-bold text-slate-500">
-              {isRtl ? 'حسابات معطّلة' : 'Inactive Accounts'}
+              {isRtl ? 'حسابات متاحة للربط' : 'Available to Link'}
             </div>
-            <div className="text-2xl font-extrabold text-amber-600 mt-1">{stats.inactiveMembers}</div>
+            <div className="text-2xl font-extrabold text-teal-700 mt-1">{stats.unlinkedCount}</div>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-            <UserX className="w-5 h-5" />
+          <div className="w-11 h-11 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+            <UserPlus className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Filters & Search Toolbar */}
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit">
-          {(['all', 'cashier', 'owner'] as const).map((r) => {
-            const label =
-              r === 'all'
-                ? isRtl
-                  ? 'الكل'
-                  : 'All'
-                : r === 'cashier'
-                ? isRtl
-                  ? 'الكاشير'
-                  : 'Cashiers'
-                : isRtl
-                ? 'المالك'
-                : 'Owner';
-            return (
-              <button
-                key={r}
-                type="button"
-                onClick={() => setRoleFilter(r)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  roleFilter === r ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl w-fit">
+          {(
+            [
+              { key: 'all', label: isRtl ? `الكل (${unifiedAccounts.length})` : `All (${unifiedAccounts.length})` },
+              { key: 'unlinked', label: isRtl ? `جاهز للربط (${stats.unlinkedCount})` : `Unlinked (${stats.unlinkedCount})` },
+              { key: 'cashier', label: isRtl ? `الكاشير (${stats.cashiersCount})` : `Cashiers (${stats.cashiersCount})` },
+              { key: 'owner', label: isRtl ? 'المالك' : 'Owner' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setRoleFilter(tab.key)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                roleFilter === tab.key
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         <div className="relative w-full sm:w-72">
@@ -559,7 +662,7 @@ export const StaffManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Staff List Table */}
+      {/* Unified Registered Accounts & Staff Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         {fetchError ? (
           <div className="p-8 text-center flex flex-col items-center gap-3">
@@ -567,7 +670,7 @@ export const StaffManagementPage: React.FC = () => {
             <p className="text-xs font-bold text-rose-700">{fetchError}</p>
             <button
               type="button"
-              onClick={() => loadStaff(false)}
+              onClick={() => loadStaffAndProfiles(false)}
               className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-bold cursor-pointer"
             >
               {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -576,46 +679,50 @@ export const StaffManagementPage: React.FC = () => {
         ) : isLoading ? (
           <div className="p-10 flex flex-col items-center justify-center gap-3 text-slate-500 text-xs font-semibold">
             <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
-            <span>{isRtl ? 'جاري تحميل قائمة موظفي المشروع...' : 'Loading project staff...'}</span>
+            <span>
+              {isRtl
+                ? 'جاري جلب الحسابات المسجلة من قاعدة البيانات...'
+                : 'Loading registered accounts from database...'}
+            </span>
           </div>
-        ) : filteredStaff.length === 0 ? (
+        ) : filteredAccounts.length === 0 ? (
           <div className="p-12 text-center flex flex-col items-center gap-3 text-slate-400">
             <Users className="w-10 h-10 text-slate-300" />
             <div className="text-sm font-bold text-slate-700">
-              {isRtl ? 'لا يوجد موظفون مطابقون حالياً' : 'No matching staff members found'}
+              {isRtl ? 'لا توجد حسابات مطابقة للتصفية الحالية' : 'No matching accounts found'}
             </div>
-            <p className="text-xs text-slate-500 max-w-sm">
-              {isRtl
-                ? 'ابدأ باختيار أول موظف من قائمة المستخدمين المسجلين وربطه بمشروعك.'
-                : 'Select a pre-registered user from the dropdown to link them to your project.'}
-            </p>
-            <button
-              type="button"
-              onClick={handleOpenAddModal}
-              className="mt-1 px-4 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              style={{ backgroundColor: themeConfig.primary }}
-            >
-              <Link2 className="w-3.5 h-3.5" />
-              <span>{isRtl ? 'اختيار وربط موظف' : 'Select & Link Staff'}</span>
-            </button>
+            {roleFilter !== 'all' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRoleFilter('all');
+                  setSearchQuery('');
+                }}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
+              >
+                {isRtl ? 'عرض كافة الحسابات' : 'Show All Accounts'}
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-start border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200/80 text-slate-500 font-bold uppercase text-[11px]">
-                  <th className="py-3 px-4 text-start">{isRtl ? 'الموظف' : 'Member'}</th>
-                  <th className="py-3 px-4 text-start">{isRtl ? 'الدور والصلاحية' : 'Role & Permissions'}</th>
-                  <th className="py-3 px-4 text-start">{isRtl ? 'الحالة' : 'Status'}</th>
-                  <th className="py-3 px-4 text-start">{isRtl ? 'تاريخ الانضمام' : 'Joined'}</th>
-                  <th className="py-3 px-4 text-center">{isRtl ? 'إجراءات' : 'Actions'}</th>
+                  <th className="py-3 px-4 text-start">{isRtl ? 'المستخدم / الحساب' : 'Account'}</th>
+                  <th className="py-3 px-4 text-start">{isRtl ? 'الدور في هذا المشروع' : 'Project Role'}</th>
+                  <th className="py-3 px-4 text-start">{isRtl ? 'الحالة والمشاريع' : 'Status & Projects'}</th>
+                  <th className="py-3 px-4 text-start">{isRtl ? 'التاريخ' : 'Date'}</th>
+                  <th className="py-3 px-4 text-center">{isRtl ? 'إجراءات الربط' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredStaff.map((member) => {
-                  const isOwnerRow = member.role === 'owner';
-                  const isSelf = member.userId === user?.id;
-                  const initials = member.fullName
+                {filteredAccounts.map((account) => {
+                  const member = account.projectMember;
+                  const isOwnerRow = member?.role === 'owner';
+                  const isSelf = account.isCurrentUser;
+                  const isBusy = busyKey === account.userId;
+                  const initials = account.fullName
                     .split(' ')
                     .filter(Boolean)
                     .map((n) => n[0])
@@ -624,21 +731,23 @@ export const StaffManagementPage: React.FC = () => {
                     .toUpperCase();
 
                   return (
-                    <tr key={member.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={account.userId} className="hover:bg-slate-50/70 transition-colors">
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <div
                             className={`w-9 h-9 rounded-xl font-extrabold text-xs flex items-center justify-center shrink-0 ${
                               isOwnerRow
                                 ? 'bg-indigo-100 text-indigo-700'
-                                : 'bg-teal-100 text-teal-800'
+                                : member
+                                ? 'bg-teal-100 text-teal-800'
+                                : 'bg-slate-100 text-slate-600'
                             }`}
                           >
-                            {initials || 'ST'}
+                            {initials || 'US'}
                           </div>
                           <div className="flex flex-col">
                             <div className="font-bold text-slate-900 flex items-center gap-1.5">
-                              <span>{member.fullName}</span>
+                              <span>{account.fullName}</span>
                               {isSelf && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
                                   {isRtl ? 'أنت' : 'You'}
@@ -646,21 +755,30 @@ export const StaffManagementPage: React.FC = () => {
                               )}
                             </div>
                             <span className="text-[11px] text-slate-500 font-mono">
-                              {member.email || `ID: ${member.userId.slice(0, 8)}...`}
+                              {account.email || `ID: ${account.userId.slice(0, 8)}...`}
                             </span>
                           </div>
                         </div>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        {isOwnerRow ? (
+                        {!member ? (
+                          <div className="inline-flex flex-col gap-0.5">
+                            <span className="inline-flex items-center gap-1 w-fit px-2.5 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[11px]">
+                              <span>{isRtl ? 'غير مرتبط بالمشروع' : 'Not Linked'}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {isRtl ? 'حساب مسجل في النظام وجاهز للربط' : 'Registered account ready to link'}
+                            </span>
+                          </div>
+                        ) : isOwnerRow ? (
                           <div className="inline-flex flex-col gap-0.5">
                             <span className="inline-flex items-center gap-1 w-fit px-2.5 py-0.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 font-bold text-[11px]">
                               <ShieldCheck className="w-3 h-3" />
                               <span>{isRtl ? 'مالك المشروع (Owner)' : 'Owner'}</span>
                             </span>
                             <span className="text-[10px] text-slate-400">
-                              {isRtl ? 'صلاحية كاملة على المشروع والموظفين' : 'Full workspace & staff access'}
+                              {isRtl ? 'صلاحية كاملة على المشروع والموظفين' : 'Full workspace access'}
                             </span>
                           </div>
                         ) : (
@@ -669,35 +787,57 @@ export const StaffManagementPage: React.FC = () => {
                               <span>{isRtl ? 'كاشير (Cashier)' : 'Cashier'}</span>
                             </span>
                             <span className="text-[10px] text-slate-400">
-                              {isRtl
-                                ? 'شاشة الكاشير والبيع وتحديث المخزون فقط'
-                                : 'POS & project stock deduction only'}
+                              {isRtl ? 'شاشة الكاشير والبيع والمخزون فقط' : 'POS & project stock only'}
                             </span>
                           </div>
                         )}
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold text-[11px] border ${
-                            member.isActive
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                              : 'bg-rose-50 border-rose-200 text-rose-700'
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              member.isActive ? 'bg-emerald-500' : 'bg-rose-500'
-                            }`}
-                          />
-                          <span>
-                            {member.isActive ? (isRtl ? 'نشط' : 'Active') : isRtl ? 'معطّل' : 'Inactive'}
-                          </span>
-                        </span>
+                        <div className="flex flex-col gap-1.5">
+                          {member ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 w-fit px-2.5 py-0.5 rounded-lg font-bold text-[11px] border ${
+                                member.isActive
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                  : 'bg-rose-50 border-rose-200 text-rose-700'
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  member.isActive ? 'bg-emerald-500' : 'bg-rose-500'
+                                }`}
+                              />
+                              <span>
+                                {member.isActive ? (isRtl ? 'نشط' : 'Active') : isRtl ? 'معطّل' : 'Inactive'}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 w-fit px-2.5 py-0.5 rounded-lg font-bold text-[11px] border bg-amber-50 border-amber-200 text-amber-800">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              <span>{isRtl ? 'بانتظار الربط' : 'Pending Link'}</span>
+                            </span>
+                          )}
+
+                          {account.otherMemberships.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {account.otherMemberships.map((om) => (
+                                <span
+                                  key={`${om.tenantId}-${om.role}`}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px] font-medium"
+                                >
+                                  <Building2 className="w-2.5 h-2.5" />
+                                  <span>{om.tenantName}</span>
+                                  <span className="font-mono text-slate-500">({om.role})</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-3.5 px-4 text-slate-500 font-mono text-[11px]">
-                        {formatDate(member.createdAt)}
+                        {formatDate(account.createdAt)}
                       </td>
 
                       <td className="py-3.5 px-4 text-center">
@@ -705,11 +845,37 @@ export const StaffManagementPage: React.FC = () => {
                           <span className="text-[11px] text-slate-400 font-medium">
                             {isRtl ? 'محمي' : 'Protected'}
                           </span>
+                        ) : !member ? (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleDirectLinkAsCashier(account)}
+                              className="px-3 py-1.5 rounded-xl text-white text-[11px] font-bold shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer disabled:opacity-50"
+                              style={{ backgroundColor: themeConfig.primary }}
+                            >
+                              {isBusy ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <UserPlus className="w-3.5 h-3.5" />
+                              )}
+                              <span>{isRtl ? 'ربط كـ كاشير' : 'Link as Cashier'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleOpenAddModal(account.userId)}
+                              className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+                              title={isRtl ? 'خيارات ربط متقدمة' : 'Advanced link options'}
+                            >
+                              <Link2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         ) : (
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               type="button"
-                              disabled={busyMemberId === member.id}
+                              disabled={isBusy}
                               onClick={() => handleToggleActive(member)}
                               className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50 ${
                                 member.isActive
@@ -727,7 +893,7 @@ export const StaffManagementPage: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              disabled={busyMemberId === member.id}
+                              disabled={isBusy}
                               onClick={() => handleRemoveMember(member)}
                               className="p-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer disabled:opacity-50"
                               title={isRtl ? 'إزالة من المشروع' : 'Remove from project'}
@@ -746,7 +912,7 @@ export const StaffManagementPage: React.FC = () => {
         )}
       </div>
 
-      {/* LINK REGISTERED USER DROPDOWN MODAL */}
+      {/* LINK REGISTERED USER DROPDOWN MODAL (for selecting target project or role) */}
       {isAddModalOpen && (
         <div className="fixed inset-0 bg-slate-900/45 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full p-6 flex flex-col gap-5 max-h-[90vh] overflow-y-auto">
@@ -764,7 +930,7 @@ export const StaffManagementPage: React.FC = () => {
                   </h3>
                   <p className="text-[11px] text-slate-500">
                     {isRtl
-                      ? `معرف المشروع النشط: ${activeTenant.name}`
+                      ? `المشروع النشط: ${activeTenant.name}`
                       : `Active Tenant: ${activeTenant.name}`}
                   </p>
                 </div>
@@ -786,7 +952,6 @@ export const StaffManagementPage: React.FC = () => {
             )}
 
             <form onSubmit={handleLinkSelectedUser} className="flex flex-col gap-4 text-xs">
-              {/* Step 1: Registered User Dropdown (with Search Filter) */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-700">
@@ -794,16 +959,15 @@ export const StaffManagementPage: React.FC = () => {
                   </label>
                   <button
                     type="button"
-                    onClick={() => loadDropdownData()}
-                    disabled={isLoadingUsers}
+                    onClick={() => loadStaffAndProfiles(true)}
+                    disabled={isRefreshing}
                     className="text-[11px] font-semibold text-indigo-600 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
-                    <RefreshCw className={`w-3 h-3 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
                     <span>{isRtl ? 'تحديث المستخدمين' : 'Reload Users'}</span>
                   </button>
                 </div>
 
-                {/* Quick Filter inside Dropdown */}
                 <div className="relative">
                   <Search
                     className={`w-3.5 h-3.5 text-slate-400 absolute top-1/2 -translate-y-1/2 ${
@@ -821,20 +985,14 @@ export const StaffManagementPage: React.FC = () => {
                   />
                 </div>
 
-                {/* Primary Registered Users Dropdown */}
                 <select
                   required
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
-                  disabled={isLoadingUsers}
-                  className="w-full h-11 px-3 rounded-xl bg-white border-2 border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-60"
+                  className="w-full h-11 px-3 rounded-xl bg-white border-2 border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
                 >
                   <option value="">
-                    {isLoadingUsers
-                      ? isRtl
-                        ? 'جاري تحميل قائمة المستخدمين المسجلين...'
-                        : 'Loading registered users...'
-                      : filteredDropdownUsers.length === 0
+                    {filteredDropdownUsers.length === 0
                       ? isRtl
                         ? 'لا يوجد مستخدمون مسجلون متاحون'
                         : 'No registered users available'
@@ -860,7 +1018,6 @@ export const StaffManagementPage: React.FC = () => {
                   })}
                 </select>
 
-                {/* Selected User's Current Multi-Tenant Projects & Roles */}
                 {selectedUserRecord && (
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/90 flex flex-col gap-2">
                     <div className="flex items-center justify-between">
@@ -904,7 +1061,6 @@ export const StaffManagementPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Step 2: Project & Role Selection */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1.5">
                   <label className="font-bold text-slate-700">
