@@ -56,7 +56,7 @@ import {
   DEFAULT_PREPARING_STATUS,
   DEFAULT_ORDER_STATUS,
 } from '../lib/ordersService';
-import { isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { TenantWithMembership, setCurrentActiveTenantId } from '../lib/tenantsService';
 import { useAuth } from './AuthContext';
 
@@ -303,9 +303,13 @@ interface AppContextType {
   updateBuyerPersona: (data: Partial<BuyerPersona>) => void;
   clearMarketingData: () => void;
 
-  // Multi-Tenant Workspace State
+  // Multi-Tenant Workspace & Role-Based Access Control (RBAC) State
   activeTenant: TenantWithMembership | null;
   currentTenantId: string | null;
+  userRole: string | null;
+  isRoleLoading: boolean;
+  accessDeniedNotice: string | null;
+  dismissAccessDeniedNotice: () => void;
   availableProjectsCount: number;
   setAvailableProjectsCount: (count: number) => void;
   isConsultantUser: boolean;
@@ -323,44 +327,262 @@ interface AppContextType {
   refreshInventoryFromSupabase: (overrideTenantId?: string) => Promise<void>;
 }
 
+const RESTRICTED_ROUTE_TOKENS = [
+  'operations',
+  'finance',
+  'expenses',
+  'profits',
+  'profit',
+  'reports',
+  'hr',
+  'marketing',
+  'staff',
+  'settings',
+  'employees',
+  'inventory',
+  'analytics',
+];
+
+function detectRestrictedUrlRoute(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const params = new URLSearchParams(window.location.search);
+  const queryPage = (params.get('page') || params.get('tab') || params.get('route') || '').toLowerCase();
+
+  return RESTRICTED_ROUTE_TOKENS.some(
+    (token) =>
+      path.includes(`/${token}`) ||
+      hash.includes(token) ||
+      queryPage === token
+  );
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>('home');
   const [language, setLanguage] = useState<Language>('ar');
   const [theme, setTheme] = useState<ColorTheme>('indigo');
   const [customPalette, setCustomPalette] = useState<CustomPalette>(DEFAULT_CUSTOM_PALETTE);
   const [businessName, setBusinessName] = useState<string>('Profness Enterprise');
   const [activeTenant, setActiveTenant] = useState<TenantWithMembership | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [isRoleLoading, setIsRoleLoading] = useState<boolean>(false);
+  const [accessDeniedNotice, setAccessDeniedNotice] = useState<string | null>(null);
   const [availableProjectsCount, setAvailableProjectsCount] = useState<number>(0);
   const [isConsultantUser, setIsConsultantUser] = useState<boolean>(false);
   const activeTenantIdRef = useRef<string | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
 
-  const activeRole = String(activeTenant?.role || '').trim().toLowerCase();
+  const normalizedRole = String(userRole || activeTenant?.role || '').trim().toLowerCase();
   const currentTenantId = activeTenant?.tenantId?.trim() || null;
-  const isOwnerUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'owner');
-  const isCashierUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'cashier');
+
+  const isOwnerUser = Boolean(
+    activeTenant &&
+      !isConsultantUser &&
+      (normalizedRole === 'owner' || normalizedRole === 'admin')
+  );
+
+  const isPrivilegedWorkspaceUser = Boolean(
+    activeTenant &&
+      (isConsultantUser ||
+        normalizedRole === 'owner' ||
+        normalizedRole === 'admin' ||
+        normalizedRole === 'consultant' ||
+        normalizedRole === 'advisor')
+  );
+
+  // Fail-closed: any active workspace user who is not verified as Owner/Admin/Consultant is restricted to POS Cashier
+  const isCashierUser = Boolean(activeTenant && !isPrivilegedWorkspaceUser);
+
+  const triggerAccessDeniedAlert = (customMessage?: string) => {
+    const msg =
+      customMessage ||
+      (language === 'ar'
+        ? 'تنبيه صلاحيات: غير مصرح لحساب الكاشير بالوصول إلى الصفحات أو الإعدادات الإدارية. تم توجيهك مباشرة إلى شاشة كاشير المبيعات (POS).'
+        : 'Access Denied: Cashier accounts are restricted to the POS Cashier screen only.');
+    setAccessDeniedNotice(msg);
+  };
+
+  const dismissAccessDeniedNotice = () => {
+    setAccessDeniedNotice(null);
+  };
+
+  // Auto-dismiss warning banner after 8 seconds
+  useEffect(() => {
+    if (!accessDeniedNotice) return;
+    const timer = window.setTimeout(() => {
+      setAccessDeniedNotice(null);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [accessDeniedNotice]);
+
+  // Verify authoritative role directly from Supabase tenant_members on login & active tenant change
+  useEffect(() => {
+    let cancelled = false;
+
+    const verifyUserRoleFromDatabase = async () => {
+      if (!user?.id || !isSupabaseConfigured) {
+        if (!cancelled) {
+          setUserRole(null);
+          setIsRoleLoading(false);
+        }
+        return;
+      }
+
+      const targetTenantId = activeTenant?.tenantId?.trim() || null;
+      if (!cancelled) {
+        setIsRoleLoading(true);
+      }
+
+      try {
+        if (targetTenantId) {
+          const [memberRes, profileRes] = await Promise.all([
+            supabase
+              .from('tenant_members')
+              .select('role, is_active')
+              .eq('user_id', user.id)
+              .eq('tenant_id', targetTenantId)
+              .eq('is_active', true)
+              .limit(5),
+            supabase
+              .from('profiles')
+              .select('is_consultant')
+              .eq('id', user.id)
+              .maybeSingle(),
+          ]);
+
+          if (cancelled) return;
+
+          const dbIsConsultant = Boolean(!profileRes.error && profileRes.data?.is_consultant);
+          const rows = (!memberRes.error && Array.isArray(memberRes.data)) ? memberRes.data : [];
+
+          if (rows.length > 0) {
+            const roles = rows.map((r: any) => String(r.role || 'cashier').trim().toLowerCase());
+            const resolved = roles.includes('owner')
+              ? 'owner'
+              : roles.includes('admin')
+              ? 'admin'
+              : roles.includes('consultant') || roles.includes('advisor')
+              ? 'consultant'
+              : 'cashier';
+
+            setUserRole(resolved);
+            if (!dbIsConsultant && resolved !== 'consultant') {
+              setIsConsultantUser(false);
+            }
+            setActiveTenant((prev) =>
+              prev && prev.tenantId === targetTenantId && prev.role !== resolved
+                ? { ...prev, role: resolved }
+                : prev
+            );
+          } else if (dbIsConsultant) {
+            setUserRole('consultant');
+            setIsConsultantUser(true);
+          } else {
+            // Fail-closed if no active privileged membership row is found
+            setIsConsultantUser(false);
+            setUserRole('cashier');
+          }
+        } else {
+          // Immediately upon login (before tenant selection), fetch active role from tenant_members
+          const { data: initialMembers } = await supabase
+            .from('tenant_members')
+            .select('role, is_active')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .limit(10);
+
+          if (cancelled) return;
+
+          if (Array.isArray(initialMembers) && initialMembers.length > 0) {
+            const roles = initialMembers.map((r: any) =>
+              String(r.role || 'cashier').trim().toLowerCase()
+            );
+            const initialRole = roles.includes('owner')
+              ? 'owner'
+              : roles.includes('admin')
+              ? 'admin'
+              : roles.includes('consultant')
+              ? 'consultant'
+              : 'cashier';
+            setUserRole(initialRole);
+          } else {
+            setUserRole(null);
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Role verification fallback triggered:', err);
+        if (!cancelled && targetTenantId) {
+          setUserRole(String(activeTenant?.role || 'cashier').trim().toLowerCase() || 'cashier');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsRoleLoading(false);
+        }
+      }
+    };
+
+    void verifyUserRoleFromDatabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, activeTenant?.tenantId]);
 
   const guardedSetCurrentPage = (page: PageId) => {
-    if (isCashierUser) {
+    if (isCashierUser || isRoleLoading) {
+      if (page !== 'home') {
+        triggerAccessDeniedAlert();
+      }
       setCurrentPage('home');
       return;
     }
     if (page === 'staff' && !isOwnerUser) {
+      triggerAccessDeniedAlert(
+        language === 'ar'
+          ? 'هذه الصفحة مخصصة لمالك المشروع (Owner) فقط.'
+          : 'Staff Management is restricted to Project Owners only.'
+      );
       setCurrentPage('home');
       return;
     }
     setCurrentPage(page);
   };
 
+  // Continuous state & browser URL route guarding (blocks direct admin URLs/hashes/queries for Cashier)
   useEffect(() => {
-    if (isCashierUser && currentPage !== 'home') {
-      setCurrentPage('home');
-    } else if (currentPage === 'staff' && !isOwnerUser) {
-      setCurrentPage('home');
-    }
-  }, [isCashierUser, isOwnerUser, currentPage]);
+    const enforceRouteGuard = () => {
+      if (!activeTenant) return;
+
+      const blockedByUrl = detectRestrictedUrlRoute();
+      if (isCashierUser && (currentPage !== 'home' || blockedByUrl)) {
+        setCurrentPage('home');
+        if (blockedByUrl && typeof window !== 'undefined') {
+          window.history.replaceState(null, '', '/');
+        }
+        triggerAccessDeniedAlert();
+      } else if (currentPage === 'staff' && !isOwnerUser && !isRoleLoading) {
+        setCurrentPage('home');
+        triggerAccessDeniedAlert(
+          language === 'ar'
+            ? 'هذه الصفحة مخصصة لمالك المشروع (Owner) فقط.'
+            : 'Staff Management is restricted to Project Owners only.'
+        );
+      }
+    };
+
+    enforceRouteGuard();
+
+    window.addEventListener('popstate', enforceRouteGuard);
+    window.addEventListener('hashchange', enforceRouteGuard);
+    return () => {
+      window.removeEventListener('popstate', enforceRouteGuard);
+      window.removeEventListener('hashchange', enforceRouteGuard);
+    };
+  }, [activeTenant?.tenantId, isCashierUser, isOwnerUser, isRoleLoading, currentPage, language]);
   const [isDarkPortal, setIsDarkPortal] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('profness_login_theme');
@@ -446,7 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFastItems(invRes.data);
 
       // 3. Fetch Expense Transactions (strictly scoped by targetTenantId & hidden from Cashier role)
-      if (String(activeTenant?.role || '').trim().toLowerCase() === 'cashier') {
+      if (isCashierUser || String(userRole || activeTenant?.role || '').trim().toLowerCase() === 'cashier') {
         setExpenses([]);
       } else {
         const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
@@ -616,8 +838,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const { user } = useAuth();
-
   const clearWorkspaceState = () => {
     setCustomers([]);
     setFastItems([]);
@@ -638,15 +858,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
+      setUserRole(null);
+      setAccessDeniedNotice(null);
       clearWorkspaceState();
       return;
     }
 
+    const incomingRole = String(tenant.role || 'cashier').trim().toLowerCase();
     activeTenantIdRef.current = tenant.tenantId;
     setCurrentActiveTenantId(tenant.tenantId);
-    setActiveTenant(tenant);
+    setActiveTenant({ ...tenant, role: incomingRole });
+    setUserRole(incomingRole);
     setBusinessName(tenant.name);
     setCurrentPage('home');
+    setAccessDeniedNotice(null);
     clearWorkspaceState();
   };
 
@@ -659,6 +884,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
+      setUserRole(null);
+      setAccessDeniedNotice(null);
       setAvailableProjectsCount(0);
       setIsConsultantUser(false);
       clearWorkspaceState();
@@ -672,6 +899,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
+      setUserRole(null);
+      setAccessDeniedNotice(null);
       setAvailableProjectsCount(0);
       setIsConsultantUser(false);
       clearWorkspaceState();
@@ -1291,6 +1520,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         activeTenant,
         currentTenantId,
+        userRole,
+        isRoleLoading,
+        accessDeniedNotice,
+        dismissAccessDeniedNotice,
         availableProjectsCount,
         setAvailableProjectsCount,
         isConsultantUser,

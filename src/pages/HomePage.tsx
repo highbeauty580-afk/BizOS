@@ -5,20 +5,29 @@ import { InventoryManager } from '../components/InventoryManager';
 import { ExpensesManager } from '../components/ExpensesManager';
 
 export const HomePage: React.FC = () => {
-  const { language, customPalette, fastItems, isCashierUser } = useApp();
+  const {
+    language,
+    customPalette,
+    fastItems,
+    isCashierUser,
+    isOwnerUser,
+    isConsultantUser,
+    isRoleLoading,
+  } = useApp();
 
   const isRtl = language === 'ar';
+  const isRestrictedCashier = isCashierUser || isRoleLoading || (!isOwnerUser && !isConsultantUser);
 
   // Section in central workspace: 'sales' | 'inventory' | 'expenses'
   const [activeSection, setActiveSection] = useState<'sales' | 'inventory' | 'expenses'>('sales');
 
   useEffect(() => {
-    if (isCashierUser && activeSection !== 'sales') {
+    if (isRestrictedCashier && activeSection !== 'sales') {
       setActiveSection('sales');
     }
-  }, [isCashierUser, activeSection]);
+  }, [isRestrictedCashier, activeSection]);
 
-  if (isCashierUser) {
+  if (isRestrictedCashier) {
     return (
       <div className="flex flex-col gap-6 w-full">
         <SalesCashier />

@@ -21,10 +21,12 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
     isConsultantUser,
     isOwnerUser,
     isCashierUser,
+    isRoleLoading,
     selectTenant,
     resetToDefault,
   } = useApp();
   const { user, signOut } = useAuth();
+  const isRestrictedCashier = isCashierUser || isRoleLoading || (!isOwnerUser && !isConsultantUser);
 
   const [isEditingBusinessName, setIsEditingBusinessName] = useState(false);
   const [tempName, setTempName] = useState(businessName);
@@ -86,7 +88,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
           {/* Business Name (Editable for Owner/Consultant, Static for Cashier) */}
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 hover:bg-slate-200/70 rounded-lg text-xs font-medium transition-colors">
             <span className="material-symbols-outlined text-base text-slate-400">domain</span>
-            {isCashierUser ? (
+            {isRestrictedCashier ? (
               <span className="flex items-center gap-1.5 text-slate-800 font-semibold">
                 <bdi>{businessName}</bdi>
                 <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">
@@ -147,7 +149,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
         {/* Right Controls: Palette Customizer, Language Toggle, User & Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
           {/* Custom Multi-Zone Palette Trigger (Hidden for Cashier) */}
-          {!isCashierUser && (
+          {!isRestrictedCashier && (
             <button
               onClick={() => setIsPaletteOpen(true)}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/90 bg-white/90 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer group shrink-0"
@@ -171,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
           </button>
 
           {/* Reset Data Button (Hidden for Cashier) */}
-          {!isCashierUser && (
+          {!isRestrictedCashier && (
             <button
               onClick={resetToDefault}
               title="Reset to sample data"
@@ -208,7 +210,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
       </header>
 
       {/* Palette Modal (Owner / Consultant only) */}
-      {!isCashierUser && <PaletteModal isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />}
+      {!isRestrictedCashier && <PaletteModal isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />}
     </>
   );
 };

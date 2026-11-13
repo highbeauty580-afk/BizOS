@@ -1557,37 +1557,41 @@ export const SalesCashier: React.FC = () => {
                 <span>{isRtl ? '+ إضافة عميل جديد' : '+ Add New Customer'}</span>
               </button>
 
-              <button
-                onClick={() => {
-                  if (customers.length > 0) {
-                    setEngagementTargetCustomer(customers[0]);
-                    setNewEngagementStatus(customers[0].status || 'New');
-                    setIsEngagementModalOpen(true);
-                  } else {
-                    alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد درجة التفاعل.' : 'Please add a customer first.');
-                  }
-                }}
-                className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base text-amber-500">analytics</span>
-                <span>{isRtl ? 'تحديد درجة تفاعل العملاء' : 'Engagement Rules'}</span>
-              </button>
+              {!isCashierUser && (
+                <>
+                  <button
+                    onClick={() => {
+                      if (customers.length > 0) {
+                        setEngagementTargetCustomer(customers[0]);
+                        setNewEngagementStatus(customers[0].status || 'New');
+                        setIsEngagementModalOpen(true);
+                      } else {
+                        alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد درجة التفاعل.' : 'Please add a customer first.');
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base text-amber-500">analytics</span>
+                    <span>{isRtl ? 'تحديد درجة تفاعل العملاء' : 'Engagement Rules'}</span>
+                  </button>
 
-              <button
-                onClick={() => {
-                  if (customers.length > 0) {
-                    setCreditLimitTargetCustomer(customers[0]);
-                    setNewCreditLimitInput((customers[0].creditLimit || 0).toString());
-                    setIsCreditLimitModalOpen(true);
-                  } else {
-                    alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد حدود الائتمان.' : 'Please add a customer first.');
-                  }
-                }}
-                className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-base text-emerald-600">credit_score</span>
-                <span>{isRtl ? 'إدارة حدود الائتمان' : 'Credit Limits'}</span>
-              </button>
+                  <button
+                    onClick={() => {
+                      if (customers.length > 0) {
+                        setCreditLimitTargetCustomer(customers[0]);
+                        setNewCreditLimitInput((customers[0].creditLimit || 0).toString());
+                        setIsCreditLimitModalOpen(true);
+                      } else {
+                        alert(isRtl ? 'يرجى إضافة عميل أولاً لتحديد حدود الائتمان.' : 'Please add a customer first.');
+                      }
+                    }}
+                    className="px-3.5 py-2 bg-white text-indigo-900 hover:bg-indigo-50 font-bold text-xs rounded-xl shadow-2xs border border-slate-200/80 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-base text-emerald-600">credit_score</span>
+                    <span>{isRtl ? 'إدارة حدود الائتمان' : 'Credit Limits'}</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -1741,22 +1745,24 @@ export const SalesCashier: React.FC = () => {
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => handleOpenEditCustomer(cust)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                title={isRtl ? 'تعديل' : 'Edit'}
-                              >
-                                <span className="material-symbols-outlined text-base">edit</span>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCustomer(cust)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                                title={isRtl ? 'حذف' : 'Delete'}
-                              >
-                                <span className="material-symbols-outlined text-base">delete</span>
-                              </button>
-                            </div>
+                            {!isCashierUser && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => handleOpenEditCustomer(cust)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                  title={isRtl ? 'تعديل' : 'Edit'}
+                                >
+                                  <span className="material-symbols-outlined text-base">edit</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteCustomer(cust)}
+                                  className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                                  title={isRtl ? 'حذف' : 'Delete'}
+                                >
+                                  <span className="material-symbols-outlined text-base">delete</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           {/* Phone & Status Badges */}
@@ -1773,54 +1779,57 @@ export const SalesCashier: React.FC = () => {
                               )}
                             </div>
 
-                            {/* Customer Status Badge (حالة العميل: جديد / متفاعل / منقطع) */}
-                            <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                              <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حالة العميل:' : 'Status:'}</span>
-                              <button
-                                onClick={() => {
-                                  setEngagementTargetCustomer(cust);
-                                  setNewEngagementStatus(cust.status || 'New');
-                                  setIsEngagementModalOpen(true);
-                                }}
-                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 cursor-pointer transition-transform active:scale-95 ${
-                                  isNew
-                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                    : isActive
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                    : 'bg-amber-50 text-amber-800 border-amber-200'
-                                }`}
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                                <span>
-                                  {isNew
-                                    ? (isRtl ? 'جديد (افتراضي)' : 'New')
-                                    : isActive
-                                    ? (isRtl ? 'متفاعل' : 'Active')
-                                    : (isRtl ? 'منقطع' : 'Churned')}
-                                </span>
-                                <span className="material-symbols-outlined text-[12px]">edit</span>
-                              </button>
-                            </div>
+                            {/* Customer Status & Credit Limit controls (Owner/Consultant only) */}
+                            {!isCashierUser && (
+                              <>
+                                <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                                  <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حالة العميل:' : 'Status:'}</span>
+                                  <button
+                                    onClick={() => {
+                                      setEngagementTargetCustomer(cust);
+                                      setNewEngagementStatus(cust.status || 'New');
+                                      setIsEngagementModalOpen(true);
+                                    }}
+                                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 cursor-pointer transition-transform active:scale-95 ${
+                                      isNew
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : isActive
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                                    }`}
+                                  >
+                                    <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                                    <span>
+                                      {isNew
+                                        ? (isRtl ? 'جديد (افتراضي)' : 'New')
+                                        : isActive
+                                        ? (isRtl ? 'متفاعل' : 'Active')
+                                        : (isRtl ? 'منقطع' : 'Churned')}
+                                    </span>
+                                    <span className="material-symbols-outlined text-[12px]">edit</span>
+                                  </button>
+                                </div>
 
-                            {/* Credit Limit Badge (حدود الائتمان: نقداً فقط / مبلغ) */}
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حدود الائتمان:' : 'Credit Limit:'}</span>
-                              <button
-                                onClick={() => {
-                                  setCreditLimitTargetCustomer(cust);
-                                  setNewCreditLimitInput((cust.creditLimit || 0).toString());
-                                  setIsCreditLimitModalOpen(true);
-                                }}
-                                className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200 flex items-center gap-1 cursor-pointer"
-                              >
-                                <span className="material-symbols-outlined text-[12px] text-emerald-600">credit_score</span>
-                                <span>
-                                  {cust.creditLimit && cust.creditLimit > 0
-                                    ? `${cust.creditLimit} ر.س`
-                                    : (isRtl ? 'نقداً فقط' : 'Cash Only')}
-                                </span>
-                              </button>
-                            </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-bold text-slate-500">{isRtl ? 'حدود الائتمان:' : 'Credit Limit:'}</span>
+                                  <button
+                                    onClick={() => {
+                                      setCreditLimitTargetCustomer(cust);
+                                      setNewCreditLimitInput((cust.creditLimit || 0).toString());
+                                      setIsCreditLimitModalOpen(true);
+                                    }}
+                                    className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-200 hover:bg-slate-200 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <span className="material-symbols-outlined text-[12px] text-emerald-600">credit_score</span>
+                                    <span>
+                                      {cust.creditLimit && cust.creditLimit > 0
+                                        ? `${cust.creditLimit} ر.س`
+                                        : (isRtl ? 'نقداً فقط' : 'Cash Only')}
+                                    </span>
+                                  </button>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 

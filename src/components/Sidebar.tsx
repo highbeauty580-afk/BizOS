@@ -21,7 +21,16 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
-  const { currentPage, setCurrentPage, language, customPalette, isOwnerUser, isCashierUser } = useApp();
+  const {
+    currentPage,
+    setCurrentPage,
+    language,
+    customPalette,
+    isOwnerUser,
+    isCashierUser,
+    isConsultantUser,
+    isRoleLoading,
+  } = useApp();
   const { user, signOut } = useAuth();
 
   const navItems: NavItemConfig[] = [
@@ -93,7 +102,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
     },
   ];
 
-  const visibleNavItems: NavItemConfig[] = isCashierUser
+  const showCashierOnlySidebar = isCashierUser || isRoleLoading || (!isOwnerUser && !isConsultantUser);
+
+  const visibleNavItems: NavItemConfig[] = showCashierOnlySidebar
     ? [
         {
           id: 'home',
@@ -181,15 +192,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
 
         {/* Footer info box */}
         <div className="px-4 flex flex-col gap-3">
-          {isCashierUser && (
+          {showCashierOnlySidebar && (
             <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200/80 text-teal-900 flex items-center justify-between gap-2">
               <span className="text-[11px] font-bold">
-                {isRtl ? 'الصلاحية: كاشير مبيعات' : 'Role: POS Cashier'}
+                {isRtl ? 'الصلاحية: كاشير مبيعات (POS فقط)' : 'Role: POS Cashier Only'}
               </span>
               <span className="w-2 h-2 rounded-full bg-teal-500"></span>
             </div>
           )}
-          {isOwnerUser && (
+          {isOwnerUser && !showCashierOnlySidebar && (
             <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200/80 text-indigo-900 flex items-center justify-between gap-2">
               <span className="text-[11px] font-bold">
                 {isRtl ? 'الصلاحية: مالك المشروع' : 'Role: Project Owner'}

@@ -41,6 +41,10 @@ const AppContent: React.FC = () => {
     activeTenant,
     isOwnerUser,
     isCashierUser,
+    isConsultantUser,
+    isRoleLoading,
+    accessDeniedNotice,
+    dismissAccessDeniedNotice,
     selectTenant,
     isDarkPortal,
   } = useApp();
@@ -143,7 +147,25 @@ const AppContent: React.FC = () => {
         isRtl ? 'lg:pr-64 lg:pl-0 pr-0 pl-0' : 'lg:pl-64 lg:pr-0 pl-0 pr-0'
       }`}>
         <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-          {isCashierUser ? (
+          {accessDeniedNotice && (
+            <div className="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 shadow-sm flex items-center justify-between gap-3 text-xs font-bold">
+              <div className="flex items-center gap-2.5">
+                <span className="material-symbols-outlined text-amber-600 text-lg shrink-0">
+                  gpp_maybe
+                </span>
+                <span>{accessDeniedNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={dismissAccessDeniedNotice}
+                className="p-1 rounded-lg hover:bg-amber-200/60 text-amber-800 cursor-pointer shrink-0"
+                title={isRtl ? 'إغلاق التنبيه' : 'Dismiss'}
+              >
+                <span className="material-symbols-outlined text-base">close</span>
+              </button>
+            </div>
+          )}
+          {isCashierUser || isRoleLoading || (!isOwnerUser && !isConsultantUser) ? (
             <HomePage />
           ) : (
             <>
