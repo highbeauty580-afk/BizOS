@@ -303,7 +303,22 @@ export const InventoryManager: React.FC = () => {
       });
       
       const isProduct = modalInventoryTypeTarget === 'finished_goods';
-      await updateStockQuantityInSupabase(editingItem.id, isNaN(stockNum) ? 0 : stockNum, isNaN(costNum) ? 0 : costNum, isProduct);
+      await updateStockQuantityInSupabase(
+        editingItem.stock_pk || editingItem.product_pk || editingItem.id,
+        isNaN(stockNum) ? 0 : stockNum,
+        isNaN(costNum) ? 0 : costNum,
+        !editingItem.stock_pk && isProduct,
+        {
+          stockPk: editingItem.stock_pk,
+          productFk: editingItem.product_pk || (isProduct ? editingItem.id : undefined),
+          itemName: formName.trim(),
+          isRawMaterial: !isProduct,
+          unit: formUnit.trim() || 'قطعة',
+          code: formCode.trim() || undefined,
+          minStock: isNaN(minNum) ? 10 : minNum,
+          maxStock: isNaN(maxNum) ? 100 : maxNum,
+        }
+      );
       
       if (isProduct && editingItem.product_pk) {
         await updateProductInSupabase(editingItem.product_pk, {
@@ -332,7 +347,22 @@ export const InventoryManager: React.FC = () => {
         const targetCost = isNaN(costNum) ? (existingItem.costPrice || 0) : costNum;
         
         const isProduct = existingItem.inventoryType === 'finished_goods';
-        const res = await updateStockQuantityInSupabase(existingItem.id, newTotalQty, targetCost, isProduct);
+        const res = await updateStockQuantityInSupabase(
+          existingItem.stock_pk || existingItem.product_pk || existingItem.id,
+          newTotalQty,
+          targetCost,
+          !existingItem.stock_pk && isProduct,
+          {
+            stockPk: existingItem.stock_pk,
+            productFk: existingItem.product_pk || (isProduct ? existingItem.id : undefined),
+            itemName: existingItem.name,
+            isRawMaterial: !isProduct,
+            unit: existingItem.unit,
+            code: existingItem.code,
+            minStock: existingItem.minStock,
+            maxStock: existingItem.maxStock,
+          }
+        );
         
         if (res.success) {
           // Record Financial Transaction for Re-supply
@@ -468,10 +498,11 @@ export const InventoryManager: React.FC = () => {
           stock_fk: stockRes.data?.stock_pk || stockRes.data?.id || createdProduct.id
         });
 
-        // Update local createdProduct with quantities before adding to state
+        // Update local createdProduct with quantities and stock_pk before adding to state
         const enrichedProduct: FastItem = {
           ...createdProduct,
           imageUrl: formImageUrl.trim() || undefined,
+          stock_pk: stockRes.data?.stock_pk || stockRes.data?.id,
           stockQuantity: isNaN(stockNum) ? 0 : stockNum,
           minStock: isNaN(minNum) ? 10 : minNum,
           maxStock: isNaN(maxNum) ? 200 : maxNum,

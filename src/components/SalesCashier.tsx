@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { FastItem, StagedItem, Transaction, PendingSale, PaymentMethod, Customer, CustomerType, CustomerStatus, SalesEntryMode } from '../types';
 import { AutoIntegrationSales } from './AutoIntegrationSales';
 import {
-  fetchCustomersFromSupabase,
   addCustomerToSupabase,
   updateCustomerStatusInSupabase,
   updateCustomerCreditLimitInSupabase,
   deleteCustomerFromSupabase,
 } from '../lib/customersService';
-import { fetchProductsFromSupabase } from '../lib/productsService';
-import { fetchStockFromSupabase, updateStockQuantityInSupabase } from '../lib/stockService';
+import {
+  fetchCombinedInventoryFromSupabase,
+  updateStockQuantityInSupabase,
+} from '../lib/stockService';
 import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 import {
   addOrderToSupabase,
@@ -26,11 +27,11 @@ export const SalesCashier: React.FC = () => {
   const {
     language,
     customPalette,
+    activeTenant,
     fastItems,
     setFastItems,
     customers,
     setCustomers,
-    addCustomer,
     updateCustomer,
     deleteCustomer,
     transactions,
@@ -39,8 +40,6 @@ export const SalesCashier: React.FC = () => {
     holdSale,
     restorePendingSale,
     cancelPendingSale,
-    deductStockForTransaction,
-    returnTransactionItems,
     setTransactions,
     updateTransactionOrderStatus,
   } = useApp();
@@ -115,6 +114,63 @@ export const SalesCashier: React.FC = () => {
   // Pagination state (Strict limit: max 3 items displayed in selection views)
   const [productPage, setProductPage] = useState<number>(1);
   const [customerPage, setCustomerPage] = useState<number>(1);
+
+  // Live Supabase inventory sync states
+  const [isLoadingInventory, setIsLoadingInventory] = useState<boolean>(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [isSubmittingSale, setIsSubmittingSale] = useState<boolean>(false);
+
+  const setFastItemsRef = useRef(setFastItems);
+  setFastItemsRef.current = setFastItems;
+
+  // Fetch authoritative products + stock directly from Supabase
+  const fetchInventory = useCallback(async () => {
+    const tenantId = activeTenant?.tenantId;
+    if (!tenantId) return;
+
+    setIsLoadingInventory(true);
+    setInventoryError(null);
+    try {
+      const res = await fetchCombinedInventoryFromSupabase(tenantId);
+      if (res.error) {
+        console.warn('⚠️ POS fetchInventory warning:', res.error);
+        setInventoryError(res.error);
+      }
+      if (!res.error || res.data.length > 0) {
+        setFastItemsRef.current(res.data);
+      }
+    } catch (err: any) {
+      setInventoryError(err?.message || 'Failed to sync inventory');
+    } finally {
+      setIsLoadingInventory(false);
+    }
+  }, [activeTenant?.tenantId]);
+
+  // Fetch live inventory from Supabase whenever POS mounts, tenant changes, or user returns to 'pos' tab
+  useEffect(() => {
+    if (activeTab === 'pos') {
+      fetchInventory();
+    }
+  }, [activeTab, fetchInventory]);
+
+  // Re-fetch live inventory automatically when window/tab regains focus
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchInventory();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchInventory();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchInventory]);
 
   // Categories for catalog filter
   const categories = ['all', 'Retail', 'Service', 'Wholesale'];
@@ -462,145 +518,176 @@ export const SalesCashier: React.FC = () => {
 
   // Confirm Sale & Process Inventory
   const handleConfirmSale = async () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || isSubmittingSale) return;
+    setIsSubmittingSale(true);
 
-    const receiptNo = `#TX-${Math.floor(1000 + Math.random() * 9000)}`;
-    const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    try {
+      const receiptNo = `#TX-${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    const itemsSummaryStr = cart.map((i) => `${i.quantity}x ${i.name}`).join(', ');
+      const itemsSummaryStr = cart.map((i) => `${i.quantity}x ${i.name}`).join(', ');
 
-    const finalCustomerName = selectedCustomer ? selectedCustomer.name : (isRtl ? 'عميل نقدي' : 'Cash Customer');
-    const finalCustomerPhone1 = selectedCustomer ? (selectedCustomer.phone || '') : '';
-    const finalCustomerPhone2 = selectedCustomer ? (selectedCustomer.phone2 || '') : '';
-    const finalCustomerAddress = selectedCustomer ? (selectedCustomer.address || '') : '';
+      const finalCustomerName = selectedCustomer ? selectedCustomer.name : (isRtl ? 'عميل نقدي' : 'Cash Customer');
+      const finalCustomerPhone1 = selectedCustomer ? (selectedCustomer.phone || '') : '';
+      const finalCustomerPhone2 = selectedCustomer ? (selectedCustomer.phone2 || '') : '';
+      const finalCustomerAddress = selectedCustomer ? (selectedCustomer.address || '') : '';
 
-    // --- SYNC WITH SUPABASE: public.orders (Order & Delivery Management) ---
-    const orderRes = await addOrderToSupabase({
-      customerName: finalCustomerName,
-      customerPhone1: finalCustomerPhone1,
-      customerPhone2: finalCustomerPhone2,
-      customerAddress: finalCustomerAddress,
-      totalPrice: total,
-      paymentMethod,
-      deliveryStatus: DEFAULT_DELIVERY_STATUS,
-      preparingStatus: DEFAULT_PREPARING_STATUS,
-      orderStatus: DEFAULT_ORDER_STATUS,
-    });
-
-    const createdOrderId = orderRes.data?.orderPk ?? orderRes.data?.id;
-
-    // --- SYNC WITH SUPABASE: public.order_items (Order Items Breakdown) ---
-    // Rule: Orders = order_pk = order_items = order_fk
-    if (createdOrderId) {
-      const orderItemsPayload: AddOrderItemInput[] = cart.map((c) => {
-        const itemTotal = Number((c.unitPrice * c.quantity).toFixed(2));
-        const matchedProd = fastItems.find(
-          (fi) => fi.id === c.originalFastItemId || fi.product_pk === c.originalFastItemId || fi.name === c.name || (fi.nameAr && fi.nameAr === c.name)
-        );
-        const resolvedProductPk = matchedProd?.product_pk || matchedProd?.id || c.originalFastItemId;
-        return {
-          orderFk: createdOrderId,
-          productFk: resolvedProductPk,
-          itemName: c.name,
-          unitPrice: c.unitPrice,
-          quantityItems: c.quantity,
-          totalItemPrice: itemTotal,
-        };
+      // --- SYNC WITH SUPABASE: public.orders (Order & Delivery Management) ---
+      const orderRes = await addOrderToSupabase({
+        customerName: finalCustomerName,
+        customerPhone1: finalCustomerPhone1,
+        customerPhone2: finalCustomerPhone2,
+        customerAddress: finalCustomerAddress,
+        totalPrice: total,
+        paymentMethod,
+        deliveryStatus: DEFAULT_DELIVERY_STATUS,
+        preparingStatus: DEFAULT_PREPARING_STATUS,
+        orderStatus: DEFAULT_ORDER_STATUS,
       });
 
-      const itemsRes = await addOrderItemsToSupabase(orderItemsPayload);
-      if (!itemsRes.success) {
-        console.error('❌ Failed to record order items in Supabase public.order_items:', itemsRes.error);
-      } else {
-        console.log(`✅ Successfully stored ${orderItemsPayload.length} order_items in Supabase with order_fk:`, createdOrderId);
+      const createdOrderId = orderRes.data?.orderPk ?? orderRes.data?.id;
+
+      // --- SYNC WITH SUPABASE: public.order_items (Order Items Breakdown) ---
+      if (createdOrderId) {
+        const orderItemsPayload: AddOrderItemInput[] = cart.map((c) => {
+          const itemTotal = Number((c.unitPrice * c.quantity).toFixed(2));
+          const matchedProd = fastItems.find(
+            (fi) => fi.id === c.originalFastItemId || fi.product_pk === c.originalFastItemId || fi.name === c.name || (fi.nameAr && fi.nameAr === c.name)
+          );
+          const resolvedProductPk = matchedProd?.product_pk || matchedProd?.id || c.originalFastItemId;
+          return {
+            orderFk: createdOrderId,
+            productFk: resolvedProductPk,
+            itemName: c.name,
+            unitPrice: c.unitPrice,
+            quantityItems: c.quantity,
+            totalItemPrice: itemTotal,
+          };
+        });
+
+        const itemsRes = await addOrderItemsToSupabase(orderItemsPayload);
+        if (!itemsRes.success) {
+          console.error('❌ Failed to record order items in Supabase public.order_items:', itemsRes.error);
+        }
       }
-    }
 
-    const newTx: Omit<Transaction, 'id'> = {
-      orderId: createdOrderId,
-      receiptNo,
-      time: timeStr,
-      date: dateStr,
-      itemsSummary: itemsSummaryStr,
-      items: cart,
-      subtotal,
-      tax,
-      total,
-      paymentMethod,
-      status: 'Completed',
-      shiftNotes: shiftNotes.trim() || (isRtl ? 'تم البيع عبر الكاشير' : 'Cashier Direct POS'),
-      cashier: 'S. Alvarez',
-      amountPaid: numericPaid,
-      changeDue,
-      customerName: finalCustomerName,
-      customerPhone1: finalCustomerPhone1,
-      customerPhone2: finalCustomerPhone2,
-      customerAddress: finalCustomerAddress,
-      deliveryStatus: DEFAULT_DELIVERY_STATUS,
-      preparingStatus: DEFAULT_PREPARING_STATUS,
-      orderStatus: DEFAULT_ORDER_STATUS,
-    };
+      const newTx: Omit<Transaction, 'id'> = {
+        orderId: createdOrderId,
+        receiptNo,
+        time: timeStr,
+        date: dateStr,
+        itemsSummary: itemsSummaryStr,
+        items: cart,
+        subtotal,
+        tax,
+        total,
+        paymentMethod,
+        status: 'Completed',
+        shiftNotes: shiftNotes.trim() || (isRtl ? 'تم البيع عبر الكاشير' : 'Cashier Direct POS'),
+        cashier: 'S. Alvarez',
+        amountPaid: numericPaid,
+        changeDue,
+        customerName: finalCustomerName,
+        customerPhone1: finalCustomerPhone1,
+        customerPhone2: finalCustomerPhone2,
+        customerAddress: finalCustomerAddress,
+        deliveryStatus: DEFAULT_DELIVERY_STATUS,
+        preparingStatus: DEFAULT_PREPARING_STATUS,
+        orderStatus: DEFAULT_ORDER_STATUS,
+      };
 
-    // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
-    const methodMapping: Record<PaymentMethod, string> = {
-      Cash: 'Cash',
-      Card: 'E_Wallet',
-      'Bank Transfer': 'Bank',
-      Invoice: 'Credit'
-    };
-    const dbMethod = methodMapping[paymentMethod] || 'Cash';
-    const txName = `${finalCustomerName} فاتورة مبيعات`;
+      // --- SYNC WITH SUPABASE: public.transactions (Financial Ledger) ---
+      const methodMapping: Record<PaymentMethod, string> = {
+        Cash: 'Cash',
+        Card: 'E_Wallet',
+        'Bank Transfer': 'Bank',
+        Invoice: 'Credit',
+      };
+      const dbMethod = methodMapping[paymentMethod] || 'Cash';
 
-    const finRes = await addFinancialTransactionToSupabase({
-      amount: total,
-      method: dbMethod,
-      notice: shiftNotes.trim() || (isRtl ? 'فاتورة مبيعات' : 'Sales Invoice'),
-      type: 'Sales_Trans',
-      name: getFormattedTxName(isRtl ? 'فاتورة مبيعات' : 'Sales Invoice', finalCustomerName)
-    });
-    if (!finRes.success) {
-      console.error('❌ Failed to record financial transaction (Sales):', finRes.error);
-    }
-    // ------------------------------------------------------------------
+      const finRes = await addFinancialTransactionToSupabase({
+        amount: total,
+        method: dbMethod,
+        notice: shiftNotes.trim() || (isRtl ? 'فاتورة مبيعات' : 'Sales Invoice'),
+        type: 'Sales_Trans',
+        name: getFormattedTxName(isRtl ? 'فاتورة مبيعات' : 'Sales Invoice', finalCustomerName),
+      });
+      if (!finRes.success) {
+        console.error('❌ Failed to record financial transaction (Sales):', finRes.error);
+      }
 
-    // 1. Add to sales history transactions
-    addTransaction(newTx);
+      // 1. Add to sales history transactions
+      addTransaction(newTx);
 
-    // 2. DEDUCT INVENTORY STOCK LOCALLY & SYNC WITH SUPABASE public.stock
-    deductStockForTransaction(cart);
-    cart.forEach(async (c) => {
-      const match = fastItems.find((fi) => fi.id === c.originalFastItemId || fi.name === c.name);
-      if (match) {
-        const remainingQty = Math.max(0, match.stockQuantity - c.quantity);
+      // 2. AWAITED STOCK DEDUCTION DIRECTLY IN SUPABASE public.stock
+      const stockUpdates = cart.map(async (c) => {
+        const match = fastItems.find(
+          (fi) =>
+            fi.id === c.originalFastItemId ||
+            fi.product_pk === c.originalFastItemId ||
+            fi.name === c.name ||
+            (fi.nameAr && fi.nameAr === c.name)
+        );
+        if (!match) return;
+
+        const remainingQty = Math.max(0, Number(match.stockQuantity || 0) - c.quantity);
         const unitCost = match.costPrice || match.price || 0;
-        // Sales are always 'Finished Goods', so we update by product_fk
-        await updateStockQuantityInSupabase(match.id, remainingQty, unitCost, true);
-      }
-    });
+        const isProduct = match.inventoryType !== 'raw_material';
 
-    // 3. Mark items as recently confirmed with timestamp for 5-minute red highlight
-    const nowTs = Date.now();
-    setRecentlyDeducted((prev) => {
-      const nextMap = { ...prev };
-      cart.forEach((c) => {
-        if (c.originalFastItemId) {
-          nextMap[c.originalFastItemId] = nowTs;
+        const stockUpdateRes = await updateStockQuantityInSupabase(
+          match.stock_pk || match.product_pk || match.id,
+          remainingQty,
+          unitCost,
+          !match.stock_pk && isProduct,
+          {
+            stockPk: match.stock_pk,
+            productFk: match.product_pk || (isProduct ? match.id : undefined),
+            itemName: match.name,
+            isRawMaterial: !isProduct,
+            unit: match.unit,
+            code: match.code,
+            minStock: match.minStock,
+            maxStock: match.maxStock,
+            tenantId: activeTenant?.tenantId,
+          }
+        );
+
+        if (!stockUpdateRes.success) {
+          console.error('❌ Failed to deduct stock in Supabase for', match.name, stockUpdateRes.error);
         }
       });
-      return nextMap;
-    });
 
-    // Set last confirmed tx for receipt feedback
-    const txCreated: Transaction = { ...newTx, id: `tx-${Date.now()}` };
-    setLastConfirmedTx(txCreated);
+      await Promise.all(stockUpdates);
 
-    // Clear cart, reset customer selection, and close modal
-    setCart([]);
-    setSelectedCustomer(null);
-    setDiscountPct(0);
-    setIsCheckoutOpen(false);
+      // Refresh authoritative inventory straight from Supabase so state never drifts
+      await fetchInventory();
+
+      // 3. Mark items as recently confirmed with timestamp for 5-minute red highlight
+      const nowTs = Date.now();
+      setRecentlyDeducted((prev) => {
+        const nextMap = { ...prev };
+        cart.forEach((c) => {
+          if (c.originalFastItemId) {
+            nextMap[c.originalFastItemId] = nowTs;
+          }
+        });
+        return nextMap;
+      });
+
+      // Set last confirmed tx for receipt feedback
+      const txCreated: Transaction = { ...newTx, id: `tx-${Date.now()}` };
+      setLastConfirmedTx(txCreated);
+
+      // Clear cart, reset customer selection, and close modal
+      setCart([]);
+      setSelectedCustomer(null);
+      setDiscountPct(0);
+      setIsCheckoutOpen(false);
+    } finally {
+      setIsSubmittingSale(false);
+    }
   };
 
   // Hold / Save Incomplete Sale
@@ -953,10 +1040,36 @@ export const SalesCashier: React.FC = () => {
                     <span className="material-symbols-outlined text-indigo-600 text-base">inventory_2</span>
                     <span>{isRtl ? '( حدد منتجات الفاتورة )' : '( Select Invoice Products )'}</span>
                   </div>
-                  <span className="text-[10px] text-indigo-600 bg-indigo-50 font-bold px-2 py-0.5 rounded-md">
-                    {filteredCatalog.length} {isRtl ? 'عنصر' : 'items'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => fetchInventory()}
+                      disabled={isLoadingInventory}
+                      title={isRtl ? 'تحديث المخزون من قاعدة البيانات' : 'Sync live inventory from Supabase'}
+                      className="p-1 rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <span className={`material-symbols-outlined text-sm block ${isLoadingInventory ? 'animate-spin text-indigo-600' : ''}`}>
+                        refresh
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-indigo-600 bg-indigo-50 font-bold px-2 py-0.5 rounded-md">
+                      {filteredCatalog.length} {isRtl ? 'عنصر' : 'items'}
+                    </span>
+                  </div>
                 </div>
+
+                {inventoryError && (
+                  <div className="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1.5 rounded-xl flex items-center justify-between gap-2">
+                    <span className="truncate">{inventoryError}</span>
+                    <button
+                      type="button"
+                      onClick={() => fetchInventory()}
+                      className="underline font-bold shrink-0 cursor-pointer"
+                    >
+                      {isRtl ? 'إعادة المحاولة' : 'Retry'}
+                    </button>
+                  </div>
+                )}
 
                 {/* Products Search Engine (محرك بحث المنتجات) */}
                 <div className="relative">
@@ -982,13 +1095,18 @@ export const SalesCashier: React.FC = () => {
 
                 {/* VERTICAL Scrollable Product Items with prominent custom scrollbar */}
                 <div className="flex flex-col gap-2 max-h-[360px] sm:max-h-[420px] overflow-y-auto pl-1 pr-2.5 product-scrollbar min-h-[220px]">
-                  {filteredCatalog.length === 0 ? (
+                  {isLoadingInventory && filteredCatalog.length === 0 ? (
+                    <div className="w-full py-12 text-center text-indigo-600 text-xs font-bold flex flex-col items-center gap-2">
+                      <span className="material-symbols-outlined text-2xl animate-spin">sync</span>
+                      <span>{isRtl ? 'جاري تحميل أحدث أرصدة المخزون...' : 'Loading live inventory...'}</span>
+                    </div>
+                  ) : filteredCatalog.length === 0 ? (
                     <div className="w-full py-12 text-center text-slate-400 text-xs">
                       {isRtl ? 'لا توجد منتجات مطابقة للبحث' : 'No matching products'}
                     </div>
                   ) : (
                     filteredCatalog.map((item) => {
-                      const actualStock = item.stockQuantity ?? 50;
+                      const actualStock = Number(item.stockQuantity ?? 0);
 
                       // Staged quantity in active cart/invoice
                       const stagedQty = cart.reduce((acc, c) => {
@@ -1881,26 +1999,47 @@ export const SalesCashier: React.FC = () => {
                                     }
                                     // ------------------------------------------------------------------
 
-                                    // 2. Update Supabase Stock
+                                    // 2. Update Supabase Stock directly & refresh authoritative inventory
                                     for (const item of tx.items) {
-                                      const catalogItem = fastItems.find(fi => fi.id === item.originalFastItemId || fi.name === item.name);
+                                      const catalogItem = fastItems.find(
+                                        (fi) =>
+                                          fi.id === item.originalFastItemId ||
+                                          fi.product_pk === item.originalFastItemId ||
+                                          fi.name === item.name
+                                      );
                                       if (catalogItem) {
-                                        const newQty = catalogItem.stockQuantity + item.quantity;
+                                        const newQty = Number(catalogItem.stockQuantity || 0) + item.quantity;
                                         const cost = catalogItem.costPrice || catalogItem.price || 0;
-                                        const isProduct = catalogItem.inventoryType === 'finished_goods';
-                                        await updateStockQuantityInSupabase(catalogItem.id, newQty, cost, isProduct);
+                                        const isProduct = catalogItem.inventoryType !== 'raw_material';
+                                        await updateStockQuantityInSupabase(
+                                          catalogItem.stock_pk || catalogItem.product_pk || catalogItem.id,
+                                          newQty,
+                                          cost,
+                                          !catalogItem.stock_pk && isProduct,
+                                          {
+                                            stockPk: catalogItem.stock_pk,
+                                            productFk: catalogItem.product_pk || (isProduct ? catalogItem.id : undefined),
+                                            itemName: catalogItem.name,
+                                            isRawMaterial: !isProduct,
+                                            unit: catalogItem.unit,
+                                            code: catalogItem.code,
+                                            minStock: catalogItem.minStock,
+                                            maxStock: catalogItem.maxStock,
+                                            tenantId: activeTenant?.tenantId,
+                                          }
+                                        );
                                       }
                                     }
-                                    
+
                                     // 3. Update Supabase Orders Status to 'مرتجع'
                                     if (tx.orderId) {
                                       await updateOrderStatusInSupabase(tx.orderId, { orderStatus: 'مرتجع' });
                                     }
 
-                                    // 4. Update Local State
-                                    returnTransactionItems(tx.items, tx.receiptNo, 'Customer Return');
+                                    // 4. Sync Local State & re-fetch live stock from Supabase
                                     setTransactions(prev => prev.map(t => t.id === tx.id ? { ...t, status: 'Returned', orderStatus: 'مرتجع' } : t));
-                                    
+                                    await fetchInventory();
+
                                     alert(isRtl ? 'تم إرجاع الفاتورة وتحديث المخزون بنجاح!' : 'Transaction returned and stock updated!');
                                   }
 
@@ -2109,10 +2248,21 @@ export const SalesCashier: React.FC = () => {
               </button>
               <button
                 onClick={handleConfirmSale}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                disabled={isSubmittingSale}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-1.5"
               >
-                <span className="material-symbols-outlined text-base">check</span>
-                <span>{isRtl ? 'تأكيد العملية وحسم المخزون' : 'Confirm & Deduct Stock'}</span>
+                <span className={`material-symbols-outlined text-base ${isSubmittingSale ? 'animate-spin' : ''}`}>
+                  {isSubmittingSale ? 'sync' : 'check'}
+                </span>
+                <span>
+                  {isSubmittingSale
+                    ? isRtl
+                      ? 'جاري التأكيد وحسم المخزون...'
+                      : 'Processing...'
+                    : isRtl
+                      ? 'تأكيد العملية وحسم المخزون'
+                      : 'Confirm & Deduct Stock'}
+                </span>
               </button>
             </div>
           </div>

@@ -36,6 +36,7 @@ import {
 } from '../lib/productsService';
 import {
   fetchStockFromSupabase,
+  fetchCombinedInventoryFromSupabase,
   addStockToSupabase,
   updateStockQuantityInSupabase,
 } from '../lib/stockService';
@@ -314,6 +315,7 @@ interface AppContextType {
   // Global Helpers
   resetToDefault: () => void;
   refreshDataFromSupabase: (overrideTenantId?: string) => Promise<void>;
+  refreshInventoryFromSupabase: (overrideTenantId?: string) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -400,47 +402,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCustomers(custRes.data);
       }
 
-      // 2. Fetch Products & Stock
-      const prodRes = await fetchProductsFromSupabase(targetTenantId);
-      const stockRes = await fetchStockFromSupabase(targetTenantId);
-
-      if (prodRes.error || stockRes.error) {
-        const err = prodRes.error || stockRes.error;
-        console.warn('Supabase fetch products/stock warning:', err);
+      // 2. Fetch Products & Stock (unified Supabase merge)
+      const invRes = await fetchCombinedInventoryFromSupabase(targetTenantId);
+      if (invRes.error) {
+        console.warn('Supabase fetch products/stock warning:', invRes.error);
       }
-
-      const products = prodRes.data || [];
-      const stocks = stockRes.data || [];
-
-      const combined: FastItem[] = stocks.map((stk) => {
-        if (stk.product_pk) {
-          const linkedProd = products.find(
-            (p) => p.id === stk.product_pk || p.product_pk === stk.product_pk
-          );
-          if (linkedProd) {
-            return {
-              ...linkedProd,
-              stockQuantity: stk.stockQuantity,
-              minStock: stk.minStock,
-              maxStock: stk.maxStock,
-              amount: stk.amount,
-              stock_pk: stk.stock_pk,
-            };
-          }
-        }
-        return stk;
-      });
-
-      products.forEach((p) => {
-        const alreadyAdded = combined.some(
-          (c) => c.id === p.id || (p.product_pk && c.product_pk === p.product_pk)
-        );
-        if (!alreadyAdded) {
-          combined.push(p);
-        }
-      });
-
-      setFastItems(combined);
+      setFastItems(invRes.data);
 
       // 3. Fetch Expense Transactions
       const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
@@ -563,6 +530,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setFetchError(err?.message || 'حدث خطأ أثناء الاتصال بقاعدة بيانات Supabase');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Dedicated lightweight live inventory sync (used by POS / Inventory views on mount & focus)
+  const refreshInventoryFromSupabase = async (overrideTenantId?: string) => {
+    const targetTenantId = overrideTenantId ?? activeTenant?.tenantId;
+    if (!targetTenantId || !isSupabaseConfigured) return;
+
+    setCurrentActiveTenantId(targetTenantId);
+    const invRes = await fetchCombinedInventoryFromSupabase(targetTenantId);
+    if (!invRes.error || invRes.data.length > 0) {
+      setFastItems(invRes.data);
     }
   };
 
@@ -733,10 +712,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (data.stockQuantity !== undefined || data.costPrice !== undefined) {
       const cost = data.costPrice ?? target.costPrice ?? target.price ?? 0;
       const qty = data.stockQuantity ?? target.stockQuantity ?? 0;
+      const stockOpts = {
+        stockPk: target.stock_pk,
+        productFk: target.product_pk,
+        itemName: data.name ?? target.name,
+        isRawMaterial: target.inventoryType === 'raw_material',
+        unit: data.unit ?? target.unit,
+        code: data.code ?? target.code,
+        minStock: data.minStock ?? target.minStock,
+        maxStock: data.maxStock ?? target.maxStock,
+        tenantId: activeTenant?.tenantId,
+      };
       if (target.stock_pk) {
-        syncPromises.push(updateStockQuantityInSupabase(target.stock_pk, qty, cost, false));
+        syncPromises.push(updateStockQuantityInSupabase(target.stock_pk, qty, cost, false, stockOpts));
       } else if (target.product_pk) {
-        syncPromises.push(updateStockQuantityInSupabase(target.product_pk, qty, cost, true));
+        syncPromises.push(updateStockQuantityInSupabase(target.product_pk, qty, cost, true, stockOpts));
+      } else {
+        syncPromises.push(updateStockQuantityInSupabase(target.id, qty, cost, target.inventoryType !== 'raw_material', stockOpts));
       }
     }
 
@@ -1215,6 +1207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         resetToDefault,
         refreshDataFromSupabase,
+        refreshInventoryFromSupabase,
       }}
     >
       {fetchError && (
