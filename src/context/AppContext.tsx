@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   PageId,
   Language,
@@ -328,6 +328,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [businessName, setBusinessName] = useState<string>('Profness Enterprise');
   const [activeTenant, setActiveTenant] = useState<TenantWithMembership | null>(null);
   const [isConsultantUser, setIsConsultantUser] = useState<boolean>(false);
+  const activeTenantIdRef = useRef<string | null>(null);
+  const prevUserIdRef = useRef<string | null>(null);
   const [isDarkPortal, setIsDarkPortal] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('profness_login_theme');
@@ -377,12 +379,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Central Supabase Data Fetching Scoped by Active Tenant
   const refreshDataFromSupabase = async (overrideTenantId?: string) => {
-    const targetTenantId = overrideTenantId ?? activeTenant?.tenantId;
+    const targetTenantId = (overrideTenantId ?? activeTenantIdRef.current ?? activeTenant?.tenantId ?? '').trim();
     if (!targetTenantId) {
       setIsLoading(false);
       return;
     }
 
+    activeTenantIdRef.current = targetTenantId;
     setCurrentActiveTenantId(targetTenantId);
     setIsLoading(true);
     setFetchError(null);
@@ -394,33 +397,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      // 1. Fetch Customers
+      // 1. Fetch Customers (strictly scoped by targetTenantId)
       const custRes = await fetchCustomersFromSupabase(targetTenantId);
+      if (activeTenantIdRef.current !== targetTenantId) return;
       if (custRes.error) {
         console.warn('Supabase fetch customers warning:', custRes.error);
       } else if (custRes.data) {
         setCustomers(custRes.data);
       }
 
-      // 2. Fetch Products & Stock (unified Supabase merge)
+      // 2. Fetch Products & Stock (unified Supabase merge scoped by targetTenantId)
       const invRes = await fetchCombinedInventoryFromSupabase(targetTenantId);
+      if (activeTenantIdRef.current !== targetTenantId) return;
       if (invRes.error) {
         console.warn('Supabase fetch products/stock warning:', invRes.error);
       }
       setFastItems(invRes.data);
 
-      // 3. Fetch Expense Transactions
+      // 3. Fetch Expense Transactions (strictly scoped by targetTenantId)
       const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
+      if (activeTenantIdRef.current !== targetTenantId) return;
       if (expRes.data) {
         setExpenses(expRes.data);
       }
 
-      // 4. Fetch Sales Transactions, Orders & Order Items from Supabase
-      const salesRes = await fetchSalesTransactionsFromSupabase(targetTenantId);
-      const ordersRes = await fetchOrdersFromSupabase(targetTenantId);
-      const orderItemsRes = await fetchOrderItemsFromSupabase();
+      // 4. Fetch Sales Transactions, Orders & Tenant-Scoped Order Items from Supabase
+      const [salesRes, ordersRes] = await Promise.all([
+        fetchSalesTransactionsFromSupabase(targetTenantId),
+        fetchOrdersFromSupabase(targetTenantId),
+      ]);
+      if (activeTenantIdRef.current !== targetTenantId) return;
 
       const ordersList = ordersRes.data || [];
+      const tenantOrderKeys = Array.from(
+        new Set(
+          ordersList
+            .flatMap((o) => [o.orderPk, o.id])
+            .filter((k): k is string | number => k !== undefined && k !== null && String(k).trim() !== '')
+        )
+      );
+      const orderItemsRes = await fetchOrderItemsFromSupabase(undefined, tenantOrderKeys);
+      if (activeTenantIdRef.current !== targetTenantId) return;
+
       const orderItemsList = orderItemsRes.data || [];
       let txList: Transaction[] = (salesRes.data || []) as Transaction[];
 
@@ -535,11 +553,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Dedicated lightweight live inventory sync (used by POS / Inventory views on mount & focus)
   const refreshInventoryFromSupabase = async (overrideTenantId?: string) => {
-    const targetTenantId = overrideTenantId ?? activeTenant?.tenantId;
+    const targetTenantId = (overrideTenantId ?? activeTenantIdRef.current ?? activeTenant?.tenantId ?? '').trim();
     if (!targetTenantId || !isSupabaseConfigured) return;
 
     setCurrentActiveTenantId(targetTenantId);
     const invRes = await fetchCombinedInventoryFromSupabase(targetTenantId);
+    // Discard stale responses if user switched projects or signed out mid-request
+    if (activeTenantIdRef.current !== targetTenantId) return;
+
     if (!invRes.productsError && !invRes.stockError) {
       setFastItems(invRes.data);
     } else {
@@ -562,48 +583,63 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const { user } = useAuth();
 
+  const clearWorkspaceState = () => {
+    setCustomers([]);
+    setFastItems([]);
+    setTransactions([]);
+    setExpenses([]);
+    setPendingSales([]);
+    setWipBatches([]);
+    setStockMovements([]);
+    setFetchError(null);
+  };
+
   const selectTenant = (tenant: TenantWithMembership | null, isConsultant?: boolean) => {
     if (typeof isConsultant === 'boolean') {
       setIsConsultantUser(isConsultant);
     }
 
     if (!tenant) {
+      activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
-      setCustomers([]);
-      setFastItems([]);
-      setTransactions([]);
-      setExpenses([]);
-      setPendingSales([]);
-      setFetchError(null);
+      clearWorkspaceState();
       return;
     }
 
+    activeTenantIdRef.current = tenant.tenantId;
     setCurrentActiveTenantId(tenant.tenantId);
     setActiveTenant(tenant);
     setBusinessName(tenant.name);
     setCurrentPage('home');
-    setCustomers([]);
-    setFastItems([]);
-    setTransactions([]);
-    setExpenses([]);
-    setPendingSales([]);
+    clearWorkspaceState();
   };
 
   useEffect(() => {
-    if (user && activeTenant) {
-      refreshDataFromSupabase(activeTenant.tenantId);
-    } else if (!user) {
+    const currentUserId = user?.id ?? null;
+
+    // Immediately wipe activeTenant and cached data if account changes or logs out
+    if (prevUserIdRef.current !== currentUserId) {
+      prevUserIdRef.current = currentUserId;
+      activeTenantIdRef.current = null;
       setCurrentActiveTenantId(null);
       setActiveTenant(null);
       setIsConsultantUser(false);
-      setCustomers([]);
-      setFastItems([]);
-      setTransactions([]);
-      setExpenses([]);
-      setPendingSales([]);
+      clearWorkspaceState();
+      return;
     }
-  }, [user, activeTenant?.tenantId]);
+
+    if (user && activeTenant) {
+      activeTenantIdRef.current = activeTenant.tenantId;
+      refreshDataFromSupabase(activeTenant.tenantId);
+    } else if (!user) {
+      activeTenantIdRef.current = null;
+      setCurrentActiveTenantId(null);
+      setActiveTenant(null);
+      setIsConsultantUser(false);
+      clearWorkspaceState();
+    }
+  }, [user?.id, activeTenant?.tenantId]);
 
   const updateCustomPalette = (data: Partial<CustomPalette>) => {
     setCustomPalette((prev) => ({ ...prev, ...data }));
@@ -774,7 +810,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (target?.product_pk) {
       setIsSyncing(true);
-      deleteProductFromSupabase(target.product_pk).finally(() => setIsSyncing(false));
+      deleteProductFromSupabase(target.product_pk, activeTenant?.tenantId).finally(() => setIsSyncing(false));
     }
   };
 

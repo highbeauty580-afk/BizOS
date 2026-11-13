@@ -50,17 +50,16 @@ export async function fetchStockFromSupabase(tenantId?: string): Promise<{ data:
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('stock')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب المخزون.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('stock')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('❌ Supabase fetch stock error:', error.message, error.details);
@@ -116,10 +115,15 @@ export async function fetchCombinedInventoryFromSupabase(
     return { data: [], error: errMsg, productsError: errMsg, stockError: errMsg };
   }
 
-  const resolvedTenantId = tenantId ?? getCurrentActiveTenantId() ?? undefined;
+  const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+  if (!currentTenantId) {
+    const errMsg = 'لم يتم تحديد المشروع النشط (tenant_id).';
+    return { data: [], error: errMsg, productsError: errMsg, stockError: errMsg };
+  }
+
   const [prodRes, stockRes] = await Promise.all([
-    fetchProductsFromSupabase(resolvedTenantId),
-    fetchStockFromSupabase(resolvedTenantId),
+    fetchProductsFromSupabase(currentTenantId),
+    fetchStockFromSupabase(currentTenantId),
   ]);
 
   const products = prodRes.data || [];
@@ -231,7 +235,7 @@ export async function addStockToSupabase(
     if (params.product_fk) {
       cleanPayload.product_fk = params.product_fk;
 
-      // If a DB trigger or prior operation already created a stock row for this product_fk, update it instead of failing/duplicating
+      // If a DB trigger or prior operation already created a stock row for this product_fk inside the same tenant, update it instead of failing/duplicating
       const { data: existingStockRow } = await supabase
         .from('stock')
         .select('stock_pk')
@@ -240,18 +244,7 @@ export async function addStockToSupabase(
         .limit(1)
         .maybeSingle();
 
-      const fallbackExistingRow =
-        existingStockRow ||
-        (
-          await supabase
-            .from('stock')
-            .select('stock_pk')
-            .eq('product_fk', params.product_fk)
-            .limit(1)
-            .maybeSingle()
-        ).data;
-
-      if (fallbackExistingRow?.stock_pk) {
+      if (existingStockRow?.stock_pk) {
         const updateExistingPayload = {
           ...cleanPayload,
           tenant_id: resolvedTenantId,
@@ -259,7 +252,8 @@ export async function addStockToSupabase(
         const { data: updatedRow, error: updateErr } = await supabase
           .from('stock')
           .update(updateExistingPayload)
-          .eq('stock_pk', fallbackExistingRow.stock_pk)
+          .eq('stock_pk', existingStockRow.stock_pk)
+          .eq('tenant_id', resolvedTenantId)
           .select();
 
         if (updateErr) {
@@ -320,24 +314,26 @@ export async function updateStockQuantityInSupabase(
 
     let updatedCount = 0;
 
-    // 1. Prefer matching directly by stock_pk when available
+    // 1. Prefer matching directly by stock_pk within the active tenant
     if (resolvedStockPk) {
       const { data, error } = await supabase
         .from('stock')
         .update(updatePayload)
         .eq('stock_pk', resolvedStockPk)
+        .eq('tenant_id', resolvedTenantId)
         .select('stock_pk');
 
       if (error) return { success: false, error: error.message };
       updatedCount = data?.length ?? 0;
     }
 
-    // 2. Fallback to matching by product_fk if stock_pk wasn't provided or matched 0 rows
+    // 2. Fallback to matching by product_fk within the active tenant
     if (updatedCount === 0 && resolvedProductFk) {
       const { data, error } = await supabase
         .from('stock')
         .update(updatePayload)
         .eq('product_fk', resolvedProductFk)
+        .eq('tenant_id', resolvedTenantId)
         .select('stock_pk');
 
       if (error) return { success: false, error: error.message };
@@ -372,12 +368,13 @@ export async function updateStockQuantityInSupabase(
       }
     }
 
-    // SYNC: Update products table unit_cost if linked to a finished good
+    // SYNC: Update products table unit_cost within the active tenant
     if (resolvedProductFk) {
       const { error: prodError } = await supabase
         .from('products')
         .update({ unit_cost: cost, tenant_id: resolvedTenantId })
-        .eq('product_pk', resolvedProductFk);
+        .eq('product_pk', resolvedProductFk)
+        .eq('tenant_id', resolvedTenantId);
 
       if (prodError) {
         console.warn('⚠️ Warning: Stock updated but product unit_cost failed to sync:', prodError.message);

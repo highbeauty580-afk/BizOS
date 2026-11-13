@@ -155,17 +155,16 @@ export async function fetchExpenseTransactionsFromSupabase(tenantId?: string): P
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('transactions')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب المصروفات.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       return { data: [], error: error.message };
@@ -223,18 +222,17 @@ export async function fetchSalesTransactionsFromSupabase(tenantId?: string): Pro
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('transactions')
-      .select('*')
-      .in('transactions_type', ['Sales_Trans', 'Return_Trans'])
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب المبيعات.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .in('transactions_type', ['Sales_Trans', 'Return_Trans'])
+      .order('created_at', { ascending: false });
 
     if (error) {
       return { data: [], error: error.message };

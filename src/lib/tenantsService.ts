@@ -40,6 +40,9 @@ const verifiedTenantIds = new Set<string>();
 export function setCurrentActiveTenantId(tenantId: string | null): void {
   const cleanId = tenantId ? tenantId.trim() : '';
   currentActiveTenantId = cleanId || null;
+  if (!currentActiveTenantId) {
+    verifiedTenantIds.clear();
+  }
 }
 
 export function getCurrentActiveTenantId(): string | null {

@@ -101,6 +101,7 @@ const AppContent: React.FC = () => {
 
   return (
     <div
+      key={activeTenant.tenantId}
       style={dynamicCanvasStyle}
       className="min-h-screen text-[#131b2e] font-sans antialiased transition-colors duration-200 relative overflow-x-hidden"
     >

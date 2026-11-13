@@ -168,25 +168,23 @@ export async function fetchOrdersFromSupabase(tenantId?: string): Promise<{ data
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('orders')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب الطلبات.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       // In case created_at column doesn't exist, try un-ordered
-      let retryQuery = supabase.from('orders').select('*');
-      if (resolvedTenantId) {
-        retryQuery = retryQuery.eq('tenant_id', resolvedTenantId);
-      }
-      const retry = await retryQuery;
+      const retry = await supabase
+        .from('orders')
+        .select('*')
+        .eq('tenant_id', currentTenantId);
       if (retry.error) {
         console.error('❌ Supabase fetch orders error:', retry.error.message);
         return { data: [], error: retry.error.message };
@@ -331,19 +329,25 @@ export async function addOrderItemsToSupabase(
   const needsProductLookup = items.some((it) => !it.productFk);
   if (needsProductLookup) {
     try {
-      const { data: prods } = await supabase.from('products').select('product_pk, product_name');
-      if (prods && prods.length > 0) {
-        const productMap: Record<string, string> = {};
-        prods.forEach((p: any) => {
-          if (p.product_name) productMap[p.product_name.trim().toLowerCase()] = p.product_pk;
-        });
-        const defaultProdPk = prods[0].product_pk;
-        items.forEach((it) => {
-          if (!it.productFk) {
-            const found = productMap[it.itemName.trim().toLowerCase()];
-            it.productFk = found || defaultProdPk;
-          }
-        });
+      const currentTenantId = getCurrentActiveTenantId()?.trim();
+      if (currentTenantId) {
+        const { data: prods } = await supabase
+          .from('products')
+          .select('product_pk, product_name')
+          .eq('tenant_id', currentTenantId);
+        if (prods && prods.length > 0) {
+          const productMap: Record<string, string> = {};
+          prods.forEach((p: any) => {
+            if (p.product_name) productMap[p.product_name.trim().toLowerCase()] = p.product_pk;
+          });
+          const defaultProdPk = prods[0].product_pk;
+          items.forEach((it) => {
+            if (!it.productFk) {
+              const found = productMap[it.itemName.trim().toLowerCase()];
+              it.productFk = found || defaultProdPk;
+            }
+          });
+        }
       }
     } catch (e) {
       console.warn('⚠️ Could not lookup products for order_items:', e);
@@ -423,16 +427,23 @@ export async function addOrderItemsToSupabase(
 }
 
 export async function fetchOrderItemsFromSupabase(
-  orderFk?: string | number
+  orderFk?: string | number,
+  orderIds?: Array<string | number>
 ): Promise<{ data: OrderItemRecord[]; error: string | null }> {
   if (!isSupabaseConfigured) {
     return { data: [], error: 'Supabase Config Error' };
   }
 
   try {
+    if (Array.isArray(orderIds) && orderIds.length === 0) {
+      return { data: [], error: null };
+    }
+
     let query = supabase.from('order_items').select('*');
     if (orderFk !== undefined) {
       query = query.eq('order_fk', orderFk);
+    } else if (Array.isArray(orderIds) && orderIds.length > 0) {
+      query = query.in('order_fk', orderIds);
     }
     const { data, error } = await query;
     if (error) {
@@ -440,6 +451,12 @@ export async function fetchOrderItemsFromSupabase(
         const retry = await supabase.from('order_items').select('*').eq('order_id', orderFk);
         if (!retry.error) {
           return { data: (retry.data || []).map(mapOrderItemRow), error: null };
+        }
+      }
+      if (Array.isArray(orderIds) && orderIds.length > 0) {
+        const retryIds = await supabase.from('order_items').select('*').in('order_id', orderIds);
+        if (!retryIds.error) {
+          return { data: (retryIds.data || []).map(mapOrderItemRow), error: null };
         }
       }
       console.warn('⚠️ Supabase fetch order_items warning:', error.message);

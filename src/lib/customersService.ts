@@ -24,17 +24,16 @@ export async function fetchCustomersFromSupabase(tenantId?: string): Promise<{ d
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('customers')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب العملاء.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('❌ Supabase fetch customers error:', error);

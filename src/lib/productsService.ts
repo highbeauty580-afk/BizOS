@@ -31,17 +31,16 @@ export async function fetchProductsFromSupabase(tenantId?: string): Promise<{ da
   }
 
   try {
-    const resolvedTenantId = tenantId ?? getCurrentActiveTenantId();
-    let query = supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (resolvedTenantId) {
-      query = query.eq('tenant_id', resolvedTenantId);
+    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    if (!currentTenantId) {
+      return { data: [], error: 'لم يتم تحديد المشروع النشط (tenant_id) لجلب المنتجات.' };
     }
 
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .eq('tenant_id', currentTenantId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('❌ Supabase fetch products error:', error.message, error.details);
@@ -143,15 +142,22 @@ export async function addProductToSupabase(
 }
 
 export async function deleteProductFromSupabase(
-  productPk: string
+  productPk: string,
+  tenantId?: string
 ): Promise<{ success: boolean; error?: string }> {
   if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
 
   try {
+    const resolvedTenantId = await resolveActiveTenantId(tenantId);
+    if (!resolvedTenantId) {
+      return { success: false, error: 'تعذر حذف المنتج: معرف المشروع النشط (tenant_id) غير متوفر.' };
+    }
+
     const { error } = await supabase
       .from('products')
       .delete()
-      .eq('product_pk', productPk);
+      .eq('product_pk', productPk)
+      .eq('tenant_id', resolvedTenantId);
 
     if (error) return { success: false, error: error.message };
     return { success: true };
@@ -186,7 +192,8 @@ export async function updateProductInSupabase(
     const { error } = await supabase
       .from('products')
       .update(cleanPayload)
-      .eq('product_pk', productPk);
+      .eq('product_pk', productPk)
+      .eq('tenant_id', resolvedTenantId);
 
     if (error) return { success: false, error: error.message };
     return { success: true };

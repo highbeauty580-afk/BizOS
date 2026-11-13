@@ -12,6 +12,7 @@ import {
   fetchCombinedInventoryFromSupabase,
   updateStockQuantityInSupabase,
 } from '../lib/stockService';
+import { getCurrentActiveTenantId } from '../lib/tenantsService';
 import { addFinancialTransactionToSupabase } from '../lib/transactionsService';
 import {
   addOrderToSupabase,
@@ -125,13 +126,16 @@ export const SalesCashier: React.FC = () => {
 
   // Fetch authoritative products + stock directly from Supabase
   const fetchInventory = useCallback(async () => {
-    const tenantId = activeTenant?.tenantId;
+    const tenantId = activeTenant?.tenantId?.trim();
     if (!tenantId) return;
 
     setIsLoadingInventory(true);
     setInventoryError(null);
     try {
       const res = await fetchCombinedInventoryFromSupabase(tenantId);
+      // Prevent stale cross-tenant overwrite if user switched projects mid-request
+      if (getCurrentActiveTenantId() !== tenantId) return;
+
       if (res.productsError || res.stockError) {
         const errMsg = res.stockError || res.productsError || res.error || 'Failed to sync inventory';
         console.warn('⚠️ POS fetchInventory warning:', errMsg);
@@ -159,12 +163,23 @@ export const SalesCashier: React.FC = () => {
     }
   }, [activeTenant?.tenantId]);
 
+  // Clear local POS invoice/customer selection whenever switching projects
+  useEffect(() => {
+    setCart([]);
+    setSelectedCustomer(null);
+    setDiscountPct(0);
+    setLastConfirmedTx(null);
+    setRecentlyDeducted({});
+    setProductPage(1);
+    setCustomerPage(1);
+  }, [activeTenant?.tenantId]);
+
   // Fetch live inventory from Supabase whenever POS mounts, tenant changes, or user returns to 'pos' tab
   useEffect(() => {
-    if (activeTab === 'pos') {
+    if (activeTab === 'pos' && activeTenant?.tenantId) {
       fetchInventory();
     }
-  }, [activeTab, fetchInventory]);
+  }, [activeTab, activeTenant?.tenantId, fetchInventory]);
 
   // Re-fetch live inventory automatically when window/tab regains focus
   useEffect(() => {
