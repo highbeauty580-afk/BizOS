@@ -71,6 +71,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setSession(currentSession);
           setUser(currentSession?.user ?? null);
           setIsLoadingAuth(false);
+          if (currentSession?.user) {
+            void syncUserEmailToProfile(currentSession.user);
+          }
         }
       }
     );
@@ -82,42 +85,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const syncUserEmailToProfile = async (authUser: User | null, explicitFullName?: string) => {
-    if (!authUser?.id || !authUser?.email) return;
+    if (!authUser?.id) return;
     try {
-      const cleanEmail = authUser.email.trim().toLowerCase();
+      const cleanEmail = authUser.email?.trim().toLowerCase() || '';
       const nameVal =
         explicitFullName?.trim() ||
         authUser.user_metadata?.full_name ||
         authUser.user_metadata?.display_name ||
-        cleanEmail.split('@')[0];
+        (cleanEmail ? cleanEmail.split('@')[0] : 'User');
 
       const { data: existingProfile, error: lookupErr } = await supabase
         .from('profiles')
-        .select('id, email, full_name')
+        .select('*')
         .eq('id', authUser.id)
         .maybeSingle();
 
       if (lookupErr) return;
 
       if (existingProfile) {
-        if (!existingProfile.email || (!existingProfile.full_name && nameVal)) {
-          await supabase
+        const needsEmail = Boolean(cleanEmail && !existingProfile.email);
+        const needsName = Boolean(!existingProfile.full_name && nameVal);
+        if (needsEmail || needsName) {
+          const updatePayload: Record<string, any> = {};
+          if (needsEmail) updatePayload.email = cleanEmail;
+          if (needsName) updatePayload.full_name = nameVal;
+          const { error: updErr } = await supabase
             .from('profiles')
-            .update({
-              email: cleanEmail,
-              ...(existingProfile.full_name ? {} : { full_name: nameVal }),
-            })
+            .update(updatePayload)
             .eq('id', authUser.id);
+          if (updErr && needsName) {
+            await supabase
+              .from('profiles')
+              .update({ full_name: nameVal })
+              .eq('id', authUser.id);
+          }
         }
       } else {
-        await supabase.from('profiles').insert({
+        const insertPayload: Record<string, any> = {
           id: authUser.id,
-          email: cleanEmail,
           full_name: nameVal,
-        });
+        };
+        if (cleanEmail) insertPayload.email = cleanEmail;
+        const { error: insErr } = await supabase.from('profiles').insert(insertPayload);
+        if (insErr && cleanEmail) {
+          // Fallback if profiles table does not have an email column
+          await supabase.from('profiles').insert({
+            id: authUser.id,
+            full_name: nameVal,
+          });
+        }
       }
     } catch {
-      // Non-fatal if profiles schema differs or email column is absent
+      // Non-fatal if profiles schema or RLS differs
     }
   };
 
@@ -166,9 +185,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Check if session was created immediately or requires email confirmation
       const needsEmailConfirmation = !data.session;
-      if (data.user && data.session) {
-        setUser(data.user);
-        setSession(data.session);
+      if (data.user) {
+        if (data.session) {
+          setUser(data.user);
+          setSession(data.session);
+        }
         void syncUserEmailToProfile(data.user, fullName);
       }
 

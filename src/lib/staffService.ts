@@ -163,9 +163,11 @@ export async function fetchRegisteredUsersForLinking(optionsConfig?: {
 }): Promise<{
   data: RegisteredUserOption[];
   error: string | null;
+  rpcAvailable?: boolean;
+  profilesCount?: number;
 }> {
   if (!isSupabaseConfigured) {
-    return { data: [], error: 'لم يتم تكوين اتصال Supabase.' };
+    return { data: [], error: 'لم يتم تكوين اتصال Supabase.', rpcAvailable: false, profilesCount: 0 };
   }
 
   const includeCurrentUser = optionsConfig?.includeCurrentUser ?? false;
@@ -180,50 +182,43 @@ export async function fetchRegisteredUsersForLinking(optionsConfig?: {
       { fullName?: string; email?: string; createdAt?: string }
     >();
 
-    // 1. Fetch all registered accounts from public.profiles
-    const { data: profilesData, error: profilesErr } = await supabase
-      .from('profiles')
-      .select('*')
-      .limit(500);
+    // Query BOTH public.profiles and list_registered_users RPC in parallel so neither old RLS nor missing profile rows hide new accounts
+    const [profilesRes, rpcRes] = await Promise.all([
+      supabase.from('profiles').select('*').limit(1000),
+      Promise.resolve(supabase.rpc('list_registered_users')).catch((err) => ({
+        data: null,
+        error: err,
+      })),
+    ]);
 
-    if (!profilesErr && Array.isArray(profilesData)) {
-      profilesData.forEach((p: any) => {
-        const uid = String(p?.id || p?.user_id || '').trim();
+    const profilesData = !profilesRes.error && Array.isArray(profilesRes.data) ? profilesRes.data : [];
+    profilesData.forEach((p: any) => {
+      const uid = String(p?.id || p?.user_id || '').trim();
+      if (!uid) return;
+      usersMap.set(uid, {
+        fullName: p.full_name || p.display_name || p.name || p.username || undefined,
+        email: p.email || undefined,
+        createdAt: p.created_at || p.updated_at || undefined,
+      });
+    });
+
+    const rpcAvailable = !rpcRes.error && Array.isArray(rpcRes.data);
+    if (rpcAvailable) {
+      (rpcRes.data as any[]).forEach((u: any) => {
+        const uid = String(u?.id || u?.user_id || '').trim();
         if (!uid) return;
+        const prev = usersMap.get(uid) || {};
         usersMap.set(uid, {
-          fullName: p.full_name || p.display_name || p.name || p.username || undefined,
-          email: p.email || undefined,
-          createdAt: p.created_at || undefined,
+          fullName:
+            prev.fullName ||
+            u.full_name ||
+            u.display_name ||
+            u.name ||
+            (u.email ? String(u.email).split('@')[0] : undefined),
+          email: prev.email || u.email || undefined,
+          createdAt: prev.createdAt || u.created_at || undefined,
         });
       });
-    }
-
-    // 2. Fallback / supplement via RPC (list_registered_users) when profiles returns <= 1 row (e.g. RLS on profiles)
-    const nonSelfCount = Array.from(usersMap.keys()).filter((uid) => uid !== currentUser?.id).length;
-    if (profilesErr || nonSelfCount === 0) {
-      try {
-        const { data: rpcUsers, error: rpcErr } = await supabase.rpc('list_registered_users');
-        if (!rpcErr && Array.isArray(rpcUsers)) {
-          rpcUsers.forEach((u: any) => {
-            const uid = String(u?.id || u?.user_id || '').trim();
-            if (!uid) return;
-            const prev = usersMap.get(uid) || {};
-            usersMap.set(uid, {
-              fullName:
-                prev.fullName ||
-                u.full_name ||
-                u.display_name ||
-                u.name ||
-                u.email?.split('@')[0] ||
-                undefined,
-              email: prev.email || u.email || undefined,
-              createdAt: prev.createdAt || u.created_at || undefined,
-            });
-          });
-        }
-      } catch {
-        // Optional RPC not configured
-      }
     }
 
     // Ensure current authenticated user is represented if includeCurrentUser is requested
@@ -297,16 +292,28 @@ export async function fetchRegisteredUsersForLinking(optionsConfig?: {
       })
       .sort((a, b) => {
         if (a.isCurrentUser !== b.isCurrentUser) return a.isCurrentUser ? 1 : -1;
+        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+          return timeB - timeA; // Newest accounts first so newly registered users appear at top
+        }
         return a.fullName.localeCompare(b.fullName, 'ar');
       });
 
     return {
       data: options,
-      error: profilesErr && options.length === 0 ? profilesErr.message : null,
+      error: profilesRes.error && options.length === 0 ? profilesRes.error.message : null,
+      rpcAvailable,
+      profilesCount: profilesData.length,
     };
   } catch (err: any) {
     console.error('❌ Exception in fetchRegisteredUsersForLinking:', err);
-    return { data: [], error: err?.message || 'تعذر جلب قائمة المستخدمين المسجلين.' };
+    return {
+      data: [],
+      error: err?.message || 'تعذر جلب قائمة المستخدمين المسجلين.',
+      rpcAvailable: false,
+      profilesCount: 0,
+    };
   }
 }
 

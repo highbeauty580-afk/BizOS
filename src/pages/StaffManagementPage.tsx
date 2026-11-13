@@ -60,6 +60,7 @@ export const StaffManagementPage: React.FC = () => {
   const [ownerTenants, setOwnerTenants] = useState<OwnerTenantOption[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isRpcMissing, setIsRpcMissing] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'unlinked' | 'cashier' | 'owner'>('all');
@@ -97,6 +98,8 @@ export const StaffManagementPage: React.FC = () => {
         fetchRegisteredUsersForLinking({ includeCurrentUser: true }),
         fetchOwnerManagedTenants(),
       ]);
+
+      setIsRpcMissing(profilesRes.rpcAvailable === false);
 
       if (staffRes.error && profilesRes.error && profilesRes.data.length === 0) {
         setFetchError(staffRes.error || profilesRes.error);
@@ -534,17 +537,21 @@ export const StaffManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Helpful notice if RLS restricts reading other profiles */}
-      {!isLoading && linkableDropdownUsers.length === 0 && (
+      {/* Helpful notice if RLS or missing RPC limits visibility of all/new registered accounts */}
+      {!isLoading && (linkableDropdownUsers.length === 0 || isRpcMissing) && (
         <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 text-xs flex items-start gap-3">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <span className="font-bold">
-              {isRtl ? 'ملاحظة صلاحيات القراءة (RLS): ' : 'Database Visibility Notice: '}
+              {isRtl ? 'تنبيه جلب الحسابات المسجلة: ' : 'Registered Accounts Visibility Notice: '}
             </span>
-            {isRtl
-              ? 'لم يتم إرجاع حسابات لمستخدمين آخرين من جدول profiles حتى الآن. إذا كانت هناك حسابات مسجلة بالفعل في Supabase، تأكد من السماح للمستخدمين المسجلين بقراءة جدول profiles (سياسة SELECT لـ authenticated) أو تفعيل دالة list_registered_users.'
-              : 'No other user accounts were returned from profiles yet. Ensure authenticated users have SELECT policy on public.profiles (or list_registered_users RPC).'}
+            {linkableDropdownUsers.length === 0
+              ? isRtl
+                ? 'لم يتم إرجاع حسابات لمستخدمين آخرين من قاعدة البيانات حتى الآن. تأكد من تفعيل دالة list_registered_users وسياسة القراءة على جدول profiles لتظهر جميع الحسابات الجديدة والمسجلة.'
+                : 'No other user accounts were returned yet. Ensure list_registered_users RPC and profiles SELECT policy are enabled in Supabase.'
+              : isRtl
+              ? 'بعض الحسابات الجديدة قد لا تظهر إذا لم تكن دالة list_registered_users أو محفّز إنشاء الملف الشخصي (Trigger) مفعّلة في قاعدة البيانات.'
+              : 'Some newly registered accounts may stay hidden until list_registered_users RPC and the profiles signup trigger are enabled in Supabase.'}
           </div>
         </div>
       )}
@@ -989,10 +996,15 @@ export const StaffManagementPage: React.FC = () => {
                   required
                   value={selectedUserId}
                   onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full h-11 px-3 rounded-xl bg-white border-2 border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  disabled={isRefreshing}
+                  className="w-full h-11 px-3 rounded-xl bg-white border-2 border-slate-200 text-slate-900 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer disabled:opacity-60"
                 >
                   <option value="">
-                    {filteredDropdownUsers.length === 0
+                    {isRefreshing && filteredDropdownUsers.length === 0
+                      ? isRtl
+                        ? 'جاري جلب جميع الحسابات المسجلة...'
+                        : 'Loading registered accounts...'
+                      : filteredDropdownUsers.length === 0
                       ? isRtl
                         ? 'لا يوجد مستخدمون مسجلون متاحون'
                         : 'No registered users available'
