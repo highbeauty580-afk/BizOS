@@ -540,8 +540,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setCurrentActiveTenantId(targetTenantId);
     const invRes = await fetchCombinedInventoryFromSupabase(targetTenantId);
-    if (!invRes.error || invRes.data.length > 0) {
+    if (!invRes.productsError && !invRes.stockError) {
       setFastItems(invRes.data);
+    } else {
+      console.warn('⚠️ refreshInventoryFromSupabase partial error:', invRes.stockError || invRes.productsError);
+      if (!invRes.productsError && invRes.data.length > 0) {
+        setFastItems((prev) => {
+          if (prev.length === 0) return invRes.data;
+          return invRes.data.map((item) => {
+            const existing = prev.find(
+              (p) => p.id === item.id || (item.product_pk && p.product_pk === item.product_pk)
+            );
+            return existing
+              ? { ...item, stockQuantity: existing.stockQuantity, stock_pk: existing.stock_pk || item.stock_pk }
+              : item;
+          });
+        });
+      }
     }
   };
 
@@ -671,7 +686,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         stock_cost: itemData.costPrice || itemData.price || 0,
         measure_stype: itemData.unit || 'قطعة',
         stock_code: itemData.code,
-      }).then(() => refreshDataFromSupabase()).finally(() => setIsSyncing(false));
+        tenant_id: activeTenant?.tenantId,
+      }).then(() => refreshInventoryFromSupabase(activeTenant?.tenantId)).finally(() => setIsSyncing(false));
     } else {
       addProductToSupabase({
         product_name: itemData.name,
@@ -681,7 +697,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unit_price: itemData.price || 0,
         product_code: itemData.code,
         measure_ptype: itemData.unit || 'قطعة',
-      }).then(() => refreshDataFromSupabase()).finally(() => setIsSyncing(false));
+        tenant_id: activeTenant?.tenantId,
+      }).then(() => refreshInventoryFromSupabase(activeTenant?.tenantId)).finally(() => setIsSyncing(false));
     }
   };
 

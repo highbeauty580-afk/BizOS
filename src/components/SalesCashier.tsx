@@ -132,11 +132,24 @@ export const SalesCashier: React.FC = () => {
     setInventoryError(null);
     try {
       const res = await fetchCombinedInventoryFromSupabase(tenantId);
-      if (res.error) {
-        console.warn('⚠️ POS fetchInventory warning:', res.error);
-        setInventoryError(res.error);
-      }
-      if (!res.error || res.data.length > 0) {
+      if (res.productsError || res.stockError) {
+        const errMsg = res.stockError || res.productsError || res.error || 'Failed to sync inventory';
+        console.warn('⚠️ POS fetchInventory warning:', errMsg);
+        setInventoryError(errMsg);
+        if (!res.productsError && res.data.length > 0) {
+          setFastItemsRef.current((prev) => {
+            if (prev.length === 0) return res.data;
+            return res.data.map((item) => {
+              const existing = prev.find(
+                (p) => p.id === item.id || (item.product_pk && p.product_pk === item.product_pk)
+              );
+              return existing
+                ? { ...item, stockQuantity: existing.stockQuantity, stock_pk: existing.stock_pk || item.stock_pk }
+                : item;
+            });
+          });
+        }
+      } else {
         setFastItemsRef.current(res.data);
       }
     } catch (err: any) {

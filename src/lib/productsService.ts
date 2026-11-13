@@ -22,6 +22,7 @@ export interface AddProductParams {
   unit_price: number;
   product_code?: string;
   measure_ptype?: string;
+  tenant_id?: string;
 }
 
 export async function fetchProductsFromSupabase(tenantId?: string): Promise<{ data: FastItem[]; error: string | null }> {
@@ -82,7 +83,7 @@ export async function addProductToSupabase(
   }
 
   try {
-    const resolvedTenantId = getCurrentActiveTenantId();
+    const resolvedTenantId = params.tenant_id ?? getCurrentActiveTenantId();
     const cleanPayload: Record<string, any> = {
       product_name: params.product_name.trim(),
       product_type: params.product_type.trim() || 'Retail',

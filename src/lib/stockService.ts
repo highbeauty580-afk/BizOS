@@ -105,9 +105,15 @@ export async function fetchStockFromSupabase(tenantId?: string): Promise<{ data:
  */
 export async function fetchCombinedInventoryFromSupabase(
   tenantId?: string
-): Promise<{ data: FastItem[]; error: string | null }> {
+): Promise<{
+  data: FastItem[];
+  error: string | null;
+  productsError: string | null;
+  stockError: string | null;
+}> {
   if (!isSupabaseConfigured) {
-    return { data: [], error: 'لم يتم تكوين متغيرات بيئة Supabase.' };
+    const errMsg = 'لم يتم تكوين متغيرات بيئة Supabase.';
+    return { data: [], error: errMsg, productsError: errMsg, stockError: errMsg };
   }
 
   const resolvedTenantId = tenantId ?? getCurrentActiveTenantId() ?? undefined;
@@ -119,8 +125,9 @@ export async function fetchCombinedInventoryFromSupabase(
   const products = prodRes.data || [];
   const stocks = stockRes.data || [];
   const matchedProductIds = new Set<string>();
+  const combined: FastItem[] = [];
 
-  const combined: FastItem[] = stocks.map((stk) => {
+  stocks.forEach((stk) => {
     let linkedProd: FastItem | undefined;
 
     if (stk.product_pk) {
@@ -138,8 +145,25 @@ export async function fetchCombinedInventoryFromSupabase(
     }
 
     if (linkedProd) {
+      // Avoid adding duplicate rows if multiple stock rows point to the same product
+      if (matchedProductIds.has(linkedProd.id)) {
+        const existingIdx = combined.findIndex((c) => c.id === linkedProd!.id);
+        if (existingIdx >= 0 && combined[existingIdx].stockQuantity === 0 && stk.stockQuantity > 0) {
+          combined[existingIdx] = {
+            ...linkedProd,
+            stockQuantity: stk.stockQuantity,
+            minStock: stk.minStock,
+            maxStock: stk.maxStock,
+            amount: stk.amount,
+            stock_pk: stk.stock_pk,
+            imageUrl: linkedProd.imageUrl || stk.imageUrl,
+          };
+        }
+        return;
+      }
+
       matchedProductIds.add(linkedProd.id);
-      return {
+      combined.push({
         ...linkedProd,
         stockQuantity: stk.stockQuantity,
         minStock: stk.minStock,
@@ -147,10 +171,11 @@ export async function fetchCombinedInventoryFromSupabase(
         amount: stk.amount,
         stock_pk: stk.stock_pk,
         imageUrl: linkedProd.imageUrl || stk.imageUrl,
-      };
+      });
+      return;
     }
 
-    return stk;
+    combined.push(stk);
   });
 
   products.forEach((p) => {
@@ -165,6 +190,8 @@ export async function fetchCombinedInventoryFromSupabase(
   return {
     data: combined,
     error: prodRes.error || stockRes.error || null,
+    productsError: prodRes.error,
+    stockError: stockRes.error,
   };
 }
 
@@ -195,7 +222,34 @@ export async function addStockToSupabase(
 
     if (params.product_fk) {
       cleanPayload.product_fk = params.product_fk;
+
+      // If a DB trigger or prior operation already created a stock row for this product_fk, update it instead of failing/duplicating
+      const { data: existingStockRow } = await supabase
+        .from('stock')
+        .select('stock_pk')
+        .eq('product_fk', params.product_fk)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingStockRow?.stock_pk) {
+        const updateExistingPayload = {
+          ...cleanPayload,
+          ...(resolvedTenantId ? { tenant_id: resolvedTenantId } : {}),
+        };
+        const { data: updatedRow, error: updateErr } = await supabase
+          .from('stock')
+          .update(updateExistingPayload)
+          .eq('stock_pk', existingStockRow.stock_pk)
+          .select();
+
+        if (updateErr) {
+          console.error('❌ Supabase Error updating existing stock row:', updateErr.message);
+          return { success: false, error: updateErr.message };
+        }
+        return { success: true, data: updatedRow && updatedRow[0] };
+      }
     }
+
     if (resolvedTenantId) {
       cleanPayload.tenant_id = resolvedTenantId;
     }
@@ -229,12 +283,17 @@ export async function updateStockQuantityInSupabase(
     const cost = parseFloat(stockCost as any) || 0;
     const qty = Math.max(0, parseFloat(newQuantity as any) || 0);
     const calcAmount = cost * qty;
+    const resolvedTenantId = options?.tenantId ?? getCurrentActiveTenantId();
 
-    const updatePayload = {
+    const updatePayload: Record<string, any> = {
       quantity: qty,
       amount: calcAmount,
       Stock_Cost: cost,
     };
+
+    if (resolvedTenantId) {
+      updatePayload.tenant_id = resolvedTenantId;
+    }
 
     const resolvedStockPk = options?.stockPk || (!isProductFk ? identifier : undefined);
     const resolvedProductFk = options?.productFk || (isProductFk ? identifier : undefined);
@@ -266,22 +325,30 @@ export async function updateStockQuantityInSupabase(
     }
 
     // 3. Fallback if neither matched 1+ rows: insert missing stock row so DB stays authoritative
-    if (updatedCount === 0 && options?.itemName) {
-      const insertRes = await addStockToSupabase({
-        stock_name: options.itemName,
-        stock_type: options.isRawMaterial ? 'Raw material' : 'Stocked Product',
-        minimum_limit: options.minStock ?? 10,
-        maximum_limit: options.maxStock ?? 200,
-        quantity: qty,
-        stock_cost: cost,
-        stock_code: options.code,
-        measure_stype: options.unit || 'قطعة',
-        product_fk: resolvedProductFk,
-        tenant_id: options.tenantId,
-      });
+    if (updatedCount === 0) {
+      if (options?.itemName) {
+        const insertRes = await addStockToSupabase({
+          stock_name: options.itemName,
+          stock_type: options.isRawMaterial ? 'Raw material' : 'Stocked Product',
+          minimum_limit: options.minStock ?? 10,
+          maximum_limit: options.maxStock ?? 200,
+          quantity: qty,
+          stock_cost: cost,
+          stock_code: options.code,
+          measure_stype: options.unit || 'قطعة',
+          product_fk: resolvedProductFk,
+          tenant_id: resolvedTenantId ?? undefined,
+        });
 
-      if (!insertRes.success) {
-        return { success: false, error: insertRes.error };
+        if (!insertRes.success) {
+          return { success: false, error: insertRes.error };
+        }
+        updatedCount = 1;
+      } else {
+        return {
+          success: false,
+          error: 'لم يتم العثور على سجل المخزون المطابق في قاعدة البيانات لتحديثه.',
+        };
       }
     }
 

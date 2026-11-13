@@ -26,12 +26,11 @@ export const InventoryManager: React.FC = () => {
   const {
     language,
     customPalette,
+    activeTenant,
     fastItems,
     setFastItems,
-    addFastItem,
     updateFastItem,
     deleteFastItem,
-    restockItem,
     wipBatches,
     startWipBatch,
     updateWipBatchStage,
@@ -44,9 +43,17 @@ export const InventoryManager: React.FC = () => {
     updateCustomer,
     deleteCustomer,
     returnTransactionItems,
+    refreshInventoryFromSupabase,
   } = useApp();
 
   const isRtl = language === 'ar';
+
+  // Sync live inventory from Supabase when InventoryManager opens
+  useEffect(() => {
+    if (activeTenant?.tenantId) {
+      refreshInventoryFromSupabase(activeTenant.tenantId);
+    }
+  }, [activeTenant?.tenantId]);
 
   // --- FINANCIAL TRANSACTION STATE FOR INVENTORY ACTIONS ---
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Card' | 'Bank Transfer' | 'Invoice'>('Cash');
@@ -286,27 +293,15 @@ export const InventoryManager: React.FC = () => {
     }
 
     if (editingItem) {
-      updateFastItem(editingItem.id, {
-        name: formName.trim(),
-        nameAr: formNameAr.trim() || undefined,
-        code: formCode.trim() || undefined,
-        category: formCategory,
-        inventoryType: modalInventoryTypeTarget,
-        price: isNaN(priceNum) ? 0 : priceNum,
-        costPrice: isNaN(costNum) ? 0 : costNum,
-        description: formDescription.trim() || undefined,
-        imageUrl: formImageUrl.trim() || undefined,
-        stockQuantity: isNaN(stockNum) ? 0 : stockNum,
-        minStock: isNaN(minNum) ? 10 : minNum,
-        maxStock: isNaN(maxNum) ? 100 : maxNum,
-        unit: formUnit.trim() || 'قطعة',
-      });
-      
       const isProduct = modalInventoryTypeTarget === 'finished_goods';
-      await updateStockQuantityInSupabase(
+      const nextStockQty = isNaN(stockNum) ? 0 : stockNum;
+      const nextCost = isNaN(costNum) ? 0 : costNum;
+      const nextPrice = isNaN(priceNum) ? 0 : priceNum;
+
+      const stockRes = await updateStockQuantityInSupabase(
         editingItem.stock_pk || editingItem.product_pk || editingItem.id,
-        isNaN(stockNum) ? 0 : stockNum,
-        isNaN(costNum) ? 0 : costNum,
+        nextStockQty,
+        nextCost,
         !editingItem.stock_pk && isProduct,
         {
           stockPk: editingItem.stock_pk,
@@ -317,21 +312,56 @@ export const InventoryManager: React.FC = () => {
           code: formCode.trim() || undefined,
           minStock: isNaN(minNum) ? 10 : minNum,
           maxStock: isNaN(maxNum) ? 100 : maxNum,
+          tenantId: activeTenant?.tenantId,
         }
       );
-      
-      if (isProduct && editingItem.product_pk) {
-        await updateProductInSupabase(editingItem.product_pk, {
-          unit_cost: isNaN(costNum) ? 0 : costNum,
-          unit_price: isNaN(priceNum) ? 0 : priceNum,
+
+      if (!stockRes.success) {
+        alert(isRtl ? `فشل تحديث المخزون في قاعدة البيانات: ${stockRes.error}` : `Stock update failed: ${stockRes.error}`);
+        setFormError(stockRes.error || 'Stock update failed');
+        return;
+      }
+
+      if (isProduct && (editingItem.product_pk || editingItem.id)) {
+        const prodRes = await updateProductInSupabase(editingItem.product_pk || editingItem.id, {
+          unit_cost: nextCost,
+          unit_price: nextPrice,
           product_name: formName.trim(),
           product_code: formCode.trim() || undefined,
           product_type: formCategory,
           product_description: formDescription.trim() || undefined,
           measure_ptype: formUnit.trim() || 'قطعة',
         });
+        if (!prodRes.success) {
+          console.warn('⚠️ Product metadata update warning:', prodRes.error);
+        }
       }
 
+      setFastItems((prev) =>
+        prev.map((item) =>
+          item.id === editingItem.id
+            ? {
+                ...item,
+                name: formName.trim(),
+                nameAr: formNameAr.trim() || undefined,
+                code: formCode.trim() || undefined,
+                category: formCategory,
+                inventoryType: modalInventoryTypeTarget,
+                price: nextPrice,
+                costPrice: nextCost,
+                description: formDescription.trim() || undefined,
+                imageUrl: formImageUrl.trim() || undefined,
+                stockQuantity: nextStockQty,
+                minStock: isNaN(minNum) ? 10 : minNum,
+                maxStock: isNaN(maxNum) ? 100 : maxNum,
+                unit: formUnit.trim() || 'قطعة',
+                amount: nextCost * nextStockQty,
+              }
+            : item
+        )
+      );
+
+      await refreshInventoryFromSupabase(activeTenant?.tenantId);
       alert(isRtl ? 'تم تحديث بيانات الصنف بالمخزون بنجاح!' : 'Stock item updated successfully!');
       setIsAddEditModalOpen(false);
     } else {
@@ -343,10 +373,10 @@ export const InventoryManager: React.FC = () => {
 
       if (existingItem) {
         const addedQty = isNaN(stockNum) ? 0 : stockNum;
-        const newTotalQty = existingItem.stockQuantity + addedQty;
+        const newTotalQty = Number(existingItem.stockQuantity || 0) + addedQty;
         const targetCost = isNaN(costNum) ? (existingItem.costPrice || 0) : costNum;
         
-        const isProduct = existingItem.inventoryType === 'finished_goods';
+        const isProduct = existingItem.inventoryType !== 'raw_material';
         const res = await updateStockQuantityInSupabase(
           existingItem.stock_pk || existingItem.product_pk || existingItem.id,
           newTotalQty,
@@ -361,13 +391,13 @@ export const InventoryManager: React.FC = () => {
             code: existingItem.code,
             minStock: existingItem.minStock,
             maxStock: existingItem.maxStock,
+            tenantId: activeTenant?.tenantId,
           }
         );
         
         if (res.success) {
           // Record Financial Transaction for Re-supply
           const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
-          const actionPrefix = isProduct ? (isRtl ? 'توريد منتج' : 'Reload stock') : (isRtl ? 'توريد مادة خام' : 'Reload material');
           const txType = isProduct ? 'Reload_stock_Trans' : 'ReLoad_material_Trans';
           
           await addFinancialTransactionToSupabase({
@@ -386,12 +416,20 @@ export const InventoryManager: React.FC = () => {
             });
           }
 
-          updateFastItem(existingItem.id, {
-            stockQuantity: newTotalQty,
-            costPrice: targetCost,
-            price: modalInventoryTypeTarget === 'finished_goods' ? (isNaN(priceNum) ? existingItem.price : priceNum) : targetCost,
-            amount: targetCost * newTotalQty
-          });
+          setFastItems((prev) =>
+            prev.map((item) =>
+              item.id === existingItem.id
+                ? {
+                    ...item,
+                    stockQuantity: newTotalQty,
+                    costPrice: targetCost,
+                    price: isProduct ? (isNaN(priceNum) ? existingItem.price : priceNum) : targetCost,
+                    amount: targetCost * newTotalQty,
+                  }
+                : item
+            )
+          );
+          await refreshInventoryFromSupabase(activeTenant?.tenantId);
           alert(isRtl ? 'تم تحديث الكمية للصنف الموجود مسبقاً بنجاح وتسجيل المعاملة المالية!' : 'Existing item updated and financial transaction recorded!');
           setIsAddEditModalOpen(false);
           return;
@@ -412,6 +450,7 @@ export const InventoryManager: React.FC = () => {
           stock_cost: isNaN(costNum) ? 0 : costNum,
           stock_code: formCode.trim() || undefined,
           measure_stype: formUnit.trim() || 'كجم',
+          tenant_id: activeTenant?.tenantId,
         };
 
         const res = await addStockToSupabase(stockParams);
@@ -435,6 +474,7 @@ export const InventoryManager: React.FC = () => {
 
         const createdRawMat: FastItem = {
           id: res.data.stock_pk || res.data.id || `rm-${Date.now()}`,
+          stock_pk: res.data.stock_pk || res.data.id,
           name: formName.trim(),
           nameAr: formNameAr.trim() || formName.trim(),
           code: formCode.trim() || undefined,
@@ -450,6 +490,7 @@ export const InventoryManager: React.FC = () => {
         };
 
         setFastItems((prev) => [createdRawMat, ...prev]);
+        await refreshInventoryFromSupabase(activeTenant?.tenantId);
         setIsAddEditModalOpen(false);
       } else {
         // Adding Finished Good to public.products & public.stock
@@ -461,6 +502,7 @@ export const InventoryManager: React.FC = () => {
           unit_price: isNaN(priceNum) ? 0 : priceNum,
           product_code: formCode.trim() || undefined,
           measure_ptype: formUnit.trim() || 'قطعة',
+          tenant_id: activeTenant?.tenantId,
         };
 
         const res = await addProductToSupabase(productParams);
@@ -481,11 +523,23 @@ export const InventoryManager: React.FC = () => {
           maximum_limit: isNaN(maxNum) ? 200 : maxNum,
           quantity: isNaN(stockNum) ? 0 : stockNum,
           stock_cost: isNaN(costNum) ? 0 : costNum,
-          product_fk: createdProduct.id, 
+          product_fk: createdProduct.product_pk || createdProduct.id,
           stock_code: formCode.trim() || undefined,
           measure_stype: formUnit.trim() || 'قطعة',
+          tenant_id: activeTenant?.tenantId,
         };
         const stockRes = await addStockToSupabase(stockParams);
+
+        if (!stockRes.success) {
+          alert(
+            isRtl
+              ? `تم إنشاء المنتج لكن فشل حفظ الكمية في جدول المخزون (stock): ${stockRes.error}`
+              : `Product created, but failed to save stock row: ${stockRes.error}`
+          );
+          setFormError(stockRes.error || 'Failed to save stock quantity');
+          await refreshInventoryFromSupabase(activeTenant?.tenantId);
+          return;
+        }
 
         // Record Financial Transaction for New Finished Good
         const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
@@ -509,8 +563,9 @@ export const InventoryManager: React.FC = () => {
           amount: (isNaN(costNum) ? 0 : costNum) * (isNaN(stockNum) ? 0 : stockNum)
         };
 
-        alert(isRtl ? 'تم حفظ المنتج بنجاح في قاعدة البيانات وتسجيل المعاملة المالية!' : 'Product saved and financial transaction recorded!');
         setFastItems((prev) => [enrichedProduct, ...prev]);
+        await refreshInventoryFromSupabase(activeTenant?.tenantId);
+        alert(isRtl ? 'تم حفظ المنتج والكمية بنجاح في قاعدة البيانات وتسجيل المعاملة المالية!' : 'Product and stock saved in database!');
         setIsAddEditModalOpen(false);
       }
     }
@@ -633,7 +688,7 @@ export const InventoryManager: React.FC = () => {
   };
 
   // Submit Start WIP Manufacturing Batch
-  const handleSubmitStartWip = (e: React.FormEvent) => {
+  const handleSubmitStartWip = async (e: React.FormEvent) => {
     e.preventDefault();
     setWipModalError('');
 
@@ -674,15 +729,33 @@ export const InventoryManager: React.FC = () => {
     });
 
     // SYNC WITH SUPABASE: Deduct Raw Materials
-    wipSelectedMaterials.forEach(async (mat) => {
-      const stockItem = rawMaterials.find((r) => r.id === mat.rawMaterialId);
-      if (stockItem) {
-        const newQty = stockItem.stockQuantity - mat.quantityUsed;
-        const cost = stockItem.costPrice || stockItem.price || 0;
-        await updateStockQuantityInSupabase(stockItem.id, newQty, cost, false);
-      }
-    });
+    await Promise.all(
+      wipSelectedMaterials.map(async (mat) => {
+        const stockItem = rawMaterials.find((r) => r.id === mat.rawMaterialId);
+        if (stockItem) {
+          const newQty = Math.max(0, Number(stockItem.stockQuantity || 0) - mat.quantityUsed);
+          const cost = stockItem.costPrice || stockItem.price || 0;
+          await updateStockQuantityInSupabase(
+            stockItem.stock_pk || stockItem.id,
+            newQty,
+            cost,
+            false,
+            {
+              stockPk: stockItem.stock_pk,
+              itemName: stockItem.name,
+              isRawMaterial: true,
+              unit: stockItem.unit,
+              code: stockItem.code,
+              minStock: stockItem.minStock,
+              maxStock: stockItem.maxStock,
+              tenantId: activeTenant?.tenantId,
+            }
+          );
+        }
+      })
+    );
 
+    await refreshInventoryFromSupabase(activeTenant?.tenantId);
     setIsStartWipModalOpen(false);
     alert(isRtl ? 'تم بدء تشغيلة التصنيع وخصم المواد الخام من المخزون!' : 'WIP Batch started and raw materials deducted!');
   };
@@ -695,18 +768,46 @@ export const InventoryManager: React.FC = () => {
     const qty = parseInt(restockQty, 10);
     if (isNaN(qty) || qty <= 0) return;
 
-    const newStockQty = restockItemTarget.stockQuantity + qty;
+    const newStockQty = Number(restockItemTarget.stockQuantity || 0) + qty;
     const cost = restockItemTarget.costPrice || restockItemTarget.price || 0;
+    const isProduct = restockItemTarget.inventoryType !== 'raw_material';
 
-    restockItem(
-      restockItemTarget.id,
-      qty,
-      restockReason.trim() || (isRtl ? 'إضافة شحنة وتوريد جديد للمخزون' : 'Stock Replenishment')
+    // Single authoritative update/upsert to public.stock in Supabase
+    const stockUpdateRes = await updateStockQuantityInSupabase(
+      restockItemTarget.stock_pk || restockItemTarget.product_pk || restockItemTarget.id,
+      newStockQty,
+      cost,
+      !restockItemTarget.stock_pk && isProduct,
+      {
+        stockPk: restockItemTarget.stock_pk,
+        productFk: restockItemTarget.product_pk || (isProduct ? restockItemTarget.id : undefined),
+        itemName: restockItemTarget.name,
+        isRawMaterial: !isProduct,
+        unit: restockItemTarget.unit,
+        code: restockItemTarget.code,
+        minStock: restockItemTarget.minStock,
+        maxStock: restockItemTarget.maxStock,
+        tenantId: activeTenant?.tenantId,
+      }
     );
 
-    // Mapped update to public.stock in Supabase
-    const isProduct = restockItemTarget.inventoryType === 'finished_goods';
-    await updateStockQuantityInSupabase(restockItemTarget.id, newStockQty, cost, isProduct);
+    if (!stockUpdateRes.success) {
+      alert(
+        isRtl
+          ? `فشل تحديث المخزون في قاعدة البيانات: ${stockUpdateRes.error}`
+          : `Failed to update stock in database: ${stockUpdateRes.error}`
+      );
+      return;
+    }
+
+    // Update React state immediately
+    setFastItems((prev) =>
+      prev.map((item) =>
+        item.id === restockItemTarget.id
+          ? { ...item, stockQuantity: newStockQty, amount: newStockQty * cost }
+          : item
+      )
+    );
 
     // Record Financial Transaction for Restock
     const methodMapping: Record<string, string> = { Cash: 'Cash', Card: 'E_Wallet', 'Bank Transfer': 'Bank', Invoice: 'Credit' };
@@ -721,6 +822,7 @@ export const InventoryManager: React.FC = () => {
       stock_fk: restockItemTarget.stock_pk || restockItemTarget.id
     });
 
+    await refreshInventoryFromSupabase(activeTenant?.tenantId);
     alert(isRtl ? `تم توريد (${qty}) قطعة للمخزون وحفظ المعاملة المالية بنجاح!` : `Restocked ${qty} items and recorded financial transaction!`);
 
     setRestockItemTarget(null);
@@ -731,7 +833,7 @@ export const InventoryManager: React.FC = () => {
 
 
   // Submit Complete WIP Batch
-  const handleConfirmCompleteWip = (e: React.FormEvent) => {
+  const handleConfirmCompleteWip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!completeWipTarget) return;
 
@@ -745,9 +847,34 @@ export const InventoryManager: React.FC = () => {
     // SYNC WITH SUPABASE: Add Finished Good to stock
     const targetGood = fastItems.find(i => i.id === completeWipTarget.finishedGoodId);
     if (targetGood) {
-      const newQty = targetGood.stockQuantity + actualQty;
+      const newQty = Number(targetGood.stockQuantity || 0) + actualQty;
       const cost = targetGood.costPrice || targetGood.price || 0;
-      updateStockQuantityInSupabase(targetGood.id, newQty, cost, true);
+      const isProduct = targetGood.inventoryType !== 'raw_material';
+      const stockRes = await updateStockQuantityInSupabase(
+        targetGood.stock_pk || targetGood.product_pk || targetGood.id,
+        newQty,
+        cost,
+        !targetGood.stock_pk && isProduct,
+        {
+          stockPk: targetGood.stock_pk,
+          productFk: targetGood.product_pk || (isProduct ? targetGood.id : undefined),
+          itemName: targetGood.name,
+          isRawMaterial: !isProduct,
+          unit: targetGood.unit,
+          code: targetGood.code,
+          minStock: targetGood.minStock,
+          maxStock: targetGood.maxStock,
+          tenantId: activeTenant?.tenantId,
+        }
+      );
+      if (!stockRes.success) {
+        alert(
+          isRtl
+            ? `تعذر تحديث مخزون المنتج النهائي في قاعدة البيانات: ${stockRes.error}`
+            : `Failed to update finished good stock: ${stockRes.error}`
+        );
+      }
+      await refreshInventoryFromSupabase(activeTenant?.tenantId);
     }
 
     setCompleteWipTarget(null);
