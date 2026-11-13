@@ -55,9 +55,11 @@ export async function fetchProjectStaffFromSupabase(
   }
 
   try {
-    const currentTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    const explicitTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    const currentTenantId =
+      (await resolveActiveTenantId(explicitTenantId)) || explicitTenantId;
     if (!currentTenantId) {
-      return { data: [], error: 'لم يتم تحديد معرف المشروع النشط (tenant_id).' };
+      return { data: [], error: 'لم يتم تحديد معرف المشروع النشط (tenant_id). يرجى اختيار المشروع أولاً.' };
     }
 
     const { data: membersData, error: membersError } = await supabase
@@ -177,7 +179,9 @@ export async function createCashierStaffAccount(
   }
 
   try {
-    const resolvedTenantId = await resolveActiveTenantId(params.tenantId);
+    const explicitTenantId = (params.tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    const resolvedTenantId =
+      (await resolveActiveTenantId(explicitTenantId)) || explicitTenantId;
     if (!resolvedTenantId) {
       return {
         success: false,
@@ -321,9 +325,11 @@ export async function toggleStaffActiveStatusInSupabase(
   if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
 
   try {
-    const resolvedTenantId = await resolveActiveTenantId(tenantId);
+    const explicitTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    const resolvedTenantId =
+      (await resolveActiveTenantId(explicitTenantId)) || explicitTenantId;
     if (!resolvedTenantId) {
-      return { success: false, error: 'معرف المشروع النشط (tenant_id) غير متوفر.' };
+      return { success: false, error: 'معرف المشروع النشط (tenant_id) غير متوفر. يرجى اختيار المشروع أولاً.' };
     }
 
     const { error } = await supabase
@@ -350,9 +356,11 @@ export async function removeStaffMemberFromSupabase(
   if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
 
   try {
-    const resolvedTenantId = await resolveActiveTenantId(tenantId);
+    const explicitTenantId = (tenantId ?? getCurrentActiveTenantId() ?? '').trim();
+    const resolvedTenantId =
+      (await resolveActiveTenantId(explicitTenantId)) || explicitTenantId;
     if (!resolvedTenantId) {
-      return { success: false, error: 'معرف المشروع النشط (tenant_id) غير متوفر.' };
+      return { success: false, error: 'معرف المشروع النشط (tenant_id) غير متوفر. يرجى اختيار المشروع أولاً.' };
     }
 
     const { error } = await supabase

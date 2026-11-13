@@ -84,59 +84,76 @@ export async function resolveActiveTenantId(
         return tenantRow.id;
       }
 
-      // If RLS blocks direct tenants read or candidate is a membership ID, check tenant_members
-      const { data: memberByTenantId } = await supabase
+      // Check tenant_members by tenant_id (handles RLS policies where tenants table isn't directly readable)
+      const { data: memberByTenantId, error: memberByTenantErr } = await supabase
         .from('tenant_members')
         .select('tenant_id')
         .eq('tenant_id', candidate)
-        .eq('is_active', true)
         .limit(1)
         .maybeSingle();
 
-      if (memberByTenantId?.tenant_id) {
+      if (!memberByTenantErr && memberByTenantId?.tenant_id) {
         verifiedTenantIds.add(memberByTenantId.tenant_id);
         setCurrentActiveTenantId(memberByTenantId.tenant_id);
         return memberByTenantId.tenant_id;
       }
 
-      const { data: memberById } = await supabase
+      // Check if candidate happened to be a membership row id rather than tenant_id
+      const { data: memberById, error: memberByIdErr } = await supabase
         .from('tenant_members')
         .select('tenant_id')
         .eq('id', candidate)
-        .eq('is_active', true)
         .limit(1)
         .maybeSingle();
 
-      if (memberById?.tenant_id) {
+      if (!memberByIdErr && memberById?.tenant_id) {
         verifiedTenantIds.add(memberById.tenant_id);
         setCurrentActiveTenantId(memberById.tenant_id);
         return memberById.tenant_id;
       }
     }
 
-    // Fallback: look up the authenticated user's active membership
+    // Fallback: look up the authenticated user's active membership (preferring owner role)
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (user?.id) {
-      const { data: activeMember } = await supabase
+      const { data: userMemberships } = await supabase
         .from('tenant_members')
-        .select('tenant_id')
+        .select('tenant_id, role')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .limit(10);
 
-      if (activeMember?.tenant_id) {
-        verifiedTenantIds.add(activeMember.tenant_id);
-        setCurrentActiveTenantId(activeMember.tenant_id);
-        return activeMember.tenant_id;
+      if (userMemberships && userMemberships.length > 0) {
+        const matchedCandidate = candidate
+          ? userMemberships.find((m: any) => m.tenant_id === candidate)
+          : null;
+        const ownerMembership = userMemberships.find(
+          (m: any) => String(m.role || '').toLowerCase() === 'owner'
+        );
+        const pickedTenantId =
+          matchedCandidate?.tenant_id ||
+          ownerMembership?.tenant_id ||
+          userMemberships[0]?.tenant_id;
+
+        if (pickedTenantId) {
+          verifiedTenantIds.add(pickedTenantId);
+          setCurrentActiveTenantId(pickedTenantId);
+          return pickedTenantId;
+        }
       }
     }
   } catch (err) {
     console.warn('⚠️ resolveActiveTenantId warning:', err);
+  }
+
+  // Never discard an explicit candidate tenant_id from active AppContext when RLS/lookup is inconclusive
+  if (candidate) {
+    setCurrentActiveTenantId(candidate);
+    return candidate;
   }
 
   return null;
@@ -374,6 +391,11 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
         metrics,
       };
 
+      if (ownerRow.tenant_id) {
+        verifiedTenantIds.add(ownerRow.tenant_id);
+        setCurrentActiveTenantId(ownerRow.tenant_id);
+      }
+
       return {
         profile,
         isConsultant: false,
@@ -413,6 +435,11 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
         createdAt: tenantObj?.created_at || staffRow.created_at || new Date().toISOString(),
         metrics: { ...EMPTY_METRICS },
       };
+
+      if (staffRow.tenant_id) {
+        verifiedTenantIds.add(staffRow.tenant_id);
+        setCurrentActiveTenantId(staffRow.tenant_id);
+      }
 
       return {
         profile,

@@ -305,6 +305,7 @@ interface AppContextType {
 
   // Multi-Tenant Workspace State
   activeTenant: TenantWithMembership | null;
+  currentTenantId: string | null;
   isConsultantUser: boolean;
   isOwnerUser: boolean;
   isCashierUser: boolean;
@@ -334,6 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const prevUserIdRef = useRef<string | null>(null);
 
   const activeRole = String(activeTenant?.role || '').trim().toLowerCase();
+  const currentTenantId = activeTenant?.tenantId?.trim() || null;
   const isOwnerUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'owner');
   const isCashierUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'cashier');
 
@@ -1283,6 +1285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearMarketingData,
 
         activeTenant,
+        currentTenantId,
         isConsultantUser,
         isOwnerUser,
         isCashierUser,

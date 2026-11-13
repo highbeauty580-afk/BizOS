@@ -29,9 +29,19 @@ import {
 } from '../lib/staffService';
 
 export const StaffManagementPage: React.FC = () => {
-  const { language, themeConfig, customPalette, activeTenant, isOwnerUser, setCurrentPage } = useApp();
+  const {
+    language,
+    themeConfig,
+    customPalette,
+    activeTenant,
+    currentTenantId,
+    isOwnerUser,
+    selectTenant,
+    setCurrentPage,
+  } = useApp();
   const { user } = useAuth();
   const isRtl = language === 'ar';
+  const activeProjectId = (currentTenantId || activeTenant?.tenantId || '').trim();
 
   const [staffList, setStaffList] = useState<StaffMemberRecord[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -53,8 +63,7 @@ export const StaffManagementPage: React.FC = () => {
 
   const loadStaff = useCallback(
     async (silent = false) => {
-      const tenantId = activeTenant?.tenantId;
-      if (!tenantId || !isOwnerUser) {
+      if (!activeProjectId || !isOwnerUser) {
         setIsLoading(false);
         return;
       }
@@ -66,7 +75,7 @@ export const StaffManagementPage: React.FC = () => {
       }
       setFetchError(null);
 
-      const res = await fetchProjectStaffFromSupabase(tenantId);
+      const res = await fetchProjectStaffFromSupabase(activeProjectId);
       if (res.error) {
         setFetchError(res.error);
       } else {
@@ -90,41 +99,12 @@ export const StaffManagementPage: React.FC = () => {
       setIsLoading(false);
       setIsRefreshing(false);
     },
-    [activeTenant?.tenantId, isOwnerUser]
+    [activeProjectId, isOwnerUser]
   );
 
   useEffect(() => {
     loadStaff(false);
   }, [loadStaff]);
-
-  // Strict Owner-only route guard inside the page itself
-  if (!isOwnerUser || !activeTenant) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl border border-rose-200/90 shadow-sm max-w-md w-full p-8 text-center flex flex-col items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
-            <ShieldAlert className="w-7 h-7" />
-          </div>
-          <h2 className="text-lg font-extrabold text-slate-900">
-            {isRtl ? 'وصول غير مصرح به' : 'Restricted Access'}
-          </h2>
-          <p className="text-xs text-slate-600 leading-relaxed">
-            {isRtl
-              ? 'هذه الصفحة مخصصة لمالك المشروع (Owner) فقط لإدارة موظفي الكاشير وصلاحيات المشروع.'
-              : 'Staff Management is strictly restricted to the Project Owner.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => setCurrentPage('home')}
-            className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-xs cursor-pointer"
-            style={{ backgroundColor: themeConfig.primary }}
-          >
-            {isRtl ? 'العودة إلى الشاشة الرئيسية' : 'Back to Home'}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   const stats = useMemo(() => {
     const total = staffList.length;
@@ -149,7 +129,67 @@ export const StaffManagementPage: React.FC = () => {
     });
   }, [staffList, searchQuery, roleFilter]);
 
+  // Strict Owner-only & Active-Project guard inside the page itself
+  if (!isOwnerUser || !activeTenant || !activeProjectId) {
+    const missingProject = isOwnerUser && (!activeTenant || !activeProjectId);
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl border border-rose-200/90 shadow-sm max-w-md w-full p-8 text-center flex flex-col items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600">
+            <ShieldAlert className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-extrabold text-slate-900">
+            {missingProject
+              ? isRtl
+                ? 'لم يتم اختيار المشروع النشط'
+                : 'No Active Project Selected'
+              : isRtl
+              ? 'وصول غير مصرح به'
+              : 'Restricted Access'}
+          </h2>
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {missingProject
+              ? isRtl
+                ? 'يرجى اختيار المشروع النشط أولاً قبل إضافة أو إدارة الموظفين.'
+                : 'Please select an active project first before adding or managing staff.'
+              : isRtl
+              ? 'هذه الصفحة مخصصة لمالك المشروع (Owner) فقط لإدارة موظفي الكاشير وصلاحيات المشروع.'
+              : 'Staff Management is strictly restricted to the Project Owner.'}
+          </p>
+          <div className="flex items-center gap-2.5">
+            {missingProject && (
+              <button
+                type="button"
+                onClick={() => selectTenant(null)}
+                className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-xs cursor-pointer"
+                style={{ backgroundColor: themeConfig.primary }}
+              >
+                {isRtl ? 'اختيار المشروع أولاً' : 'Select Project'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setCurrentPage('home')}
+              className="px-5 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs font-bold shadow-xs cursor-pointer"
+            >
+              {isRtl ? 'العودة إلى الشاشة الرئيسية' : 'Back to Home'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleOpenAddModal = () => {
+    if (!activeProjectId) {
+      setActionFeedback({
+        type: 'error',
+        message: isRtl
+          ? 'يرجى اختيار المشروع النشط أولاً قبل إضافة موظف جديد.'
+          : 'Please select an active project first before adding a new staff member.',
+      });
+      return;
+    }
     setFormError(null);
     setFullName('');
     setEmail('');
@@ -162,13 +202,23 @@ export const StaffManagementPage: React.FC = () => {
     e.preventDefault();
     setFormError(null);
     setActionFeedback(null);
+
+    if (!activeProjectId) {
+      const missingMsg = isRtl
+        ? 'تعذر تحديد معرف المشروع النشط (tenant_id). يرجى اختيار المشروع أولاً.'
+        : 'Unable to determine active project (tenant_id). Please select a project first.';
+      setFormError(missingMsg);
+      setActionFeedback({ type: 'error', message: missingMsg });
+      return;
+    }
+
     setIsSubmitting(true);
 
     const res = await createCashierStaffAccount({
       fullName,
       email,
       password,
-      tenantId: activeTenant.tenantId,
+      tenantId: activeProjectId,
     });
 
     setIsSubmitting(false);
@@ -194,12 +244,12 @@ export const StaffManagementPage: React.FC = () => {
   };
 
   const handleToggleActive = async (member: StaffMemberRecord) => {
-    if (member.role === 'owner' || member.userId === user?.id) return;
+    if (member.role === 'owner' || member.userId === user?.id || !activeProjectId) return;
     setBusyMemberId(member.id);
     setActionFeedback(null);
 
     const nextState = !member.isActive;
-    const res = await toggleStaffActiveStatusInSupabase(member.id, nextState, activeTenant.tenantId);
+    const res = await toggleStaffActiveStatusInSupabase(member.id, nextState, activeProjectId);
 
     setBusyMemberId(null);
 
@@ -227,7 +277,7 @@ export const StaffManagementPage: React.FC = () => {
   };
 
   const handleRemoveMember = async (member: StaffMemberRecord) => {
-    if (member.role === 'owner' || member.userId === user?.id) return;
+    if (member.role === 'owner' || member.userId === user?.id || !activeProjectId) return;
     const confirmText = isRtl
       ? `هل أنت متأكد من إزالة (${member.fullName}) من طاقم مشروع "${activeTenant.name}"؟`
       : `Remove ${member.fullName} from "${activeTenant.name}"?`;
@@ -236,7 +286,7 @@ export const StaffManagementPage: React.FC = () => {
     setBusyMemberId(member.id);
     setActionFeedback(null);
 
-    const res = await removeStaffMemberFromSupabase(member.id, activeTenant.tenantId);
+    const res = await removeStaffMemberFromSupabase(member.id, activeProjectId);
     setBusyMemberId(null);
 
     if (!res.success) {
