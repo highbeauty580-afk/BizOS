@@ -46,7 +46,10 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
   const [portalState, setPortalState] = useState<PostAuthPortalState>({
     profile: null,
     isConsultant: false,
+    isCashier: false,
+    isDisabledCashier: false,
     ownerProject: null,
+    staffProject: null,
     projects: [],
     error: null,
   });
@@ -84,6 +87,17 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
         setIsLoading(false);
         setIsRefreshing(false);
         onSelectTenantRef.current(result.ownerProject, false);
+        return;
+      }
+
+      // Rule C: Cashier / Staff Account -> skip portal & route directly into POS cashier screen
+      if (!result.error && !result.isConsultant && result.staffProject) {
+        setHasLockedOnboarding(true);
+        setIsAutoRoutingOwner(true);
+        setPortalState(result);
+        setIsLoading(false);
+        setIsRefreshing(false);
+        onSelectTenantRef.current(result.staffProject, false);
         return;
       }
 
@@ -195,10 +209,20 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
   };
 
   const showLoadingSkeleton = isLoading || isAutoRoutingOwner;
-  const showOwnerOnboarding =
+  const showDisabledCashierNotice =
     !showLoadingSkeleton &&
     !portalState.isConsultant &&
     !portalState.ownerProject &&
+    !portalState.staffProject &&
+    portalState.isDisabledCashier &&
+    !portalState.error;
+  const showOwnerOnboarding =
+    !showLoadingSkeleton &&
+    !portalState.isConsultant &&
+    !portalState.isCashier &&
+    !portalState.isDisabledCashier &&
+    !portalState.ownerProject &&
+    !portalState.staffProject &&
     !hasLockedOnboarding &&
     !portalState.error;
   const showConsultantDashboard = !showLoadingSkeleton && portalState.isConsultant;
@@ -517,6 +541,45 @@ export const PostAuthPortal: React.FC<PostAuthPortalProps> = ({ onSelectTenant }
                   <div className={`h-11 w-full rounded-xl ${isDarkMode ? 'bg-teal-500/15' : 'bg-[#EDF1F6]'}`} />
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* 1B. DISABLED / UNLINKED CASHIER GUARD */}
+        {showDisabledCashierNotice && (
+          <div className="flex items-center justify-center min-h-[70vh]">
+            <div className={`${glassCardClass} rounded-3xl p-8 sm:p-12 max-w-xl w-full text-center relative overflow-hidden`}>
+              <div className="mx-auto w-16 h-16 rounded-2xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center mb-5">
+                <ShieldCheck className="w-8 h-8 text-amber-400" />
+              </div>
+              <h2 className={`text-xl sm:text-2xl font-extrabold mb-3 ${isDarkMode ? 'text-white' : 'text-[#013589]'}`}>
+                {isRtl ? 'حساب الموظف غير مفعّل حالياً' : 'Staff Account Inactive'}
+              </h2>
+              <p className={`text-sm leading-relaxed max-w-md mx-auto mb-7 ${isDarkMode ? 'text-slate-300' : 'text-[#68778D]'}`}>
+                {isRtl
+                  ? 'تم تعطيل وصول هذا الحساب (كاشير) أو لم يتم تفعيل ربطه بالمشروع بعد. يرجى التواصل مع مالك المشروع لتفعيل صلاحياتك.'
+                  : 'This cashier account is currently disabled or pending activation by the project owner.'}
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => loadPortalData(false)}
+                  className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition-all cursor-pointer"
+                >
+                  {isRtl ? 'إعادة التحقق' : 'Refresh Status'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => signOut()}
+                  className={`px-5 py-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                    isDarkMode
+                      ? 'border-slate-700 text-slate-200 hover:bg-slate-800'
+                      : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {isRtl ? 'تسجيل الخروج' : 'Sign Out'}
+                </button>
+              </div>
             </div>
           </div>
         )}

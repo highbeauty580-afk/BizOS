@@ -29,7 +29,10 @@ export interface UserProfileRecord {
 export interface PostAuthPortalState {
   profile: UserProfileRecord | null;
   isConsultant: boolean;
+  isCashier: boolean;
+  isDisabledCashier: boolean;
   ownerProject: TenantWithMembership | null;
+  staffProject: TenantWithMembership | null;
   projects: TenantWithMembership[];
   error: string | null;
 }
@@ -203,7 +206,10 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
     return {
       profile: null,
       isConsultant: false,
+      isCashier: false,
+      isDisabledCashier: false,
       ownerProject: null,
+      staffProject: null,
       projects: [],
       error: 'لم يتم تكوين اتصال Supabase.',
     };
@@ -228,7 +234,10 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       return {
         profile: null,
         isConsultant: Boolean(user.user_metadata?.is_consultant),
+        isCashier: String(user.user_metadata?.role || '').toLowerCase() === 'cashier',
+        isDisabledCashier: false,
         ownerProject: null,
+        staffProject: null,
         projects: [],
         error: membershipsRes.error.message,
       };
@@ -267,7 +276,10 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
         return {
           profile,
           isConsultant: true,
+          isCashier: false,
+          isDisabledCashier: false,
           ownerProject: null,
+          staffProject: null,
           projects: [],
           error: allTenantsError.message,
         };
@@ -326,7 +338,10 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       return {
         profile,
         isConsultant: true,
+        isCashier: false,
+        isDisabledCashier: false,
         ownerProject: null,
+        staffProject: null,
         projects,
         error: null,
       };
@@ -337,49 +352,109 @@ export async function fetchPostAuthPortalData(user: User): Promise<PostAuthPorta
       (row: any) => String(row.role || '').toLowerCase() === 'owner'
     );
 
-    if (!ownerRow) {
+    if (ownerRow) {
+      let tenantObj = Array.isArray(ownerRow.tenants) ? ownerRow.tenants[0] : ownerRow.tenants;
+      if (!tenantObj && ownerRow.tenant_id) {
+        const { data: fallbackTenant } = await supabase
+          .from('tenants')
+          .select('id, name, created_at')
+          .eq('id', ownerRow.tenant_id)
+          .maybeSingle();
+        tenantObj = fallbackTenant;
+      }
+
+      const metrics = await fetchTenantQuickMetrics(ownerRow.tenant_id);
+      const ownerProject: TenantWithMembership = {
+        id: ownerRow.id,
+        tenantId: ownerRow.tenant_id,
+        name: tenantObj?.name || 'مشروعي',
+        role: 'owner',
+        isActive: true,
+        createdAt: tenantObj?.created_at || ownerRow.created_at || new Date().toISOString(),
+        metrics,
+      };
+
       return {
         profile,
         isConsultant: false,
-        ownerProject: null,
-        projects: [],
+        isCashier: false,
+        isDisabledCashier: false,
+        ownerProject,
+        staffProject: null,
+        projects: [ownerProject],
         error: null,
       };
     }
 
-    let tenantObj = Array.isArray(ownerRow.tenants) ? ownerRow.tenants[0] : ownerRow.tenants;
-    if (!tenantObj && ownerRow.tenant_id) {
-      const { data: fallbackTenant } = await supabase
-        .from('tenants')
-        .select('id, name, created_at')
-        .eq('id', ownerRow.tenant_id)
-        .maybeSingle();
-      tenantObj = fallbackTenant;
+    // RULE C: Cashier / Staff Account -> Direct Route to Assigned Project POS Screen (never show Owner onboarding)
+    const staffRow = activeMemberships.find((row: any) => {
+      const r = String(row.role || '').toLowerCase();
+      return r === 'cashier' || r === 'staff' || r === 'member' || r === 'admin';
+    });
+
+    if (staffRow) {
+      let tenantObj = Array.isArray(staffRow.tenants) ? staffRow.tenants[0] : staffRow.tenants;
+      if (!tenantObj && staffRow.tenant_id) {
+        const { data: fallbackTenant } = await supabase
+          .from('tenants')
+          .select('id, name, created_at')
+          .eq('id', staffRow.tenant_id)
+          .maybeSingle();
+        tenantObj = fallbackTenant;
+      }
+
+      const staffRole = String(staffRow.role || 'cashier').toLowerCase();
+      const staffProject: TenantWithMembership = {
+        id: staffRow.id,
+        tenantId: staffRow.tenant_id,
+        name: tenantObj?.name || 'نقطة البيع',
+        role: staffRole,
+        isActive: true,
+        createdAt: tenantObj?.created_at || staffRow.created_at || new Date().toISOString(),
+        metrics: { ...EMPTY_METRICS },
+      };
+
+      return {
+        profile,
+        isConsultant: false,
+        isCashier: staffRole === 'cashier',
+        isDisabledCashier: false,
+        ownerProject: null,
+        staffProject,
+        projects: [staffProject],
+        error: null,
+      };
     }
 
-    const metrics = await fetchTenantQuickMetrics(ownerRow.tenant_id);
-    const ownerProject: TenantWithMembership = {
-      id: ownerRow.id,
-      tenantId: ownerRow.tenant_id,
-      name: tenantObj?.name || 'مشروعي',
-      role: 'owner',
-      isActive: true,
-      createdAt: tenantObj?.created_at || ownerRow.created_at || new Date().toISOString(),
-      metrics,
-    };
+    // Check if user is a deactivated cashier (should NOT see Owner "Create First Project" screen)
+    const { data: inactiveCashierRows } = await supabase
+      .from('tenant_members')
+      .select('id, role, is_active')
+      .eq('user_id', user.id)
+      .eq('role', 'cashier')
+      .limit(1);
+
+    const isCashierAccount =
+      metaRole === 'cashier' || (Array.isArray(inactiveCashierRows) && inactiveCashierRows.length > 0);
 
     return {
       profile,
       isConsultant: false,
-      ownerProject,
-      projects: [ownerProject],
+      isCashier: isCashierAccount,
+      isDisabledCashier: isCashierAccount,
+      ownerProject: null,
+      staffProject: null,
+      projects: [],
       error: null,
     };
   } catch (err: any) {
     return {
       profile: null,
       isConsultant: false,
+      isCashier: false,
+      isDisabledCashier: false,
       ownerProject: null,
+      staffProject: null,
       projects: [],
       error: err?.message || 'حدث خطأ أثناء تحميل بيانات المشاريع',
     };

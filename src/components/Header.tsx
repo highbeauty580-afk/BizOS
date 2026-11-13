@@ -18,6 +18,7 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
     setBusinessName,
     activeTenant,
     isConsultantUser,
+    isCashierUser,
     selectTenant,
     resetToDefault,
   } = useApp();
@@ -80,10 +81,17 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
 
           <div className="h-4 w-px bg-slate-200/80 hidden md:block" />
 
-          {/* Editable Business Name */}
+          {/* Business Name (Editable for Owner/Consultant, Static for Cashier) */}
           <div className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 hover:bg-slate-200/70 rounded-lg text-xs font-medium transition-colors">
             <span className="material-symbols-outlined text-base text-slate-400">domain</span>
-            {isEditingBusinessName ? (
+            {isCashierUser ? (
+              <span className="flex items-center gap-1.5 text-slate-800 font-semibold">
+                <bdi>{businessName}</bdi>
+                <span className="px-1.5 py-0.5 rounded bg-teal-100 text-teal-800 text-[10px] font-bold">
+                  {isRtl ? 'كاشير' : 'Cashier'}
+                </span>
+              </span>
+            ) : isEditingBusinessName ? (
               <input
                 type="text"
                 value={tempName}
@@ -123,15 +131,17 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
 
         {/* Right Controls: Palette Customizer, Language Toggle, User & Logout */}
         <div className="flex items-center gap-1.5 sm:gap-2.5">
-          {/* Custom Multi-Zone Palette Trigger */}
-          <button
-            onClick={() => setIsPaletteOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/90 bg-white/90 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer group shrink-0"
-            title="Custom Palette & Hex Picker / تخصيص لوحة الألوان بالهيكسا كود"
-          >
-            <span className="material-symbols-outlined text-sm text-indigo-600 hover-icon-palette">palette</span>
-            <span className="hidden sm:inline">{isRtl ? 'لوحة الألوان' : 'Color Palette'}</span>
-          </button>
+          {/* Custom Multi-Zone Palette Trigger (Hidden for Cashier) */}
+          {!isCashierUser && (
+            <button
+              onClick={() => setIsPaletteOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/90 bg-white/90 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer group shrink-0"
+              title="Custom Palette & Hex Picker / تخصيص لوحة الألوان بالهيكسا كود"
+            >
+              <span className="material-symbols-outlined text-sm text-indigo-600 hover-icon-palette">palette</span>
+              <span className="hidden sm:inline">{isRtl ? 'لوحة الألوان' : 'Color Palette'}</span>
+            </button>
+          )}
 
           {/* Language Toggle */}
           <button
@@ -145,14 +155,16 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
             </span>
           </button>
 
-          {/* Reset Data Button */}
-          <button
-            onClick={resetToDefault}
-            title="Reset to sample data"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors group cursor-pointer shrink-0"
-          >
-            <span className="material-symbols-outlined text-lg hover-icon-spin">restart_alt</span>
-          </button>
+          {/* Reset Data Button (Hidden for Cashier) */}
+          {!isCashierUser && (
+            <button
+              onClick={resetToDefault}
+              title="Reset to sample data"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors group cursor-pointer shrink-0"
+            >
+              <span className="material-symbols-outlined text-lg hover-icon-spin">restart_alt</span>
+            </button>
+          )}
 
           {/* User Profile & Logout */}
           {user && (
@@ -180,8 +192,8 @@ export const Header: React.FC<HeaderProps> = ({ isMobileMenuOpen, onToggleMobile
         </div>
       </header>
 
-      {/* Palette Modal */}
-      <PaletteModal isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />
+      {/* Palette Modal (Owner / Consultant only) */}
+      {!isCashierUser && <PaletteModal isOpen={isPaletteOpen} onClose={() => setIsPaletteOpen(false)} />}
     </>
   );
 };

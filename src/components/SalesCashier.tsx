@@ -29,6 +29,7 @@ export const SalesCashier: React.FC = () => {
     language,
     customPalette,
     activeTenant,
+    isCashierUser,
     fastItems,
     setFastItems,
     customers,
@@ -50,6 +51,12 @@ export const SalesCashier: React.FC = () => {
 
   // Entry Mode: 'manual' (يدوي) | 'auto_integration' (ربط تلقائي)
   const [salesEntryMode, setSalesEntryMode] = useState<SalesEntryMode>('manual');
+
+  useEffect(() => {
+    if (isCashierUser && salesEntryMode !== 'manual') {
+      setSalesEntryMode('manual');
+    }
+  }, [isCashierUser, salesEntryMode]);
 
   // Section Tabs: 'pos' (Cashier Terminal), 'customers' (Customer Database), 'history' (Sales History), 'pending' (Incomplete / Held Sales)
   const [activeTab, setActiveTab] = useState<'pos' | 'customers' | 'history' | 'pending'>('pos');
@@ -757,48 +764,50 @@ export const SalesCashier: React.FC = () => {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {/* Top Mode Switcher: الربط اليدوي | الربط الآلي */}
-      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-bold text-slate-500 px-1">
-            {isRtl ? 'طريقة الربط وتسجيل المبيعات:' : 'Integration Mode:'}
-          </span>
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl">
-            <button
-              onClick={() => setSalesEntryMode('manual')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                salesEntryMode === 'manual'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">touch_app</span>
-              <span>{isRtl ? 'التسجيل اليدوي' : 'Manual Entry'}</span>
-            </button>
+      {/* Top Mode Switcher: الربط اليدوي | الربط الآلي (Hidden for Cashier role) */}
+      {!isCashierUser && (
+        <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-bold text-slate-500 px-1">
+              {isRtl ? 'طريقة الربط وتسجيل المبيعات:' : 'Integration Mode:'}
+            </span>
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl">
+              <button
+                onClick={() => setSalesEntryMode('manual')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  salesEntryMode === 'manual'
+                    ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">touch_app</span>
+                <span>{isRtl ? 'التسجيل اليدوي' : 'Manual Entry'}</span>
+              </button>
 
-            <button
-              onClick={() => setSalesEntryMode('auto_integration')}
-              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                salesEntryMode === 'auto_integration'
-                  ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <span className="material-symbols-outlined text-base">hub</span>
-              <span>{isRtl ? 'الربط الآلي' : 'Automated Linking'}</span>
-            </button>
+              <button
+                onClick={() => setSalesEntryMode('auto_integration')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  salesEntryMode === 'auto_integration'
+                    ? 'bg-white text-indigo-700 shadow-xs border border-slate-200'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">hub</span>
+                <span>{isRtl ? 'الربط الآلي' : 'Automated Linking'}</span>
+              </button>
+            </div>
           </div>
+
+          {salesEntryMode === 'auto_integration' && (
+            <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              {isRtl ? 'محرك الربط الآلي والمزامنة التلقائية نشط' : 'Auto Engine Active'}
+            </span>
+          )}
         </div>
+      )}
 
-        {salesEntryMode === 'auto_integration' && (
-          <span className="text-xs font-bold bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-xl border border-emerald-200 flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            {isRtl ? 'محرك الربط الآلي والمزامنة التلقائية نشط' : 'Auto Engine Active'}
-          </span>
-        )}
-      </div>
-
-      {salesEntryMode === 'auto_integration' ? (
+      {!isCashierUser && salesEntryMode === 'auto_integration' ? (
         <AutoIntegrationSales />
       ) : (
         <>

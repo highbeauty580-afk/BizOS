@@ -10,6 +10,7 @@ import { OperationsPage } from './pages/OperationsPage';
 import { FinancePage } from './pages/FinancePage';
 import { HRPage } from './pages/HRPage';
 import { MarketingPage } from './pages/MarketingPage';
+import { StaffManagementPage } from './pages/StaffManagementPage';
 
 const hexToRgb = (hex: string): { r: number; g: number; b: number } => {
   if (!hex) return { r: 53, g: 37, b: 205 };
@@ -33,7 +34,16 @@ const hexToRgba = (hex: string, alpha: number): string => {
 
 const AppContent: React.FC = () => {
   const { user, isLoadingAuth } = useAuth();
-  const { currentPage, language, customPalette, activeTenant, selectTenant, isDarkPortal } = useApp();
+  const {
+    currentPage,
+    language,
+    customPalette,
+    activeTenant,
+    isOwnerUser,
+    isCashierUser,
+    selectTenant,
+    isDarkPortal,
+  } = useApp();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
   const isRtl = language === 'ar';
@@ -133,11 +143,18 @@ const AppContent: React.FC = () => {
         isRtl ? 'lg:pr-64 lg:pl-0 pr-0 pl-0' : 'lg:pl-64 lg:pr-0 pl-0 pr-0'
       }`}>
         <main className="w-full max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-          {currentPage === 'home' && <HomePage />}
-          {currentPage === 'operations' && <OperationsPage />}
-          {currentPage === 'finance' && <FinancePage />}
-          {currentPage === 'hr' && <HRPage />}
-          {currentPage === 'marketing' && <MarketingPage />}
+          {isCashierUser ? (
+            <HomePage />
+          ) : (
+            <>
+              {currentPage === 'home' && <HomePage />}
+              {currentPage === 'operations' && <OperationsPage />}
+              {currentPage === 'finance' && <FinancePage />}
+              {currentPage === 'hr' && <HRPage />}
+              {currentPage === 'marketing' && <MarketingPage />}
+              {currentPage === 'staff' && isOwnerUser && <StaffManagementPage />}
+            </>
+          )}
         </main>
       </div>
     </div>

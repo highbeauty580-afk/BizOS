@@ -2,7 +2,7 @@
  * BizOS Types Definition
  */
 
-export type PageId = 'home' | 'operations' | 'finance' | 'hr' | 'marketing';
+export type PageId = 'home' | 'operations' | 'finance' | 'hr' | 'marketing' | 'staff';
 
 export type Language = 'en' | 'ar';
 

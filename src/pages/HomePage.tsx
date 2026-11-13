@@ -1,16 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { SalesCashier } from '../components/SalesCashier';
 import { InventoryManager } from '../components/InventoryManager';
 import { ExpensesManager } from '../components/ExpensesManager';
 
 export const HomePage: React.FC = () => {
-  const { language, customPalette, fastItems } = useApp();
+  const { language, customPalette, fastItems, isCashierUser } = useApp();
 
   const isRtl = language === 'ar';
 
   // Section in central workspace: 'sales' | 'inventory' | 'expenses'
   const [activeSection, setActiveSection] = useState<'sales' | 'inventory' | 'expenses'>('sales');
+
+  useEffect(() => {
+    if (isCashierUser && activeSection !== 'sales') {
+      setActiveSection('sales');
+    }
+  }, [isCashierUser, activeSection]);
+
+  if (isCashierUser) {
+    return (
+      <div className="flex flex-col gap-6 w-full">
+        <SalesCashier />
+      </div>
+    );
+  }
 
   // Calculate unique inventory threshold counts
   const lowStockCount = fastItems.filter((i) => i.stockQuantity <= (i.minStock ?? 10)).length;

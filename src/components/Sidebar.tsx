@@ -21,7 +21,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseMobile }) => {
-  const { currentPage, setCurrentPage, language, customPalette } = useApp();
+  const { currentPage, setCurrentPage, language, customPalette, isOwnerUser, isCashierUser } = useApp();
   const { user, signOut } = useAuth();
 
   const navItems: NavItemConfig[] = [
@@ -80,7 +80,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
       iconColor: 'text-rose-600',
       iconAnimClass: 'hover-icon-campaign',
     },
+    {
+      id: 'staff',
+      labelEn: 'Staff Management',
+      labelAr: 'إدارة الموظفين',
+      icon: 'manage_accounts',
+      activeBg: 'bg-teal-600 text-white shadow-sm',
+      inactiveBg: 'bg-teal-50/60 hover:bg-teal-100/80 border-teal-100',
+      inactiveText: 'text-teal-900',
+      iconColor: 'text-teal-600',
+      iconAnimClass: 'hover-icon-schema',
+    },
   ];
+
+  const visibleNavItems: NavItemConfig[] = isCashierUser
+    ? [
+        {
+          id: 'home',
+          labelEn: 'POS Cashier',
+          labelAr: 'كاشير المبيعات (POS)',
+          icon: 'point_of_sale',
+          activeBg: 'bg-indigo-600 text-white shadow-sm',
+          inactiveBg: 'bg-indigo-50/60 hover:bg-indigo-100/80 border-indigo-100',
+          inactiveText: 'text-indigo-900',
+          iconColor: 'text-indigo-600',
+          iconAnimClass: 'hover-icon-grid',
+        },
+      ]
+    : navItems.filter((item) => item.id !== 'staff' || isOwnerUser);
 
   const isRtl = language === 'ar';
 
@@ -120,7 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
         <div className="flex flex-col gap-2 px-3.5">
           {/* Navigation List */}
           <nav className="flex flex-col gap-3 pt-2">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const isActive = currentPage === item.id;
               return (
                 <button
@@ -154,6 +181,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen = false, onCloseM
 
         {/* Footer info box */}
         <div className="px-4 flex flex-col gap-3">
+          {isCashierUser && (
+            <div className="p-3 rounded-2xl bg-teal-50 border border-teal-200/80 text-teal-900 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold">
+                {isRtl ? 'الصلاحية: كاشير مبيعات' : 'Role: POS Cashier'}
+              </span>
+              <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+            </div>
+          )}
+          {isOwnerUser && (
+            <div className="p-3 rounded-2xl bg-indigo-50 border border-indigo-200/80 text-indigo-900 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold">
+                {isRtl ? 'الصلاحية: مالك المشروع' : 'Role: Project Owner'}
+              </span>
+              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+            </div>
+          )}
           <div className="p-3.5 rounded-2xl bg-white/70 border border-white/90 shadow-xs flex flex-col gap-1">
             <div className="text-xs font-bold text-slate-900 flex items-center justify-between">
               <span>Profness Engine</span>

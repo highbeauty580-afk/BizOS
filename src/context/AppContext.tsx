@@ -306,6 +306,8 @@ interface AppContextType {
   // Multi-Tenant Workspace State
   activeTenant: TenantWithMembership | null;
   isConsultantUser: boolean;
+  isOwnerUser: boolean;
+  isCashierUser: boolean;
   selectTenant: (tenant: TenantWithMembership | null, isConsultant?: boolean) => void;
 
   // Portal (Login & Project Selection) Theme Mode
@@ -330,6 +332,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isConsultantUser, setIsConsultantUser] = useState<boolean>(false);
   const activeTenantIdRef = useRef<string | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
+
+  const activeRole = String(activeTenant?.role || '').trim().toLowerCase();
+  const isOwnerUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'owner');
+  const isCashierUser = Boolean(activeTenant && !isConsultantUser && activeRole === 'cashier');
+
+  const guardedSetCurrentPage = (page: PageId) => {
+    if (isCashierUser) {
+      setCurrentPage('home');
+      return;
+    }
+    if (page === 'staff' && !isOwnerUser) {
+      setCurrentPage('home');
+      return;
+    }
+    setCurrentPage(page);
+  };
+
+  useEffect(() => {
+    if (isCashierUser && currentPage !== 'home') {
+      setCurrentPage('home');
+    } else if (currentPage === 'staff' && !isOwnerUser) {
+      setCurrentPage('home');
+    }
+  }, [isCashierUser, isOwnerUser, currentPage]);
   const [isDarkPortal, setIsDarkPortal] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('profness_login_theme');
@@ -414,11 +440,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setFastItems(invRes.data);
 
-      // 3. Fetch Expense Transactions (strictly scoped by targetTenantId)
-      const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
-      if (activeTenantIdRef.current !== targetTenantId) return;
-      if (expRes.data) {
-        setExpenses(expRes.data);
+      // 3. Fetch Expense Transactions (strictly scoped by targetTenantId & hidden from Cashier role)
+      if (String(activeTenant?.role || '').trim().toLowerCase() === 'cashier') {
+        setExpenses([]);
+      } else {
+        const expRes = await fetchExpenseTransactionsFromSupabase(targetTenantId);
+        if (activeTenantIdRef.current !== targetTenantId) return;
+        if (expRes.data) {
+          setExpenses(expRes.data);
+        }
       }
 
       // 4. Fetch Sales Transactions, Orders & Tenant-Scoped Order Items from Supabase
@@ -1164,7 +1194,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     <AppContext.Provider
       value={{
         currentPage,
-        setCurrentPage,
+        setCurrentPage: guardedSetCurrentPage,
         language,
         setLanguage,
         theme,
@@ -1254,6 +1284,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         activeTenant,
         isConsultantUser,
+        isOwnerUser,
+        isCashierUser,
         selectTenant,
 
         isDarkPortal,
