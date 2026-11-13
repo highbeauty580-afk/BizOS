@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { FastItem } from '../types';
-import { getCurrentActiveTenantId } from './tenantsService';
+import { getCurrentActiveTenantId, resolveActiveTenantId } from './tenantsService';
 
 /**
  * Dedicated Supabase Product Service for BizOS
@@ -83,7 +83,14 @@ export async function addProductToSupabase(
   }
 
   try {
-    const resolvedTenantId = params.tenant_id ?? getCurrentActiveTenantId();
+    const resolvedTenantId = await resolveActiveTenantId(params.tenant_id);
+    if (!resolvedTenantId) {
+      return {
+        success: false,
+        error: 'تعذر حفظ المنتج: معرف المشروع النشط (tenant_id) غير متوفر أو غير صالح. يرجى تحديد المشروع الحالي أولاً.',
+      };
+    }
+
     const cleanPayload: Record<string, any> = {
       product_name: params.product_name.trim(),
       product_type: params.product_type.trim() || 'Retail',
@@ -92,11 +99,8 @@ export async function addProductToSupabase(
       unit_price: parseFloat(params.unit_price as any) || 0,
       product_code: params.product_code?.trim() || null,
       Measure_PType: params.measure_ptype?.trim() || 'قطعة',
+      tenant_id: resolvedTenantId,
     };
-
-    if (resolvedTenantId) {
-      cleanPayload.tenant_id = resolvedTenantId;
-    }
 
     console.log('2. Sending Clean Payload to public.products:', cleanPayload);
 
@@ -162,7 +166,15 @@ export async function updateProductInSupabase(
   if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
 
   try {
-    const cleanPayload: any = {};
+    const resolvedTenantId = await resolveActiveTenantId(updates.tenant_id);
+    if (!resolvedTenantId) {
+      return {
+        success: false,
+        error: 'تعذر تحديث المنتج: معرف المشروع النشط (tenant_id) غير متوفر أو غير صالح.',
+      };
+    }
+
+    const cleanPayload: any = { tenant_id: resolvedTenantId };
     if (updates.product_name) cleanPayload.product_name = updates.product_name.trim();
     if (updates.product_type) cleanPayload.product_type = updates.product_type.trim();
     if (updates.product_description !== undefined) cleanPayload.product_description = updates.product_description?.trim() || null;

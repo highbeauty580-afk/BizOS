@@ -35,13 +35,105 @@ export interface PostAuthPortalState {
 }
 
 let currentActiveTenantId: string | null = null;
+const verifiedTenantIds = new Set<string>();
 
 export function setCurrentActiveTenantId(tenantId: string | null): void {
-  currentActiveTenantId = tenantId;
+  const cleanId = tenantId ? tenantId.trim() : '';
+  currentActiveTenantId = cleanId || null;
 }
 
 export function getCurrentActiveTenantId(): string | null {
   return currentActiveTenantId;
+}
+
+/**
+ * Resolves and verifies the active tenant_id against public.tenants / public.tenant_members
+ * so foreign key constraints (e.g. stock_tenant_id_fkey, products_tenant_id_fkey) never receive null or invalid IDs.
+ */
+export async function resolveActiveTenantId(
+  preferredTenantId?: string | null
+): Promise<string | null> {
+  const candidate = (preferredTenantId ?? getCurrentActiveTenantId() ?? '').trim();
+
+  if (candidate && verifiedTenantIds.has(candidate)) {
+    setCurrentActiveTenantId(candidate);
+    return candidate;
+  }
+
+  if (!isSupabaseConfigured) {
+    return candidate || null;
+  }
+
+  try {
+    if (candidate) {
+      const { data: tenantRow, error: tenantErr } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('id', candidate)
+        .maybeSingle();
+
+      if (!tenantErr && tenantRow?.id) {
+        verifiedTenantIds.add(tenantRow.id);
+        setCurrentActiveTenantId(tenantRow.id);
+        return tenantRow.id;
+      }
+
+      // If RLS blocks direct tenants read or candidate is a membership ID, check tenant_members
+      const { data: memberByTenantId } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('tenant_id', candidate)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (memberByTenantId?.tenant_id) {
+        verifiedTenantIds.add(memberByTenantId.tenant_id);
+        setCurrentActiveTenantId(memberByTenantId.tenant_id);
+        return memberByTenantId.tenant_id;
+      }
+
+      const { data: memberById } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('id', candidate)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+
+      if (memberById?.tenant_id) {
+        verifiedTenantIds.add(memberById.tenant_id);
+        setCurrentActiveTenantId(memberById.tenant_id);
+        return memberById.tenant_id;
+      }
+    }
+
+    // Fallback: look up the authenticated user's active membership
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user?.id) {
+      const { data: activeMember } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (activeMember?.tenant_id) {
+        verifiedTenantIds.add(activeMember.tenant_id);
+        setCurrentActiveTenantId(activeMember.tenant_id);
+        return activeMember.tenant_id;
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ resolveActiveTenantId warning:', err);
+  }
+
+  return null;
 }
 
 const EMPTY_METRICS: TenantMetrics = {
@@ -337,7 +429,7 @@ export async function createTenantForOwner(
     let resolvedTenantId =
       typeof record === 'string'
         ? record.trim()
-        : String(record?.tenant_id || record?.id || '').trim();
+        : String(record?.tenant_id || '').trim();
     let resolvedMemberId =
       typeof record === 'object' && record !== null
         ? String(record.member_id || record.id || '').trim()
@@ -350,6 +442,19 @@ export async function createTenantForOwner(
       typeof record === 'object' && record !== null && record.created_at
         ? String(record.created_at)
         : new Date().toISOString();
+
+    // Verify record.id if RPC returned { id } without explicit tenant_id
+    if (!resolvedTenantId && typeof record === 'object' && record !== null && record.id) {
+      const possibleTenantId = String(record.id).trim();
+      const { data: tenantCheck } = await supabase
+        .from('tenants')
+        .select('id')
+        .eq('id', possibleTenantId)
+        .maybeSingle();
+      if (tenantCheck?.id) {
+        resolvedTenantId = tenantCheck.id;
+      }
+    }
 
     // If the RPC returns void or omits tenant_id, read back the newly linked owner membership
     if (!resolvedTenantId) {
@@ -381,6 +486,9 @@ export async function createTenantForOwner(
         error: 'تم إنشاء المشروع ولكن تعذر تحديد معرف المشروع المرتبط.',
       };
     }
+
+    verifiedTenantIds.add(resolvedTenantId);
+    setCurrentActiveTenantId(resolvedTenantId);
 
     return {
       success: true,

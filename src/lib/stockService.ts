@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase';
 import { FastItem } from '../types';
-import { getCurrentActiveTenantId } from './tenantsService';
+import { getCurrentActiveTenantId, resolveActiveTenantId } from './tenantsService';
 import { fetchProductsFromSupabase } from './productsService';
 
 /**
@@ -203,11 +203,18 @@ export async function addStockToSupabase(
   }
 
   try {
+    const resolvedTenantId = await resolveActiveTenantId(params.tenant_id);
+    if (!resolvedTenantId) {
+      return {
+        success: false,
+        error: 'تعذر حفظ المخزون: معرف المشروع النشط (tenant_id) غير متوفر أو غير صالح. يرجى التأكد من تحديد المشروع الحالي.',
+      };
+    }
+
     const cost = parseFloat(params.stock_cost as any) || 0;
-    const qty = parseFloat(params.quantity as any) || 0;
+    const qty = Math.max(0, parseFloat(params.quantity as any) || 0);
     const calcAmount = cost * qty;
 
-    const resolvedTenantId = params.tenant_id ?? getCurrentActiveTenantId();
     const cleanPayload: Record<string, any> = {
       Stock_name: params.stock_name.trim(),
       stock_type: params.stock_type,
@@ -218,6 +225,7 @@ export async function addStockToSupabase(
       amount: calcAmount,
       Stock_code: params.stock_code?.trim() || null,
       Measure_SType: params.measure_stype?.trim() || 'قطعة',
+      tenant_id: resolvedTenantId,
     };
 
     if (params.product_fk) {
@@ -228,18 +236,30 @@ export async function addStockToSupabase(
         .from('stock')
         .select('stock_pk')
         .eq('product_fk', params.product_fk)
+        .eq('tenant_id', resolvedTenantId)
         .limit(1)
         .maybeSingle();
 
-      if (existingStockRow?.stock_pk) {
+      const fallbackExistingRow =
+        existingStockRow ||
+        (
+          await supabase
+            .from('stock')
+            .select('stock_pk')
+            .eq('product_fk', params.product_fk)
+            .limit(1)
+            .maybeSingle()
+        ).data;
+
+      if (fallbackExistingRow?.stock_pk) {
         const updateExistingPayload = {
           ...cleanPayload,
-          ...(resolvedTenantId ? { tenant_id: resolvedTenantId } : {}),
+          tenant_id: resolvedTenantId,
         };
         const { data: updatedRow, error: updateErr } = await supabase
           .from('stock')
           .update(updateExistingPayload)
-          .eq('stock_pk', existingStockRow.stock_pk)
+          .eq('stock_pk', fallbackExistingRow.stock_pk)
           .select();
 
         if (updateErr) {
@@ -248,10 +268,6 @@ export async function addStockToSupabase(
         }
         return { success: true, data: updatedRow && updatedRow[0] };
       }
-    }
-
-    if (resolvedTenantId) {
-      cleanPayload.tenant_id = resolvedTenantId;
     }
 
     const { data, error } = await supabase
@@ -280,20 +296,24 @@ export async function updateStockQuantityInSupabase(
   if (!isSupabaseConfigured) return { success: false, error: 'Supabase not configured' };
 
   try {
+    const resolvedTenantId = await resolveActiveTenantId(options?.tenantId);
+    if (!resolvedTenantId) {
+      return {
+        success: false,
+        error: 'تعذر تحديث أو إنشاء سجل المخزون: معرف المشروع النشط (tenant_id) غير متوفر أو غير صالح. يرجى اختيار المشروع الحالي أولاً.',
+      };
+    }
+
     const cost = parseFloat(stockCost as any) || 0;
     const qty = Math.max(0, parseFloat(newQuantity as any) || 0);
     const calcAmount = cost * qty;
-    const resolvedTenantId = options?.tenantId ?? getCurrentActiveTenantId();
 
     const updatePayload: Record<string, any> = {
       quantity: qty,
       amount: calcAmount,
       Stock_Cost: cost,
+      tenant_id: resolvedTenantId,
     };
-
-    if (resolvedTenantId) {
-      updatePayload.tenant_id = resolvedTenantId;
-    }
 
     const resolvedStockPk = options?.stockPk || (!isProductFk ? identifier : undefined);
     const resolvedProductFk = options?.productFk || (isProductFk ? identifier : undefined);
@@ -324,7 +344,7 @@ export async function updateStockQuantityInSupabase(
       updatedCount = data?.length ?? 0;
     }
 
-    // 3. Fallback if neither matched 1+ rows: insert missing stock row so DB stays authoritative
+    // 3. Fallback if neither matched 1+ rows: insert missing stock row with explicit tenant_id
     if (updatedCount === 0) {
       if (options?.itemName) {
         const insertRes = await addStockToSupabase({
@@ -337,7 +357,7 @@ export async function updateStockQuantityInSupabase(
           stock_code: options.code,
           measure_stype: options.unit || 'قطعة',
           product_fk: resolvedProductFk,
-          tenant_id: resolvedTenantId ?? undefined,
+          tenant_id: resolvedTenantId,
         });
 
         if (!insertRes.success) {
@@ -356,7 +376,7 @@ export async function updateStockQuantityInSupabase(
     if (resolvedProductFk) {
       const { error: prodError } = await supabase
         .from('products')
-        .update({ unit_cost: cost })
+        .update({ unit_cost: cost, tenant_id: resolvedTenantId })
         .eq('product_pk', resolvedProductFk);
 
       if (prodError) {

@@ -331,6 +331,7 @@ export const InventoryManager: React.FC = () => {
           product_type: formCategory,
           product_description: formDescription.trim() || undefined,
           measure_ptype: formUnit.trim() || 'قطعة',
+          tenant_id: activeTenant?.tenantId,
         });
         if (!prodRes.success) {
           console.warn('⚠️ Product metadata update warning:', prodRes.error);
@@ -412,7 +413,8 @@ export const InventoryManager: React.FC = () => {
           if (isProduct && existingItem.product_pk) {
             await updateProductInSupabase(existingItem.product_pk, {
               unit_cost: targetCost,
-              unit_price: isNaN(priceNum) ? existingItem.price : priceNum
+              unit_price: isNaN(priceNum) ? existingItem.price : priceNum,
+              tenant_id: activeTenant?.tenantId,
             });
           }
 

@@ -722,6 +722,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           unit_price: data.price,
           product_code: data.code,
           measure_ptype: data.unit,
+          tenant_id: activeTenant?.tenantId,
         })
       );
     }
